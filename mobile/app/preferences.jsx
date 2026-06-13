@@ -6,12 +6,48 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { updatePreferences, getPreferences } from '../api/heatpath';
 
+function SensitivityPicker({ value, onChange, color }) {
+  return (
+    <View>
+      <View style={{
+        flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8,
+      }}>
+        {[1,2,3,4,5,6,7,8,9,10].map(n => (
+          <TouchableOpacity
+            key={n}
+            onPress={() => onChange(n)}
+            style={{
+              width: 44, height: 44, borderRadius: 22,
+              backgroundColor: value === n ? color : '#f3f4f6',
+              alignItems: 'center', justifyContent: 'center',
+              borderWidth: value === n ? 2 : 1,
+              borderColor: value === n ? color : '#e5e7eb',
+            }}
+          >
+            <Text style={{
+              fontSize: 15, fontWeight: '700',
+              color: value === n ? '#fff' : '#6b7280',
+            }}>{n}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 11, color: '#9ca3af' }}>Mild</Text>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: color }}>
+          Selected: {value}
+        </Text>
+        <Text style={{ fontSize: 11, color: '#9ca3af' }}>Extreme</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function PreferencesScreen() {
-  const [heatSensitivity, setHeatSensitivity]   = useState(5);
-  const [aqiSensitivity,  setAqiSensitivity]    = useState(5);
-  const [avoidCrowds,     setAvoidCrowds]        = useState(false);
-  const [saving,          setSaving]             = useState(false);
-  const [saved,           setSaved]              = useState(false);
+  const [heatSensitivity, setHeatSensitivity] = useState(5);
+  const [aqiSensitivity,  setAqiSensitivity]  = useState(5);
+  const [avoidCrowds,     setAvoidCrowds]      = useState(false);
+  const [saving,          setSaving]           = useState(false);
+  const [saved,           setSaved]            = useState(false);
 
   useEffect(() => {
     getPreferences()
@@ -37,94 +73,79 @@ export default function PreferencesScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
+    <ScrollView style={{ flex: 1, backgroundColor: '#f9fafb' }}>
       <StatusBar style="dark" />
 
       {/* Header */}
-      <View className="bg-white px-4 pt-12 pb-4 shadow-sm">
-        <TouchableOpacity onPress={() => router.back()} className="mb-3">
-          <Text className="text-emerald-600 font-semibold">← Back</Text>
+      <View style={{
+        backgroundColor: '#fff', paddingHorizontal: 20,
+        paddingTop: 48, paddingBottom: 20,
+        borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+      }}>
+        <TouchableOpacity onPress={() => router.push('/')} style={{ marginBottom: 12 }}>
+          <Text style={{ color: '#059669', fontWeight: '600', fontSize: 14 }}>← Back</Text>
         </TouchableOpacity>
-        <Text className="text-2xl font-extrabold text-gray-800">Preferences</Text>
-        <Text className="text-sm text-gray-500 mt-1">
+        <Text style={{ fontSize: 26, fontWeight: '800', color: '#1f2937' }}>
+          Preferences
+        </Text>
+        <Text style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
           Adjust how HeatPath scores routes for you.
         </Text>
       </View>
 
-      <View className="px-4 pt-6 gap-6">
+      <View style={{ padding: 20, gap: 16 }}>
 
         {/* Heat sensitivity */}
-        <View className="bg-white rounded-2xl p-4 shadow-sm">
-          <Text className="text-sm font-bold text-gray-700 mb-1">
+        <View style={{
+          backgroundColor: '#fff', borderRadius: 16,
+          padding: 20, shadowColor: '#000',
+          shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+        }}>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: '#1f2937', marginBottom: 4 }}>
             🌡️ Heat sensitivity
           </Text>
-          <Text className="text-xs text-gray-400 mb-4">
+          <Text style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>
             Higher = HeatPath avoids hot routes more aggressively.
           </Text>
-          <View className="flex-row justify-between mb-2">
-            {[1,2,3,4,5,6,7,8,9,10].map(n => (
-              <TouchableOpacity
-                key={n}
-                onPress={() => setHeatSensitivity(n)}
-                className={`w-7 h-7 rounded-full items-center justify-center ${
-                  heatSensitivity === n ? 'bg-orange-400' : 'bg-gray-100'
-                }`}
-              >
-                <Text className={`text-xs font-bold ${
-                  heatSensitivity === n ? 'text-white' : 'text-gray-500'
-                }`}>{n}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View className="flex-row justify-between">
-            <Text className="text-xs text-gray-400">Mild</Text>
-            <Text className="text-xs text-orange-400 font-semibold">
-              Selected: {heatSensitivity}
-            </Text>
-            <Text className="text-xs text-gray-400">Extreme</Text>
-          </View>
+          <SensitivityPicker
+            value={heatSensitivity}
+            onChange={setHeatSensitivity}
+            color="#f97316"
+          />
         </View>
 
         {/* AQI sensitivity */}
-        <View className="bg-white rounded-2xl p-4 shadow-sm">
-          <Text className="text-sm font-bold text-gray-700 mb-1">
+        <View style={{
+          backgroundColor: '#fff', borderRadius: 16,
+          padding: 20, shadowColor: '#000',
+          shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+        }}>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: '#1f2937', marginBottom: 4 }}>
             💨 Air quality sensitivity
           </Text>
-          <Text className="text-xs text-gray-400 mb-4">
+          <Text style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>
             Higher = HeatPath avoids polluted routes more aggressively.
           </Text>
-          <View className="flex-row justify-between mb-2">
-            {[1,2,3,4,5,6,7,8,9,10].map(n => (
-              <TouchableOpacity
-                key={n}
-                onPress={() => setAqiSensitivity(n)}
-                className={`w-7 h-7 rounded-full items-center justify-center ${
-                  aqiSensitivity === n ? 'bg-blue-400' : 'bg-gray-100'
-                }`}
-              >
-                <Text className={`text-xs font-bold ${
-                  aqiSensitivity === n ? 'text-white' : 'text-gray-500'
-                }`}>{n}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View className="flex-row justify-between">
-            <Text className="text-xs text-gray-400">Mild</Text>
-            <Text className="text-xs text-blue-400 font-semibold">
-              Selected: {aqiSensitivity}
-            </Text>
-            <Text className="text-xs text-gray-400">Extreme</Text>
-          </View>
+          <SensitivityPicker
+            value={aqiSensitivity}
+            onChange={setAqiSensitivity}
+            color="#3b82f6"
+          />
         </View>
 
-        {/* Avoid crowds toggle */}
-        <View className="bg-white rounded-2xl p-4 shadow-sm flex-row justify-between items-center">
-          <View className="flex-1 mr-4">
-            <Text className="text-sm font-bold text-gray-700">
+        {/* Avoid crowds */}
+        <View style={{
+          backgroundColor: '#fff', borderRadius: 16, padding: 20,
+          flexDirection: 'row', justifyContent: 'space-between',
+          alignItems: 'center', shadowColor: '#000',
+          shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+        }}>
+          <View style={{ flex: 1, marginRight: 16 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1f2937' }}>
               👥 Avoid crowded areas
             </Text>
-            <Text className="text-xs text-gray-400 mt-1">
-              Coming in Week 3 — crowd data integration pending.
+            <Text style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+              Coming soon — crowd data integration pending.
             </Text>
           </View>
           <Switch
@@ -140,17 +161,20 @@ export default function PreferencesScreen() {
         <TouchableOpacity
           onPress={handleSave}
           disabled={saving}
-          className={`rounded-2xl py-4 items-center justify-center ${
-            saved ? 'bg-emerald-500' : saving ? 'bg-gray-200' : 'bg-emerald-500'
-          }`}
+          style={{
+            borderRadius: 16, paddingVertical: 16,
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: saved ? '#059669' : saving ? '#d1fae5' : '#059669',
+            marginTop: 4,
+          }}
         >
-          <Text className="text-white font-bold text-sm">
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
             {saved ? '✓ Saved!' : saving ? 'Saving…' : 'Save preferences'}
           </Text>
         </TouchableOpacity>
 
+        <View style={{ height: 32 }} />
       </View>
-      <View className="h-12" />
     </ScrollView>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import PlaceSearchInput from './PlaceSearchInput';
+import * as Location from 'expo-location';
 
 /**
  * Autocomplete location search form for HeatPath.
@@ -12,13 +13,37 @@ import PlaceSearchInput from './PlaceSearchInput';
 export default function SearchForm({ onSearch, isLoading }) {
   const [startPlace, setStartPlace] = useState(null);
   const [endPlace, setEndPlace] = useState(null);
-  const [activeField, setActiveField] = useState(null); // 'start' | 'end' | null
+  const [activeField, setActiveField] = useState(null);
+  const [locating, setLocating] = useState(false);
+
+  async function handleUseCurrentLocation() {
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Location permission denied. Please allow location access.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const { latitude, longitude } = loc.coords;
+
+      const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const label = place
+        ? `${place.name || ''} ${place.street || ''}, ${place.city || ''}`.trim()
+        : `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+
+      setStartPlace({ lat: latitude, lon: longitude, label });
+    } catch (e) {
+      alert('Could not get location. Please search manually.');
+    } finally {
+      setLocating(false);
+    }
+  }
 
   const handleSubmit = () => {
-    if (!startPlace || !endPlace) {
-      return;
-    }
-    // Call the parent search handler with start coordinates, end coordinates, and labels
+    if (!startPlace || !endPlace) return;
     onSearch(
       startPlace.lat,
       startPlace.lon,
@@ -37,18 +62,46 @@ export default function SearchForm({ onSearch, isLoading }) {
         <Text className="text-xl font-bold text-gray-800">🌿 HeatPath</Text>
       </View>
 
+      {/* FROM field */}
       <View style={{ zIndex: activeField === 'start' ? 100 : 10 }} className="relative">
-        <Text className="text-xs font-semibold text-gray-500 mb-1">From</Text>
-        <PlaceSearchInput
-          placeholder="Search start location..."
-          onPlaceSelected={setStartPlace}
-          biasLat={18.9220}
-          biasLon={72.8347}
-          onFocus={() => setActiveField('start')}
-          onBlur={() => setActiveField(null)}
-        />
+        <View className="flex-row justify-between items-center mb-1">
+          <Text className="text-xs font-semibold text-gray-500">From</Text>
+          <TouchableOpacity
+            onPress={handleUseCurrentLocation}
+            disabled={locating}
+            className="flex-row items-center"
+          >
+            <Text className="text-xs font-semibold text-emerald-600">
+              {locating ? '📍 Locating…' : '📍 Use my location'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Show selected location label if set via GPS */}
+        {startPlace && !activeField && (
+          <View className="flex-row items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mb-1">
+            <Text className="text-xs text-emerald-700 flex-1" numberOfLines={1}>
+              📍 {startPlace.label}
+            </Text>
+            <TouchableOpacity onPress={() => setStartPlace(null)} className="ml-2">
+              <Text className="text-xs text-gray-400 font-bold">✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {(!startPlace || activeField === 'start') && (
+          <PlaceSearchInput
+            placeholder="Search start location..."
+            onPlaceSelected={setStartPlace}
+            biasLat={18.9220}
+            biasLon={72.8347}
+            onFocus={() => setActiveField('start')}
+            onBlur={() => setActiveField(null)}
+          />
+        )}
       </View>
 
+      {/* TO field */}
       <View style={{ zIndex: activeField === 'end' ? 100 : 5 }} className="mt-3 relative">
         <Text className="text-xs font-semibold text-gray-500 mb-1">To</Text>
         <PlaceSearchInput
@@ -61,6 +114,7 @@ export default function SearchForm({ onSearch, isLoading }) {
         />
       </View>
 
+      {/* Find route button */}
       <TouchableOpacity
         onPress={handleSubmit}
         disabled={isButtonDisabled}
@@ -68,11 +122,9 @@ export default function SearchForm({ onSearch, isLoading }) {
           isButtonDisabled ? 'bg-gray-200' : 'bg-emerald-500'
         }`}
       >
-        <Text
-          className={`font-bold text-sm ${
-            isButtonDisabled ? 'text-gray-400' : 'text-white'
-          }`}
-        >
+        <Text className={`font-bold text-sm ${
+          isButtonDisabled ? 'text-gray-400' : 'text-white'
+        }`}>
           {isLoading ? 'Finding routes…' : 'Find Coolest Route 🌿'}
         </Text>
       </TouchableOpacity>
