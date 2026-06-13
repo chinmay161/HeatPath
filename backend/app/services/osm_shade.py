@@ -33,8 +33,76 @@ _shade_cache: Dict[str, tuple[float, str]] = {}
 async def estimate_shade_from_street_type(lat: float, lon: float) -> tuple[float, str]:
     """
     Estimate shade percentage based on street/land-use tags at coordinate.
+    
+    This performs a separate lightweight Overpass API query.
     """
-    return 25.0, "street_type"
+    query = f"""
+    [out:json][timeout:8];
+    (
+      way["highway"](around:30,{lat},{lon});
+      way["landuse"](around:80,{lat},{lon});
+      way["leisure"="park"](around:80,{lat},{lon});
+    );
+    out tags;
+    """
+    headers = {
+        "User-Agent": "HeatPath/1.0 (contact: support@heatpathapp.org)"
+    }
+    elements = []
+    api_failed = False
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post("https://overpass-api.de/api/interpreter", data={"data": query}, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                elements = data.get("elements", [])
+            else:
+                logger.warning(f"Overpass street type API failed: status={resp.status_code}")
+                api_failed = True
+    except Exception as e:
+        logger.warning(f"Overpass street type API failed: error={e}")
+        api_failed = True
+
+    if api_failed or not elements:
+        return 25.0, "street_type"
+
+    matched_scores = []
+    for el in elements:
+        tags = el.get("tags", {})
+        
+        # landuse rules
+        landuse = tags.get("landuse")
+        if landuse == "residential":
+            matched_scores.append(20.0)
+        elif landuse == "commercial":
+            matched_scores.append(35.0)
+        elif landuse == "retail":
+            matched_scores.append(30.0)
+        elif landuse == "industrial":
+            matched_scores.append(10.0)
+            
+        # leisure rules
+        if tags.get("leisure") == "park":
+            matched_scores.append(55.0)
+            
+        # highway rules
+        highway = tags.get("highway")
+        if highway == "pedestrian":
+            matched_scores.append(40.0)
+        elif highway == "footway":
+            matched_scores.append(15.0)
+        elif highway in ("primary", "secondary"):
+            matched_scores.append(30.0)
+        elif highway == "residential":
+            matched_scores.append(20.0)
+        elif highway == "service":
+            matched_scores.append(15.0)
+
+    if not matched_scores:
+        return 25.0, "street_type"
+
+    return float(max(matched_scores)), "street_type"
+
 
 
 async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> tuple[List[Dict[str, Any]], str]:
