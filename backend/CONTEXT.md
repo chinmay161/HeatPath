@@ -158,3 +158,34 @@ The `POST /score-route` endpoint now orchestrates both `osm_shade` and `comfort_
 The endpoint currently accepts `heat_index`, `aqi`, `heat_sensitivity`, and `aqi_sensitivity` as optional query parameters with default values (0.0 for environmental, 5 for sensitivities). 
 - In **Week 2**, Dev B will inject the real values by mapping the path's starting coordinate to `GET /conditions` (for heat/AQI) and loading stored user preferences from `POST /preferences` (for sensitivities). 
 - See `API_CONTRACT.md` for the finalized request/response shapes and Dev B's exact integration checklist.
+
+## Dev B — Week 1 Completed (June 2026)
+
+### Files created / modified
+- `app/services/weather.py` — Live weather + AQI service (was empty, now fully implemented)
+  - `get_weather()`: Fetches temperature_c, humidity_pct, feels_like_c from Open-Meteo (no API key needed)
+  - `get_aqi()`: Fetches AQI from WAQI API, falls back to 50 if token missing
+  - `compute_heat_index()`: Steadman formula, accurate for Indian summer range (>27°C)
+- `app/routers/conditions.py` — Replaced 501 stub with full implementation
+  - Returns real heat_index (°C), aqi_index (0.0–1.0 normalised), shade_index (0.0, Dev A owns)
+- `tests/test_main.py` — Updated test_get_conditions_stub → test_get_conditions_live (asserts 200 + schema)
+
+### Dependencies added to requirements.txt
+- `pytest-httpx==0.30.0`
+- `pytest-asyncio==0.23.6`
+- Pinned `httpx==0.27.0` to fix TestClient compatibility
+
+### Environment variables needed
+- `WAQI_TOKEN`: Free token from https://aqicn.org/data-platform/token/
+  (fallback to AQI=50 if not set — safe for development)
+
+### Live test result (Sat 13 Jun 2026, 07:56 UTC)
+- GET /conditions/?lat=18.9220&lon=72.8347 (Mumbai)
+- Response: { "heat_index": 39.55, "shade_index": 0.0, "aqi_index": 0.1 }
+- All 11 tests passing
+
+### What Dev A needs from me (Week 2 integration)
+- When POST /score-route runs, it should call GET /conditions with the path's
+  start coordinate to get real heat_index and aqi_index values
+- Those slot into comfort_scorer.py's heat_index and aqi parameters
+- shade_index will be populated by Dev A's OSM module and returned alongside

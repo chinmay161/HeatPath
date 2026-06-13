@@ -13,11 +13,16 @@ def test_health_check():
     assert response.json()["status"] == "ok"
     assert "env" in response.json()
 
-def test_get_conditions_stub():
-    """Test the conditions stub endpoint."""
+def test_get_conditions_live():
+    """Test that conditions endpoint returns real data."""
     response = client.get("/conditions/?lat=40.7128&lon=-74.0060")
-    assert response.status_code == 501
-    assert response.json()["detail"] == "not implemented"
+    assert response.status_code == 200
+    data = response.json()
+    assert "heat_index" in data
+    assert "aqi_index" in data
+    assert "shade_index" in data
+    assert isinstance(data["heat_index"], float)
+    assert 0.0 <= data["aqi_index"] <= 1.0
 
 def test_score_route(httpx_mock):
     """Test the score route endpoint."""

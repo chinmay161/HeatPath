@@ -1,0 +1,83 @@
+"""
+Dev B owns this file.
+Fetches real-time temperature, humidity, heat index from Open-Meteo (free, no key).
+Fetches AQI from WAQI API (free token).
+Called by GET /conditions endpoint.
+"""
+import httpx
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+WAQI_TOKEN = os.getenv("WAQI_TOKEN", "")
+
+
+async def get_weather(lat: float, lon: float) -> dict:
+    """
+    Returns temperature_c, humidity_pct, feels_like_c from Open-Meteo.
+    No API key required.
+    """
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&current=temperature_2m,relative_humidity_2m,apparent_temperature"
+        f"&forecast_days=1"
+    )
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        data = r.json()
+
+    current = data["current"]
+    return {
+        "temperature_c": current["temperature_2m"],
+        "humidity_pct":  current["relative_humidity_2m"],
+        "feels_like_c":  current["apparent_temperature"],
+    }
+
+
+async def get_aqi(lat: float, lon: float) -> int:
+    """
+    Returns AQI (0–500 scale) from WAQI API.
+    Falls back to 50 (Good) if token missing or API fails.
+    """
+    if not WAQI_TOKEN:
+        return 50  # safe fallback
+
+    url = f"https://api.waqi.info/feed/geo:{lat};{lon}/?token={WAQI_TOKEN}"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            data = r.json()
+        if data["status"] == "ok":
+            return int(data["data"]["aqi"])
+    except Exception:
+        pass
+    return 50
+
+
+def compute_heat_index(temp_c: float, humidity_pct: float) -> float:
+    """
+    Steadman heat index formula (°C).
+    Accurate above 27°C and 40% humidity — the Indian summer range.
+    """
+    T = temp_c
+    R = humidity_pct
+
+    if T < 27:
+        return round(T, 2)
+
+    HI = (
+        -8.78469475556
+        + 1.61139411    * T
+        + 2.33854883889 * R
+        - 0.14611605    * T * R
+        - 0.012308094   * T**2
+        - 0.016424828   * R**2
+        + 0.002211732   * T**2 * R
+        + 0.00072546    * T   * R**2
+        - 0.000003582   * T**2 * R**2
+    )
+    return round(HI, 2)
