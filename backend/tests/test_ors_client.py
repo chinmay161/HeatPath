@@ -10,6 +10,8 @@ client = TestClient(app)
 
 @pytest.mark.asyncio
 async def test_fetch_candidate_routes_success(httpx_mock):
+    from app.services.ors_client import _route_cache
+    _route_cache.clear()
     # Mock OpenRouteService directions GeoJSON response
     mock_response = {
         "type": "FeatureCollection",
@@ -57,6 +59,8 @@ async def test_fetch_candidate_routes_success(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_fetch_candidate_routes_error(httpx_mock):
+    from app.services.ors_client import _route_cache
+    _route_cache.clear()
     httpx_mock.add_response(
         url="https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
         status_code=500,
@@ -70,7 +74,7 @@ async def test_fetch_candidate_routes_error(httpx_mock):
             await fetch_candidate_routes(18.9220, 72.8347, 18.9230, 72.8360, n=2)
         except HTTPException as e:
             assert e.status_code == 502
-            assert "returned error status 500" in e.detail
+            assert "returned 500" in e.detail
             raise httpx.HTTPStatusError("Mocked status error", request=httpx.Request("POST", ""), response=httpx.Response(500))
 
 

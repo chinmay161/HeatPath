@@ -122,11 +122,15 @@ async def fetch_candidate_routes(
             deduplicated.append(path)
             continue
 
-        # Sample every 5th point for speed
-        sample = path[::5] or path[:1]
+        # Sample every 5th point for speed, but if path is short, keep all points
+        sample = path[::5] if len(path) >= 10 else path
+        if not sample:
+            sample = path[:1]
         is_dup = False
         for accepted in deduplicated:
-            accepted_sample = accepted[::5] or accepted[:1]
+            accepted_sample = accepted[::5] if len(accepted) >= 10 else accepted
+            if not accepted_sample:
+                accepted_sample = accepted[:1]
             close = sum(
                 1 for pt1 in sample
                 if any(
