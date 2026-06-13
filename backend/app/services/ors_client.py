@@ -2,6 +2,7 @@
 OpenRouteService client service for pedestrian routing.
 """
 import logging
+import math
 from typing import List, Dict, Any
 import httpx
 from fastapi import HTTPException, status
@@ -41,7 +42,8 @@ async def fetch_candidate_routes(
     body = {
         "coordinates": [[start_lon, start_lat], [end_lon, end_lat]],
         "alternative_routes": {
-            "share_factor": 0.6,
+            "share_factor": 0.4,
+            "weight_factor": 1.6,
             "target_count": n
         },
         "geometry_simplify": False
@@ -110,7 +112,53 @@ async def fetch_candidate_routes(
             detail="OpenRouteService returned features but no valid route geometry coordinates were found"
         )
         
-    return paths[:n]
+    # Perform sequential deduplication: drop any route where > 80% of waypoints
+    # are within 30m of another route's waypoints (simple pairwise lat/lon distance check).
+    deduplicated_paths = []
+    for idx, path in enumerate(paths):
+        if not deduplicated_paths:
+            deduplicated_paths.append(path)
+            continue
+            
+        should_drop = False
+        for accepted_path in deduplicated_paths:
+            close_points = 0
+            for pt1 in path:
+                # Check if pt1 is within 30m of any waypoint in accepted_path
+                for pt2 in accepted_path:
+                    if haversine_distance(pt1["lat"], pt1["lon"], pt2["lat"], pt2["lon"]) <= 30.0:
+                        close_points += 1
+                        break
+            
+            overlap_ratio = close_points / len(path) if path else 0
+            if overlap_ratio > 0.8:
+                should_drop = True
+                logger.warning(
+                    f"Deduplication dropped candidate route at index {idx} "
+                    f"due to {overlap_ratio * 100:.1f}% waypoint overlap (> 80%) with an accepted route"
+                )
+                break
+                
+        if not should_drop:
+            deduplicated_paths.append(path)
+            
+    return deduplicated_paths[:n]
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate distance between two coordinates in meters."""
+    R = 6371000  # Earth radius in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = math.sin(delta_phi / 2.0) ** 2 + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(delta_lambda / 2.0) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return R * c
 
 
 def simplify_path(path: List[Dict[str, float]], max_points: int = 20) -> List[Dict[str, float]]:

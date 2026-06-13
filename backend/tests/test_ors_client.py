@@ -177,3 +177,52 @@ def test_find_routes_endpoint_integration(httpx_mock, monkeypatch):
     assert data["conditions"]["aqi_normalised"] == 80 / 300.0
     assert data["conditions"]["fetched_at_lat"] == 18.9220
     assert data["conditions"]["fetched_at_lon"] == 72.8347
+
+
+@pytest.mark.asyncio
+async def test_fetch_candidate_routes_deduplication(httpx_mock):
+    # Mock response returning two routes: Route 1 and Route 2.
+    # Route 2 is highly overlapping with Route 1 (same path, except one point is 5 meters off)
+    mock_response = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [
+                        [72.8347, 18.9220],
+                        [72.8350, 18.9225]
+                    ]
+                }
+            },
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [
+                        [72.8347, 18.9220],
+                        # 18.92251 (approx 1 meter north of 18.9225)
+                        [72.8350, 18.92251]
+                    ]
+                }
+            }
+        ]
+    }
+    httpx_mock.add_response(
+        url="https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
+        json=mock_response
+    )
+
+    routes = await fetch_candidate_routes(
+        start_lat=18.9220,
+        start_lon=72.8347,
+        end_lat=18.9225,
+        end_lon=72.8350,
+        n=2
+    )
+
+    # Route 2 is dropped by deduplication because > 80% of its waypoints are within 30m of Route 1.
+    assert len(routes) == 1
+    assert routes[0] == [{"lat": 18.9220, "lon": 72.8347}, {"lat": 18.9225, "lon": 72.8350}]
+
