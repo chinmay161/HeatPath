@@ -267,3 +267,23 @@ The `POST /find-routes` endpoint processes routing requests end-to-end as follow
 
 ### Week 2 remaining (Dev B)
 - Comparison panel UI — Normal vs HeatPath route cards (frontend)
+
+## Dev B — Week 2 Comparison Panel UI (completed)
+
+### Frontend scaffolded
+- Expo SDK 56 + React Native Web
+- `frontend/services/api.js` — findRoutes(), getConditions() calling backend
+- `frontend/components/RouteCard.js` — route card with comfort score, heat safety,
+  shade cover, conditions strip, HEATPATH BEST badge for rank 1
+- `frontend/app/index.js` — home screen with coordinate inputs, loading state,
+  conditions bar, route card list
+
+### Live test result (Sat 13 Jun 2026)
+- Mumbai (18.9220, 72.8347) → (18.9350, 72.8250)
+- Heat index: 38.67°C, AQI: 77
+- Route 1 & 2: comfort score 0.384, heat safety 61%, shade 0% (Overpass rate limited)
+- UI renders correctly in browser via Expo Web
+
+### Week 3 tasks remaining (Dev B)
+- Preferences UI — heat sensitivity slider, saved prefs screen
+- Deploy frontend to Vercel free tier
