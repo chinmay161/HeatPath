@@ -392,3 +392,29 @@ From live testing feedback and UX screenshots, requiring users to manually type 
    - Added optional field `shade_source: str = "unknown"` to `RouteScoreResponse` and `ScoredRoute` schemas.
    - Values: `"overpass"`, `"street_type"`, `"cached"`, `"failed_fallback"`.
    - Router endpoints (`find_routes.py` and `routes.py`) compute the mode of segment sources across the path and populate this field.
+
+## Dev B — Week 3 Complete (13 June 2026)
+
+### Deployed
+- Frontend: https://heatpath-rose.vercel.app
+- Backend:  https://heatpath-api.onrender.com
+
+### Frontend fixes
+- Added `vercel.json` with SPA rewrite rule — fixes /preferences 404 on Vercel
+- Added `useWindowDimensions` mobile detection — map screen now stacks vertically
+  on screens < 768px instead of broken side-by-side layout
+- Added `.npmrc` with `legacy-peer-deps=true` for Vercel build compatibility
+
+### Known issues
+- Open-Meteo returns 429 on Render shared IP — fixed with retry + fallback (34°C/72% RH)
+- Overpass API blocked by ISP — shade uses coordinate-based fallback (varied, realistic)
+- Heat index fallback shows 57°C (too high) — fixed to 37.5°C feels-like in weather.py
+
+### Backend fixes
+- `weather.py`: retry 3x on 429 with exponential backoff, realistic fallback
+- `ors_client.py`: in-memory route cache — repeat searches instant
+- `find_routes.py`: parallel scoring with asyncio.gather, max_points=8, n_routes=2
+- `.python-version`: pinned to 3.11.9 for Render Python compatibility
+- `render.yaml`: added for one-click Render deployment
+
+### All 17 tests still passing
