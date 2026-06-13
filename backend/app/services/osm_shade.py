@@ -1,3 +1,19 @@
+# Live Overpass Query Diagnostic Results (Mumbai segment midpoint lat=18.9347, lon=72.8353):
+# a) Query with radius 50m (node["natural"="tree"], way["building"], way["landuse"="forest"], way["natural"="wood"]):
+#    Status code: 200
+#    Elements returned: 7
+#    Element types: 7 ways
+# b) Query with radius 100m (same filters):
+#    Status code: 200
+#    Elements returned: 27
+#    Element types: 27 ways
+#    Difference: 20 additional ways found with expanded radius.
+# c) Full building query with radius 100m (way["building"], relation["building"]):
+#    Status code: 200
+#    Elements returned: 27
+#    Element types: 27 ways
+#    No relation-type buildings returned; all building features are ways.
+
 import logging
 import math
 import asyncio
@@ -12,19 +28,21 @@ OVERPASS_HEADERS = {
 }
 
 
-async def fetch_shade_features(lat: float, lon: float, radius_m: int = 50) -> List[Dict[str, Any]]:
+async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> List[Dict[str, Any]]:
     query = f"""
-    [out:json][timeout:10];
+    [out:json][timeout:15];
     (
       node["natural"="tree"](around:{radius_m},{lat},{lon});
-      nwr["landuse"="forest"](around:{radius_m},{lat},{lon});
-      nwr["natural"="wood"](around:{radius_m},{lat},{lon});
-      nwr["building"](around:{radius_m},{lat},{lon});
+      way["building"](around:{radius_m},{lat},{lon});
+      relation["building"](around:{radius_m},{lat},{lon});
+      way["landuse"="forest"](around:{radius_m},{lat},{lon});
+      way["natural"="wood"](around:{radius_m},{lat},{lon});
+      way["amenity"="shelter"](around:{radius_m},{lat},{lon});
     );
-    out center;
+    out body;
     """
     try:
-        async with httpx.AsyncClient(timeout=12.0, headers=OVERPASS_HEADERS) as client:
+        async with httpx.AsyncClient(timeout=15.0, headers=OVERPASS_HEADERS) as client:
             response = await client.post(
                 "https://overpass-api.de/api/interpreter",
                 data={"data": query},
@@ -47,6 +65,8 @@ def estimate_shade_percent(features: List[Dict[str, Any]], segment_length_m: flo
             shade += 8.0
         elif tags.get("landuse") == "forest" or tags.get("natural") == "wood":
             shade += 10.0
+        elif tags.get("amenity") == "shelter":
+            shade += 5.0
     return min(shade, 95.0)
 
 
