@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { scoreToBgClass, scoreToLabel } from '../utils/scoreToColor';
 import ScoreBar from './ScoreBar';
@@ -26,11 +26,48 @@ function routeStats(route) {
       route.path[i+1].lat, route.path[i+1].lon,
     );
   }
-  const walkMins = Math.round((total / 5) * 60); // 5 km/h walking speed
+  const walkMins = Math.round((total / 5) * 60);
   return { distanceKm: total.toFixed(2), walkMins };
 }
 
+function buildExplainer(route, bestRoute, distanceKm, walkMins) {
+  const shade    = Math.round(route.shade_safety_score * 100);
+  const heat     = Math.round(route.heat_safety_score  * 100);
+  const score    = Math.round(route.overall_score      * 100);
+  const isTop    = route.rank === 1;
+
+  if (isTop) {
+    const reasons = [];
+    if (shade >= 40)
+      reasons.push(`${shade}% of this route has shade cover`);
+    else if (shade >= 20)
+      reasons.push(`moderate shade on ${shade}% of the route`);
+    else
+      reasons.push('minimal shade but the coolest path available');
+
+    if (heat >= 70)
+      reasons.push('low heat exposure throughout');
+    else if (heat >= 50)
+      reasons.push('manageable heat levels');
+    else
+      reasons.push('high heat — walk early morning or evening if possible');
+
+    return `HeatPath picked this route because it has ${reasons[0]}, with ${reasons[1]}. `
+      + `At ${walkMins} min for ${distanceKm} km, it scores ${score}/100 for comfort.`;
+  } else {
+    const bestStats = routeStats(bestRoute);
+    const timeDiff  = walkMins - bestStats.walkMins;
+    const heatDiff  = Math.abs(
+      Math.round((route.heat_safety_score - bestRoute.heat_safety_score) * 100)
+    );
+    return `This route is ${timeDiff > 0 ? `${timeDiff} min longer` : 'similar time'} `
+      + `and ${heatDiff}% less heat-safe than Route 1. `
+      + `Choose this only if Route 1 is blocked or unfamiliar.`;
+  }
+}
+
 export default function RouteCard({ route, isSelected, onPress, bestRoute }) {
+  const [showExplainer, setShowExplainer] = useState(false);
   const isTop = route.rank === 1;
   const { distanceKm, walkMins } = routeStats(route);
 
@@ -38,11 +75,12 @@ export default function RouteCard({ route, isSelected, onPress, bestRoute }) {
     ? ((route.heat_safety_score - bestRoute.heat_safety_score) * 100).toFixed(0)
     : null;
 
-  // Time delta vs best route
-  const bestStats  = bestRoute ? routeStats(bestRoute) : null;
-  const timeDelta  = bestStats && route.rank > 1
+  const bestStats = bestRoute ? routeStats(bestRoute) : null;
+  const timeDelta = bestStats && route.rank > 1
     ? walkMins - bestStats.walkMins
     : null;
+
+  const explainerText = buildExplainer(route, bestRoute, distanceKm, walkMins);
 
   return (
     <TouchableOpacity
@@ -69,12 +107,45 @@ export default function RouteCard({ route, isSelected, onPress, bestRoute }) {
             </View>
           )}
         </View>
-        <View className="px-2.5 py-1 rounded-full bg-gray-100">
-          <Text className="text-xs font-semibold text-gray-600">
-            {scoreToLabel(route.overall_score)}
-          </Text>
+        <View className="flex-row items-center gap-2">
+          {/* Why this route button */}
+          <TouchableOpacity
+            onPress={e => { e.stopPropagation?.(); setShowExplainer(v => !v); }}
+            style={{
+              backgroundColor: showExplainer ? '#ecfdf5' : '#f9fafb',
+              borderWidth: 1,
+              borderColor: showExplainer ? '#6ee7b7' : '#e5e7eb',
+              borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
+            }}
+          >
+            <Text style={{ fontSize: 11, color: showExplainer ? '#065f46' : '#6b7280', fontWeight: '600' }}>
+              {showExplainer ? '✕ close' : 'ℹ️ why?'}
+            </Text>
+          </TouchableOpacity>
+          <View className="px-2.5 py-1 rounded-full bg-gray-100">
+            <Text className="text-xs font-semibold text-gray-600">
+              {scoreToLabel(route.overall_score)}
+            </Text>
+          </View>
         </View>
       </View>
+
+      {/* Explainer panel */}
+      {showExplainer && (
+        <View style={{
+          backgroundColor: isTop ? '#f0fdf4' : '#fff7ed',
+          borderWidth: 1,
+          borderColor: isTop ? '#bbf7d0' : '#fed7aa',
+          borderRadius: 10, padding: 10, marginBottom: 10,
+        }}>
+          <Text style={{
+            fontSize: 12, lineHeight: 18,
+            color: isTop ? '#065f46' : '#9a3412',
+          }}>
+            {explainerText}
+          </Text>
+        </View>
+      )}
 
       {/* Walk time + distance row */}
       <View className="flex-row items-center gap-3 mb-3">

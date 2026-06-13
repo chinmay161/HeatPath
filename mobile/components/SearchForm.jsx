@@ -1,20 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import PlaceSearchInput from './PlaceSearchInput';
 import * as Location from 'expo-location';
 
-/**
- * Autocomplete location search form for HeatPath.
- *
- * @param {object} props
- * @param {function} props.onSearch - Callback function called with (startLat, startLon, endLat, endLon, startLabel, endLabel)
- * @param {boolean} props.isLoading - Loading state indicator
- */
+const LOADING_MESSAGES = [
+  'Finding routes…',
+  'Checking heat conditions…',
+  'Scoring shade coverage…',
+  'Ranking by comfort…',
+  'Almost there…',
+];
+
 export default function SearchForm({ onSearch, isLoading }) {
-  const [startPlace, setStartPlace] = useState(null);
-  const [endPlace, setEndPlace] = useState(null);
+  const [startPlace,  setStartPlace]  = useState(null);
+  const [endPlace,    setEndPlace]    = useState(null);
   const [activeField, setActiveField] = useState(null);
-  const [locating, setLocating] = useState(false);
+  const [locating,    setLocating]    = useState(false);
+  const [loadingMsg,  setLoadingMsg]  = useState(LOADING_MESSAGES[0]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingMsg(LOADING_MESSAGES[0]);
+      return;
+    }
+    let i = 0;
+    const t = setInterval(() => {
+      i = (i + 1) % LOADING_MESSAGES.length;
+      setLoadingMsg(LOADING_MESSAGES[i]);
+    }, 3500);
+    return () => clearInterval(t);
+  }, [isLoading]);
 
   async function handleUseCurrentLocation() {
     setLocating(true);
@@ -45,12 +60,9 @@ export default function SearchForm({ onSearch, isLoading }) {
   const handleSubmit = () => {
     if (!startPlace || !endPlace) return;
     onSearch(
-      startPlace.lat,
-      startPlace.lon,
-      endPlace.lat,
-      endPlace.lon,
-      startPlace.label,
-      endPlace.label
+      startPlace.lat, startPlace.lon,
+      endPlace.lat,   endPlace.lon,
+      startPlace.label, endPlace.label,
     );
   };
 
@@ -69,7 +81,6 @@ export default function SearchForm({ onSearch, isLoading }) {
           <TouchableOpacity
             onPress={handleUseCurrentLocation}
             disabled={locating}
-            className="flex-row items-center"
           >
             <Text className="text-xs font-semibold text-emerald-600">
               {locating ? '📍 Locating…' : '📍 Use my location'}
@@ -77,7 +88,6 @@ export default function SearchForm({ onSearch, isLoading }) {
           </TouchableOpacity>
         </View>
 
-        {/* Show selected location label if set via GPS */}
         {startPlace && !activeField && (
           <View className="flex-row items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mb-1">
             <Text className="text-xs text-emerald-700 flex-1" numberOfLines={1}>
@@ -125,9 +135,23 @@ export default function SearchForm({ onSearch, isLoading }) {
         <Text className={`font-bold text-sm ${
           isButtonDisabled ? 'text-gray-400' : 'text-white'
         }`}>
-          {isLoading ? 'Finding routes…' : 'Find Coolest Route 🌿'}
+          {isLoading ? loadingMsg : 'Find Coolest Route 🌿'}
         </Text>
       </TouchableOpacity>
+
+      {/* Loading progress bar */}
+      {isLoading && (
+        <View style={{
+          height: 3, backgroundColor: '#d1fae5',
+          borderRadius: 2, marginTop: 8, overflow: 'hidden',
+        }}>
+          <View style={{
+            height: '100%', backgroundColor: '#059669',
+            borderRadius: 2, width: '100%',
+            animation: 'progress 25s linear forwards',
+          }} />
+        </View>
+      )}
     </View>
   );
 }

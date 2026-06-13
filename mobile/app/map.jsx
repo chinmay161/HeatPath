@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Platform, Animated } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -78,21 +78,121 @@ function AnimatedRouteReveal({ children }) {
   }, []);
 
   return (
-    <Animated.View style={{
-      opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }],
-    }}>
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
       {children}
     </Animated.View>
+  );
+}
+
+// Web-only: animates a dot along the route path on the Leaflet map
+function RouteReplayButton({ route, mapRef }) {
+  const [replaying, setReplaying]   = useState(false);
+  const [progress,  setProgress]    = useState(0);
+  const intervalRef                  = useRef(null);
+  const markerRef                    = useRef(null);
+
+  const startReplay = useCallback(() => {
+    if (!route?.path || route.path.length < 2) return;
+    if (replaying) {
+      clearInterval(intervalRef.current);
+      markerRef.current?.remove();
+      setReplaying(false);
+      setProgress(0);
+      return;
+    }
+
+    setReplaying(true);
+    setProgress(0);
+
+    const path  = route.path;
+    const total = path.length;
+    let   i     = 0;
+
+    // Create a walking dot marker on the Leaflet map
+    if (typeof window !== 'undefined' && window.L) {
+      const L    = window.L;
+      const icon = L.divIcon({
+        html: `<div style="
+          width: 20px; height: 20px; border-radius: 50%;
+          background: #3b82f6; border: 3px solid #fff;
+          box-shadow: 0 0 10px #3b82f6aa;
+          animation: pulse 1s infinite;
+        "></div>
+        <style>
+          @keyframes pulse {
+            0%   { transform: scale(1);   box-shadow: 0 0 10px #3b82f6aa; }
+            50%  { transform: scale(1.3); box-shadow: 0 0 20px #3b82f6cc; }
+            100% { transform: scale(1);   box-shadow: 0 0 10px #3b82f6aa; }
+          }
+        </style>`,
+        className: '', iconSize: [20, 20], iconAnchor: [10, 10],
+      });
+
+      // Find the Leaflet map instance from the DOM
+      const mapEl = document.querySelector('.leaflet-container');
+      if (mapEl && mapEl._leaflet_id) {
+        const map = window._heatpathMap;
+        if (map) {
+          markerRef.current = L.marker(
+            [path[0].lat, path[0].lon], { icon, zIndexOffset: 2000 }
+          ).addTo(map);
+        }
+      }
+    }
+
+    intervalRef.current = setInterval(() => {
+      i++;
+      if (i >= total) {
+        clearInterval(intervalRef.current);
+        markerRef.current?.remove();
+        setReplaying(false);
+        setProgress(0);
+        return;
+      }
+      setProgress(Math.round((i / total) * 100));
+      if (markerRef.current && route.path[i]) {
+        markerRef.current.setLatLng([route.path[i].lat, route.path[i].lon]);
+      }
+    }, 120);
+  }, [route, replaying]);
+
+  useEffect(() => {
+    return () => {
+      clearInterval(intervalRef.current);
+      markerRef.current?.remove();
+    };
+  }, []);
+
+  return (
+    <TouchableOpacity
+      onPress={startReplay}
+      style={{
+        position: 'absolute', bottom: 60, left: 12, zIndex: 1000,
+        backgroundColor: replaying ? '#3b82f6' : 'rgba(255,255,255,0.95)',
+        borderRadius: 24, paddingHorizontal: 14, paddingVertical: 8,
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        border: '1px solid #e5e7eb',
+      }}
+    >
+      <Text style={{ fontSize: 14 }}>{replaying ? '⏹' : '▶️'}</Text>
+      <Text style={{
+        fontSize: 12, fontWeight: '700',
+        color: replaying ? '#fff' : '#1f2937',
+      }}>
+        {replaying ? `Walking… ${progress}%` : 'Preview walk'}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
 export default function MapScreen() {
   const params = useLocalSearchParams();
   const { startLabel, endLabel } = params;
-  const insets = useSafeAreaInsets();
+  const insets       = useSafeAreaInsets();
   const [selectedRoute, setSelectedRoute] = useState(0);
   const [routesVisible, setRoutesVisible] = useState(false);
+  const [replayKey,     setReplayKey]     = useState(0);
 
   let routes     = [];
   let conditions = null;
@@ -111,11 +211,15 @@ export default function MapScreen() {
     }
   }
 
-  // Trigger route animation after short delay (simulates drawing)
   useEffect(() => {
     const t = setTimeout(() => setRoutesVisible(true), 300);
     return () => clearTimeout(t);
   }, []);
+
+  // Reset replay when selected route changes
+  useEffect(() => {
+    setReplayKey(k => k + 1);
+  }, [selectedRoute]);
 
   const backButtonTop = Platform.OS === 'web' ? 16 : insets.top + 8;
 
@@ -147,12 +251,10 @@ export default function MapScreen() {
           </AnimatedRouteReveal>
         ))
       ) : (
-        // Skeleton placeholders while routes animate in
         [0, 1].map(i => (
           <View key={i} style={{
             height: 90, borderRadius: 16, marginBottom: 12,
-            backgroundColor: '#f3f4f6',
-            opacity: 0.7,
+            backgroundColor: '#f3f4f6', opacity: 0.7,
           }} />
         ))
       )}
@@ -179,6 +281,15 @@ export default function MapScreen() {
           >
             <Text className="text-gray-800 text-sm font-bold">← Search</Text>
           </TouchableOpacity>
+
+          {/* Replay button — web only */}
+          {routes[selectedRoute] && (
+            <RouteReplayButton
+              key={replayKey}
+              route={routes[selectedRoute]}
+            />
+          )}
+
           <ConditionsBadge conditions={conditions} />
         </View>
 
