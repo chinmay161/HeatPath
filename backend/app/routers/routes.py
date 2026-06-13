@@ -2,11 +2,12 @@
 Routes router for scoring pedestrian paths.
 """
 from fastapi import APIRouter, HTTPException, status
+from app.models.schemas import RouteScoreRequest, RouteScoreResponse
 
 router = APIRouter(prefix="/score-route", tags=["Routes"])
 
-@router.post("/")
-async def score_route():
+@router.post("/", response_model=RouteScoreResponse)
+async def score_route(request: RouteScoreRequest):
     """
     Score a route based on heat, shade, and AQI.
     

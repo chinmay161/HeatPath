@@ -1,12 +1,13 @@
 """
 Conditions router for weather, shade, and AQI data.
 """
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Query
+from app.models.schemas import ConditionsResponse
 
 router = APIRouter(prefix="/conditions", tags=["Conditions"])
 
-@router.get("/")
-async def get_conditions():
+@router.get("/", response_model=ConditionsResponse)
+async def get_conditions(lat: float = Query(..., description="Latitude"), lon: float = Query(..., description="Longitude")):
     """
     Get environmental conditions (weather, shade, AQI) for a specific location.
     

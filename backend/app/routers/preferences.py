@@ -2,11 +2,12 @@
 Preferences router for user settings.
 """
 from fastapi import APIRouter, HTTPException, status
+from app.models.schemas import PreferencesRequest, PreferencesResponse
 
 router = APIRouter(prefix="/preferences", tags=["Preferences"])
 
-@router.post("/")
-async def update_preferences():
+@router.post("/", response_model=PreferencesResponse)
+async def update_preferences(request: PreferencesRequest):
     """
     Update user routing preferences.
     
