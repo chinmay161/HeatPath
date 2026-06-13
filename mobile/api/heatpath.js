@@ -101,3 +101,50 @@ export async function getConditions(lat, lon) {
 
   return await response.json();
 }
+
+/**
+ * Updates user routing preferences (heat and AQI sensitivity).
+ * @param {number} heatSensitivity - Heat sensitivity 1–10.
+ * @param {number} aqiSensitivity - AQI sensitivity 1–10.
+ * @returns {Promise<{status: string}>}
+ */
+export async function updatePreferences(heatSensitivity, aqiSensitivity) {
+  const response = await fetch(`${BASE_URL}/preferences/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      heat_sensitivity: heatSensitivity,
+      aqi_sensitivity:  aqiSensitivity,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`Failed to update preferences: ${response.status} ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Fetches current user routing preferences.
+ * @returns {Promise<{heat_sensitivity: number, aqi_sensitivity: number}>}
+ */
+export async function getPreferences() {
+  const response = await fetch(`${BASE_URL}/preferences/`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`Failed to fetch preferences: ${response.status} ${errorText}`);
+  }
+
+  return await response.json();
+}

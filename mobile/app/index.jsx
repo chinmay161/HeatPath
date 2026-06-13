@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { findRoutes } from '../api/heatpath';
@@ -55,6 +55,12 @@ export default function SearchScreen() {
       <View className="flex-1 justify-center px-4 py-8">
         <View className="items-center mb-8">
           <Text className="text-4xl font-extrabold text-emerald-600 tracking-tight">HeatPath</Text>
+                <TouchableOpacity
+                  onPress={() => router.push('/preferences')}
+                  className="mt-2"
+                >
+                  <Text className="text-xs text-gray-400 underline">⚙️ Preferences</Text>
+                </TouchableOpacity>
           <Text className="text-sm text-gray-500 mt-2 text-center font-medium">
             Walk cooler. Walk safer.
           </Text>
