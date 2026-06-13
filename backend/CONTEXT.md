@@ -114,3 +114,27 @@ Currently, all endpoint logic inside the routers (`conditions.py`, `routes.py`, 
    ```bash
    pytest
    ```
+
+## Task 2 — OSM Shade Fetcher
+The `osm_shade` service is responsible for querying open map data to calculate the amount of shade available along a pedestrian route. The **Overpass API** was chosen because it allows for powerful, dynamic queries (Overpass QL) of OpenStreetMap data, letting us efficiently fetch specific shade-contributing features like individual trees, forests, and buildings around given coordinates without hosting a massive full-planet OSM database locally.
+
+### Shade Scoring Heuristic
+The heuristic calculates shade based on the following exact weights for features found within a 50m radius of a path segment midpoint:
+- **Individual trees** (`natural=tree`): +5% shade per tree.
+- **Buildings** (`building=*`): +8% shade per building.
+- **Forest/Wood areas** (`landuse=forest` or `natural=wood`): +10% shade per area.
+- The total shade percentage for a segment is **capped at 95%**.
+
+### Mapping to POST /score-route
+The `shade_for_path` function accepts a path array conforming to the `POST /score-route` contract (e.g., `[{"lat": 40.71, "lon": -74.00}, ...]`). It breaks the path into segments, computes the geographic midpoint for each segment, and fetches the shade score. The `POST /score-route` endpoint averages these segment scores, normalises the average to a 0.0–1.0 range, and returns it as the `shade_safety_score`.
+
+### Stubbed Data
+The `heat_safety_score` and `overall_score` are still stubbed to `0.0`. These depend on the Weather and AQI data pipeline which is currently being built by Dev B. Once Dev B completes the conditions module, these scores will be dynamically calculated.
+
+### Rate-Limiting & Overpass Fair-Use
+- **Timeouts & Graceful Degradation:** The Overpass API is a free, shared resource and can occasionally be slow or return 429 (Too Many Requests). The `httpx.AsyncClient` is configured with a 10s timeout. If the API fails or times out, the service handles it gracefully by returning `0.0` (0% shade) for that specific segment rather than failing the entire route.
+- **Future Considerations:** Dev B or future devs should consider implementing caching (e.g., Redis) for bounding boxes or coordinates to reduce direct calls to Overpass API and comply with their Fair Use Policy if traffic increases.
+
+### Edge Cases Handled
+- **API Errors:** As mentioned, timeouts or bad responses return a 0.0 shade score for the segment, allowing the rest of the route to process.
+- **Single-Point Paths:** If a route contains fewer than 2 points, it cannot form a segment. The endpoint handles this gracefully by returning early with all scores set to `0.0`.
