@@ -19,8 +19,15 @@ def test_get_conditions_stub():
     assert response.status_code == 501
     assert response.json()["detail"] == "not implemented"
 
-def test_score_route_stub():
-    """Test the score route stub endpoint."""
+def test_score_route(httpx_mock):
+    """Test the score route endpoint."""
+    mock_response = {
+        "elements": [
+            {"tags": {"natural": "tree"}}
+        ]
+    }
+    httpx_mock.add_response(url="https://overpass-api.de/api/interpreter", json=mock_response)
+    
     payload = {
         "path": [
             {"lat": 40.7128, "lon": -74.0060},
@@ -28,8 +35,11 @@ def test_score_route_stub():
         ]
     }
     response = client.post("/score-route/", json=payload)
-    assert response.status_code == 501
-    assert response.json()["detail"] == "not implemented"
+    assert response.status_code == 200
+    data = response.json()
+    assert "shade_safety_score" in data
+    assert isinstance(data["shade_safety_score"], float)
+    assert data["shade_safety_score"] == 0.05
 
 def test_update_preferences_stub():
     """Test the update preferences stub endpoint."""
