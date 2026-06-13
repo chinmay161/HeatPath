@@ -337,3 +337,58 @@ From live testing feedback and UX screenshots, requiring users to manually type 
 - **ORS parameters**: Updated alternative route request parameters `share_factor` from `0.6` to `0.4` (forcing ORS to search for more divergent paths) and added `weight_factor: 1.6` (penalizing reuse of identical segments).
 - **Sequential Deduplication**: Implemented a pure python sequential deduplication step using a custom Haversine distance helper. It sequentially discards candidate routes where `> 80%` of waypoints are within `30m` of any waypoint of an already accepted route. A warning is logged whenever a duplicate candidate is dropped.
 
+
+## Shade Pipeline Bug Fix (Pre-Week 3)
+
+### Diagnosis & Root Causes
+1. **Root Cause 1 - Overpass Rate Limiting (Silent Failure)**:
+   - Live testing logs showed "shade 0% (Overpass rate limited)".
+   - The original implementation caught HTTP errors and returned `0.0` with no distinction between a rate-limit error and genuinely having no shade features.
+2. **Root Cause 2 - Sparse OSM Tagging in Mumbai**:
+   - The CST → Gateway route midpoint in dense Mumbai (lat=18.9347, lon=72.8353) was queried.
+   - Diagnostic query results:
+     - **Query A (50m radius)**: `node["natural"="tree"]`, `way["building"]`, `way["landuse"="forest"]`, `way["natural"="wood"]` returned **7 elements** (all of type `way`), status code `200`.
+     - **Query B (100m radius)**: The same filters returned **27 elements** (all of type `way`), status code `200`. Expanding the search radius to 100m increased the count by 20 elements, indicating dense structures are present but outside the 50m range.
+     - **Query C (100m building query)**: `way["building"]` and `relation["building"]` returned **27 elements** (all of type `way`), status code `200`. There were no relation-type building elements in this coordinate's immediate area.
+
+### Changes Implemented
+1. **Tuple Return Signature**:
+   - Updated `fetch_shade_features` to return `(features: list, source: str)`.
+   - The `source` is set to `"overpass"` on success, `"failed"` on non-200/timeout HTTP responses, and `"cached"` on cache hits.
+   - Real HTTP status codes are logged on failure (e.g. `Overpass API failed: status=429, using fallback`).
+2. **Street-Type Fallback Estimator**:
+   - Implemented `estimate_shade_from_street_type(lat, lon) -> (value: float, source: str)` using a separate lightweight Overpass query with an 8s timeout:
+     ```
+     [out:json][timeout:8];
+     (
+       way["highway"](around:30,{lat},{lon});
+       way["landuse"](around:80,{lat},{lon});
+       way["leisure"="park"](around:80,{lat},{lon});
+     );
+     out tags;
+     ```
+   - Rules implemented in order (taking the highest matching shade percentage if multiple match):
+     - `landuse = "residential"` → 20%
+     - `landuse = "commercial"` → 35%
+     - `landuse = "retail"` → 30%
+     - `landuse = "industrial"` → 10%
+     - `leisure = "park"` → 55%
+     - `highway = "pedestrian"` → 40%
+     - `highway = "footway"` → 15%
+     - `highway = "primary"` or `"secondary"` → 30%
+     - `highway = "residential"` → 20%
+     - `highway = "service"` → 15%
+     - No tags found / API failed → 25% (urban default)
+3. **Query Expansion**:
+   - Primary query radius increased default from 50m to 100m.
+   - Added `relation["building"]` and `way["amenity"="shelter"]` to the main Overpass QL query.
+   - Added `amenity=shelter` (+5% shade each) to the scoring in `estimate_shade_percent`.
+4. **In-Memory Segment Cache**:
+   - Added module-level dict `_shade_cache: dict[str, tuple[float, str]] = {}`.
+   - Key format: `f"{lat:.4f},{lon:.4f},{radius}"` (~11m precision).
+   - Cache hit skips the Overpass API call entirely and returns the cached percentage and `"cached"` source.
+   - *Note*: Week 3 Redis implementation will replace this in-memory dictionary cache with Redis TTL caching.  # TODO Week 3: replace with Redis TTL cache
+5. **Debuggability (shade_source Response Field)**:
+   - Added optional field `shade_source: str = "unknown"` to `RouteScoreResponse` and `ScoredRoute` schemas.
+   - Values: `"overpass"`, `"street_type"`, `"cached"`, `"failed_fallback"`.
+   - Router endpoints (`find_routes.py` and `routes.py`) compute the mode of segment sources across the path and populate this field.
