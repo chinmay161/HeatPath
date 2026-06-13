@@ -316,3 +316,24 @@ When running on physical mobile devices via Expo Go, the app cannot connect to b
 
 ### Integration Tests
 Refer to the [INTEGRATION_TEST.md](file:///c:/Users/Chinmay/Desktop/Vs%20Code/HeatPath/mobile/INTEGRATION_TEST.md) file inside the `mobile` folder for the sync verification checklists.
+
+## Pre-Week 3 UX Fix — Photon Place Search
+
+### Why Coordinate Inputs Were Replaced
+From live testing feedback and UX screenshots, requiring users to manually type raw latitude/longitude coordinate decimals was a significant friction point and not user-friendly. We replaced this manual coordinate input entirely with a Google Maps-style autocomplete place search.
+
+### Photon API Integration
+- **Endpoint**: `GET https://photon.komoot.io/api/?q={query}&limit=5&lang=en&lat=18.9220&lon=72.8347` (with optional location bias defaulted to Mumbai coordinates).
+- **No API Key**: The Komoot Photon API is keyless, OpenStreetMap-based, and has no rate-limit headers.
+- **Lon/Lat Flip Gotcha**: Photon returns GeoJSON FeatureCollections where coordinates are ordered as `[longitude, latitude]`. We flip these on parse to store them internally as `{ lat: coordinates[1], lon: coordinates[0] }`.
+- **Response Shape**: Returns `{ label: "{name}, {city}, {state}", lat, lon, osm_value }` where undefined location values are omitted.
+
+### PlaceSearchInput Component
+- **Debouncing**: Handled locally inside the component using a custom `useRef` + `clearTimeout` pattern (350ms duration) without external libraries.
+- **Overlay Requirement**: Wrapped inside a relative container with `relative z-50` class, ensuring the dropdown overlay list sits above sibling elements in the route details form (critical for web platform positioning).
+- **Cross-Platform rendering**: Uses `Platform.OS === 'web'` to render suggestion elements inside mapped HTML scrollable `div`s on web, and standard native `FlatList` on native platforms.
+
+### Identical Routes Fix & Divergence
+- **ORS parameters**: Updated alternative route request parameters `share_factor` from `0.6` to `0.4` (forcing ORS to search for more divergent paths) and added `weight_factor: 1.6` (penalizing reuse of identical segments).
+- **Sequential Deduplication**: Implemented a pure python sequential deduplication step using a custom Haversine distance helper. It sequentially discards candidate routes where `> 80%` of waypoints are within `30m` of any waypoint of an already accepted route. A warning is logged whenever a duplicate candidate is dropped.
+
