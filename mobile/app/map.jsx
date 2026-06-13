@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Platform, Animated } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Platform, Animated, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HeatMap from '../components/HeatMap';
@@ -84,12 +84,11 @@ function AnimatedRouteReveal({ children }) {
   );
 }
 
-// Web-only: animates a dot along the route path on the Leaflet map
-function RouteReplayButton({ route, mapRef }) {
-  const [replaying, setReplaying]   = useState(false);
-  const [progress,  setProgress]    = useState(0);
-  const intervalRef                  = useRef(null);
-  const markerRef                    = useRef(null);
+function RouteReplayButton({ route }) {
+  const [replaying, setReplaying] = useState(false);
+  const [progress,  setProgress]  = useState(0);
+  const intervalRef               = useRef(null);
+  const markerRef                 = useRef(null);
 
   const startReplay = useCallback(() => {
     if (!route?.path || route.path.length < 2) return;
@@ -108,35 +107,21 @@ function RouteReplayButton({ route, mapRef }) {
     const total = path.length;
     let   i     = 0;
 
-    // Create a walking dot marker on the Leaflet map
     if (typeof window !== 'undefined' && window.L) {
       const L    = window.L;
       const icon = L.divIcon({
         html: `<div style="
-          width: 20px; height: 20px; border-radius: 50%;
-          background: #3b82f6; border: 3px solid #fff;
-          box-shadow: 0 0 10px #3b82f6aa;
-          animation: pulse 1s infinite;
-        "></div>
-        <style>
-          @keyframes pulse {
-            0%   { transform: scale(1);   box-shadow: 0 0 10px #3b82f6aa; }
-            50%  { transform: scale(1.3); box-shadow: 0 0 20px #3b82f6cc; }
-            100% { transform: scale(1);   box-shadow: 0 0 10px #3b82f6aa; }
-          }
-        </style>`,
+          width:20px;height:20px;border-radius:50%;
+          background:#3b82f6;border:3px solid #fff;
+          box-shadow:0 0 10px #3b82f6aa;
+        "></div>`,
         className: '', iconSize: [20, 20], iconAnchor: [10, 10],
       });
-
-      // Find the Leaflet map instance from the DOM
-      const mapEl = document.querySelector('.leaflet-container');
-      if (mapEl && mapEl._leaflet_id) {
-        const map = window._heatpathMap;
-        if (map) {
-          markerRef.current = L.marker(
-            [path[0].lat, path[0].lon], { icon, zIndexOffset: 2000 }
-          ).addTo(map);
-        }
+      const map = window._heatpathMap;
+      if (map) {
+        markerRef.current = L.marker(
+          [path[0].lat, path[0].lon], { icon, zIndexOffset: 2000 }
+        ).addTo(map);
       }
     }
 
@@ -189,7 +174,9 @@ function RouteReplayButton({ route, mapRef }) {
 export default function MapScreen() {
   const params = useLocalSearchParams();
   const { startLabel, endLabel } = params;
-  const insets       = useSafeAreaInsets();
+  const insets        = useSafeAreaInsets();
+  const { width }     = useWindowDimensions();
+  const isDesktop     = Platform.OS === 'web' && width >= 768;
   const [selectedRoute, setSelectedRoute] = useState(0);
   const [routesVisible, setRoutesVisible] = useState(false);
   const [replayKey,     setReplayKey]     = useState(0);
@@ -216,12 +203,11 @@ export default function MapScreen() {
     return () => clearTimeout(t);
   }, []);
 
-  // Reset replay when selected route changes
   useEffect(() => {
     setReplayKey(k => k + 1);
   }, [selectedRoute]);
 
-  const backButtonTop = Platform.OS === 'web' ? 16 : insets.top + 8;
+  const backButtonTop = isDesktop ? 16 : insets.top + 8;
 
   const RouteList = () => (
     <>
@@ -261,11 +247,10 @@ export default function MapScreen() {
     </>
   );
 
-  // Web Layout
-  if (Platform.OS === 'web') {
+  // Desktop web layout — side by side
+  if (isDesktop) {
     return (
       <View className="flex-1 flex-row bg-gray-50 h-screen w-screen overflow-hidden">
-        {/* Map */}
         <View style={{ width: '65%', height: '100%', position: 'relative' }}>
           <HeatMap
             routes={routes}
@@ -281,19 +266,12 @@ export default function MapScreen() {
           >
             <Text className="text-gray-800 text-sm font-bold">← Search</Text>
           </TouchableOpacity>
-
-          {/* Replay button — web only */}
           {routes[selectedRoute] && (
-            <RouteReplayButton
-              key={replayKey}
-              route={routes[selectedRoute]}
-            />
+            <RouteReplayButton key={replayKey} route={routes[selectedRoute]} />
           )}
-
           <ConditionsBadge conditions={conditions} />
         </View>
 
-        {/* Route panel */}
         <View style={{ width: '35%', height: '100%' }}
           className="bg-white border-l border-gray-200 flex-col"
         >
@@ -314,10 +292,11 @@ export default function MapScreen() {
     );
   }
 
-  // Native Layout
+  // Mobile layout — stacked (native + mobile web)
   return (
-    <View className="flex-1 bg-gray-50 relative">
-      <View className="absolute top-0 left-0 right-0 bottom-0 w-full h-full z-0">
+    <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+      {/* Full screen map */}
+      <View style={{ height: '55%', position: 'relative' }}>
         <HeatMap
           routes={routes}
           selectedIndex={selectedRoute}
@@ -325,31 +304,39 @@ export default function MapScreen() {
           endCoord={endCoord}
           onRouteSelect={setSelectedRoute}
         />
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={{ position: 'absolute', top: backButtonTop, left: 16, zIndex: 1000 }}
+          className="bg-white/90 px-3 py-2 rounded-full flex-row items-center justify-center shadow-md border border-gray-100"
+        >
+          <Text className="text-gray-800 text-sm font-bold">← Search</Text>
+        </TouchableOpacity>
+        <View style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 1000 }}>
+          <ConditionsBadge conditions={conditions} />
+        </View>
       </View>
 
-      <TouchableOpacity
-        onPress={() => router.back()}
-        style={{ position: 'absolute', top: backButtonTop, left: 16, zIndex: 1000 }}
-        className="bg-white/90 px-3 py-2 rounded-full flex-row items-center justify-center shadow-md border border-gray-100"
-      >
-        <Text className="text-gray-800 text-sm font-bold">← Search</Text>
-      </TouchableOpacity>
-
-      <View style={{ position: 'absolute', bottom: '46%', right: 16, zIndex: 1000 }}>
-        <ConditionsBadge conditions={conditions} />
-      </View>
-
+      {/* Route cards below map */}
       <View style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        maxHeight: '45%', zIndex: 1001,
-      }}
-        className="bg-white/95 rounded-t-3xl shadow-2xl border-t border-gray-100"
-      >
-        <View className="w-12 h-1 bg-gray-300 rounded-full mx-auto mt-4 mb-2" />
-        <Text className="text-base font-bold text-gray-800 px-4 mb-2">Route Options</Text>
+        flex: 1, backgroundColor: '#fff',
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        marginTop: -16, paddingTop: 8,
+        shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8,
+        elevation: 8,
+      }}>
+        <View style={{
+          width: 40, height: 4, backgroundColor: '#d1d5db',
+          borderRadius: 2, alignSelf: 'center', marginBottom: 8,
+        }} />
+        <Text style={{
+          fontSize: 15, fontWeight: '700', color: '#1f2937',
+          paddingHorizontal: 16, marginBottom: 4,
+        }}>
+          Route Options
+        </Text>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 8 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
         >
           <RouteList />
         </ScrollView>
