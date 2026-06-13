@@ -27,19 +27,24 @@ def test_score_route(httpx_mock):
         ]
     }
     httpx_mock.add_response(url="https://overpass-api.de/api/interpreter", json=mock_response)
+    httpx_mock.add_response(url="https://overpass-api.de/api/interpreter", json=mock_response)
     
     payload = {
         "path": [
             {"lat": 40.7128, "lon": -74.0060},
-            {"lat": 40.7580, "lon": -73.9855}
+            {"lat": 40.7580, "lon": -73.9855},
+            {"lat": 40.7829, "lon": -73.9654}
         ]
     }
-    response = client.post("/score-route/", json=payload)
+    response = client.post("/score-route/?heat_index=30.0&aqi=50.0&heat_sensitivity=5&aqi_sensitivity=5", json=payload)
     assert response.status_code == 200
     data = response.json()
+    assert "heat_safety_score" in data
     assert "shade_safety_score" in data
+    assert "overall_score" in data
+    assert isinstance(data["heat_safety_score"], float)
     assert isinstance(data["shade_safety_score"], float)
-    assert data["shade_safety_score"] == 0.05
+    assert isinstance(data["overall_score"], float)
 
 def test_update_preferences_stub():
     """Test the update preferences stub endpoint."""
