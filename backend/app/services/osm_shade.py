@@ -28,7 +28,7 @@ OVERPASS_HEADERS = {
 }
 
 
-_shade_cache: Dict[str, tuple[float, str]] = {}
+_shade_cache: Dict[str, tuple[float, str]] = {}  # TODO Week 3: replace with Redis TTL cache
 
 async def estimate_shade_from_street_type(lat: float, lon: float) -> tuple[float, str]:
     """
