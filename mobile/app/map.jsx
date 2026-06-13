@@ -11,6 +11,7 @@ import ConditionsBadge from '../components/ConditionsBadge';
  */
 export default function MapScreen() {
   const params = useLocalSearchParams();
+  const { startLabel, endLabel } = params;
   const insets = useSafeAreaInsets();
   const [selectedRoute, setSelectedRoute] = useState(0);
 
@@ -52,9 +53,9 @@ export default function MapScreen() {
           <TouchableOpacity
             onPress={() => router.back()}
             style={{ position: 'absolute', top: 16, left: 16, zIndex: 1000 }}
-            className="bg-white/90 w-10 h-10 rounded-full items-center justify-center shadow-md border border-gray-100"
+            className="bg-white/90 px-3 py-2 rounded-full flex-row items-center justify-center shadow-md border border-gray-100"
           >
-            <Text className="text-gray-800 text-lg font-bold">←</Text>
+            <Text className="text-gray-800 text-sm font-bold">← Search</Text>
           </TouchableOpacity>
 
           {/* Conditions Badge (bottom-right) */}
@@ -63,7 +64,14 @@ export default function MapScreen() {
 
         {/* Route Card Listing panel */}
         <View style={{ width: '35%', height: '100%' }} className="bg-white border-l border-gray-200 p-4">
-          <Text className="text-lg font-bold text-gray-800 mb-4 px-1">Route Options</Text>
+          <Text className="text-lg font-bold text-gray-800 mb-2 px-1">Route Options</Text>
+          {startLabel && endLabel ? (
+            <View className="bg-emerald-50 border border-emerald-100 rounded-xl p-2.5 mb-3 mx-1">
+              <Text className="text-xs font-semibold text-emerald-800 text-center" numberOfLines={1}>
+                {startLabel}  →  {endLabel}
+              </Text>
+            </View>
+          ) : null}
           <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
             {routes.map((route, index) => (
               <RouteCard
@@ -97,9 +105,9 @@ export default function MapScreen() {
       <TouchableOpacity
         onPress={() => router.back()}
         style={{ position: 'absolute', top: backButtonTop, left: 16, zIndex: 1000 }}
-        className="bg-white/90 w-10 h-10 rounded-full items-center justify-center shadow-md border border-gray-100"
+        className="bg-white/90 px-3 py-2 rounded-full flex-row items-center justify-center shadow-md border border-gray-100"
       >
-        <Text className="text-gray-800 text-lg font-bold">←</Text>
+        <Text className="text-gray-800 text-sm font-bold">← Search</Text>
       </TouchableOpacity>
 
       {/* Conditions Badge placed right above the native bottom sheet */}
@@ -123,7 +131,14 @@ export default function MapScreen() {
         {/* Visual Grab Handle */}
         <View className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
 
-        <Text className="text-base font-bold text-gray-800 mb-3 px-1">Route Options</Text>
+        <Text className="text-base font-bold text-gray-800 mb-2 px-1">Route Options</Text>
+        {startLabel && endLabel ? (
+          <View className="bg-emerald-50 border border-emerald-100 rounded-xl p-2.5 mb-3 mx-1">
+            <Text className="text-xs font-semibold text-emerald-800 text-center" numberOfLines={1}>
+              {startLabel}  →  {endLabel}
+            </Text>
+          </View>
+        ) : null}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
           {routes.map((route, index) => (

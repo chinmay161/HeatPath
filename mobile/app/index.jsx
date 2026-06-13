@@ -12,7 +12,7 @@ export default function SearchScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleSearch = async (sLat, sLon, eLat, eLon) => {
+  const handleSearch = async (sLat, sLon, eLat, eLon, startLabel, endLabel) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -28,7 +28,11 @@ export default function SearchScreen() {
 
       router.push({
         pathname: '/map',
-        params: { data: JSON.stringify(resultPayload) },
+        params: {
+          data: JSON.stringify(resultPayload),
+          startLabel,
+          endLabel,
+        },
       });
     } catch (err) {
       console.error(err);
