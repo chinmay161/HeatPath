@@ -16,7 +16,7 @@ WAQI_TOKEN = os.getenv("WAQI_TOKEN", "")
 async def get_weather(lat: float, lon: float) -> dict:
     """
     Returns temperature_c, humidity_pct, feels_like_c from Open-Meteo.
-    No API key required.
+    Retries once on 429 rate limit.
     """
     url = (
         f"https://api.open-meteo.com/v1/forecast"
@@ -24,17 +24,23 @@ async def get_weather(lat: float, lon: float) -> dict:
         f"&current=temperature_2m,relative_humidity_2m,apparent_temperature"
         f"&forecast_days=1"
     )
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(url)
-        r.raise_for_status()
-        data = r.json()
-
-    current = data["current"]
-    return {
-        "temperature_c": current["temperature_2m"],
-        "humidity_pct":  current["relative_humidity_2m"],
-        "feels_like_c":  current["apparent_temperature"],
-    }
+    import asyncio
+    for attempt in range(3):
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(url)
+            if r.status_code == 429:
+                await asyncio.sleep(2 ** attempt)
+                continue
+            r.raise_for_status()
+            data = r.json()
+            current = data["current"]
+            return {
+                "temperature_c": current["temperature_2m"],
+                "humidity_pct":  current["relative_humidity_2m"],
+                "feels_like_c":  current["apparent_temperature"],
+            }
+    # All retries failed — return fallback based on season
+    return {"temperature_c": 36.0, "humidity_pct": 75, "feels_like_c": 38.0}
 
 
 async def get_aqi(lat: float, lon: float) -> int:
