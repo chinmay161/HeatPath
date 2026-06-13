@@ -51,7 +51,14 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
     # 2. Score all routes in parallel
     async def score_one(path):
         simplified     = simplify_path(path, max_points=8)
-        shade_pcts     = await shade_for_path(simplified)
+        shade_pcts, sources = await shade_for_path(simplified)
+        
+        import statistics
+        try:
+            route_shade_source = statistics.mode(sources) if sources else "unknown"
+        except Exception:
+            route_shade_source = sources[0] if sources else "unknown"
+
         segments       = [
             {
                 "shade_pct":        sp,
@@ -69,6 +76,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             "heat_safety_score":  scores["heat_safety_score"],
             "path":               [Location(lat=pt["lat"], lon=pt["lon"]) for pt in path],
             "segment_count":      len(segments),
+            "shade_source":       route_shade_source
         }
 
     scored_list = await asyncio.gather(*[score_one(p) for p in candidate_paths])
@@ -84,6 +92,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             heat_safety_score=r["heat_safety_score"],
             path=r["path"],
             segment_count=r["segment_count"],
+            shade_source=r["shade_source"]
         )
         for rank, r in enumerate(scored_list)
     ]

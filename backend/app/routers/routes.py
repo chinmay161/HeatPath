@@ -43,8 +43,14 @@ async def score_route(
             )
         
     path_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in request.path]
-    shade_percentages = await shade_for_path(path_dicts)
+    shade_percentages, sources = await shade_for_path(path_dicts)
     
+    import statistics
+    try:
+        route_shade_source = statistics.mode(sources) if sources else "unknown"
+    except Exception:
+        route_shade_source = sources[0] if sources else "unknown"
+
     segments = []
     for shade_pct in shade_percentages:
         segments.append({
@@ -60,5 +66,6 @@ async def score_route(
     return RouteScoreResponse(
         heat_safety_score=scores["heat_safety_score"],
         shade_safety_score=scores["shade_safety_score"],
-        overall_score=scores["overall_score"]
+        overall_score=scores["overall_score"],
+        shade_source=route_shade_source
     )

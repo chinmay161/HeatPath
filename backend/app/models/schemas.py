@@ -31,6 +31,7 @@ class RouteScoreResponse(BaseModel):
     heat_safety_score:  float
     shade_safety_score: float
     overall_score:      float
+    shade_source:       str = "unknown"
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -63,6 +64,7 @@ class ScoredRoute(BaseModel):
     heat_safety_score:  float         = Field(..., description="Heat safety score 0–1")
     path:               List[Location] = Field(..., description="Route coordinates")
     segment_count:      int           = Field(..., description="Number of path segments")
+    shade_source:       str           = "unknown"
     model_config = ConfigDict(from_attributes=True)
 
 
