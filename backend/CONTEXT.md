@@ -246,3 +246,24 @@ The `POST /find-routes` endpoint processes routing requests end-to-end as follow
 - Ensure `ORS_API_KEY` is defined in `.env`.
 - Dev B can test the integration by calling `POST /find-routes` with coordinates and checking the ranked route options.
 - The `POST /score-route` now auto-fetches conditions for a path when `heat_index` and `aqi` query parameters are omitted, returning a real, live-calculated comfort score.
+
+## Dev B — Week 2 Task: Preferences Integration (completed)
+
+### What changed
+- `app/routers/find_routes.py` — replaced hardcoded sensitivity defaults (5,5)
+  with live values from `_user_preferences` store (Dev B's preferences module)
+- Scoring now respects user's heat_sensitivity and aqi_sensitivity in real time
+- Verified: POST /preferences with {9,9} → POST /find-routes returns
+  lower overall_score reflecting high sensitivity to heat/AQI
+
+### Live test result (Sat 13 Jun 2026, ~09:30 UTC)
+- POST /find-routes Mumbai (18.9220,72.8347) → (18.9350,72.8250), n_routes=2
+- Route 1: overall_score=0.289756, heat_safety_score=0.2996, segment_count=19
+- Route 2: overall_score=0.289756, heat_safety_score=0.2996, segment_count=19
+- conditions: heat_index=38.91°C, aqi_normalised=0.217
+- shade_safety_score=0.0 on both (Overpass found no tagged shade features
+  on these segments — expected for dense Mumbai urban streets)
+- All 17 tests passing
+
+### Week 2 remaining (Dev B)
+- Comparison panel UI — Normal vs HeatPath route cards (frontend)

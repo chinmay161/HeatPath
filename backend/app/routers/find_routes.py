@@ -48,16 +48,18 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         shade_percentages = await shade_for_path(simplified_path)
         
         # Build segments list for the comfort scorer
+        # Load real user preferences from /preferences store
+        from app.routers.preferences import _user_preferences
+
         segments = []
         for shade_pct in shade_percentages:
             segments.append({
                 "shade_pct": shade_pct,
                 "heat_index": heat_index,
                 "aqi": aqi_normalised,
-                "heat_sensitivity": 5,  # default sensitivity
-                "aqi_sensitivity": 5   # default sensitivity
+                "heat_sensitivity": _user_preferences["heat_sensitivity"],
+                "aqi_sensitivity":  _user_preferences["aqi_sensitivity"],
             })
-            
         # Calculate scores
         scores = calculate_route_scores(segments)
         
