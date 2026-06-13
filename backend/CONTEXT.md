@@ -138,3 +138,23 @@ The `heat_safety_score` and `overall_score` are still stubbed to `0.0`. These de
 ### Edge Cases Handled
 - **API Errors:** As mentioned, timeouts or bad responses return a 0.0 shade score for the segment, allowing the rest of the route to process.
 - **Single-Point Paths:** If a route contains fewer than 2 points, it cannot form a segment. The endpoint handles this gracefully by returning early with all scores set to `0.0`.
+
+## Task 3 — Route Comfort Scorer
+The `comfort_scorer.py` service is a pure-logic module that calculates route comfort. It takes pre-fetched environmental data per segment (shade, heat, AQI) and user sensitivities, calculating segment comfort scores and overall route safety/comfort scores.
+
+### Exact Formula Used
+```python
+shade_score   = shade_pct / 95.0           # normalise shade to 0–1
+heat_penalty  = min(heat_index / 50.0, 1.0) * (heat_sensitivity / 10.0)
+aqi_penalty   = min(aqi / 300.0, 1.0)      * (aqi_sensitivity / 10.0)
+comfort       = shade_score * 0.5 - heat_penalty * 0.3 - aqi_penalty * 0.2
+return max(0.0, min(1.0, comfort + 0.5))   # centre and clamp to [0, 1]
+```
+
+### POST /score-route Orchestration
+The `POST /score-route` endpoint now orchestrates both `osm_shade` and `comfort_scorer`. It first calls `shade_for_path` to get the shade percentages for the route segments. It then merges those values with the supplied (or default) heat index, AQI, and sensitivity parameters, and hands the complete list of segments off to `comfort_scorer.score_route()`. The endpoint then constructs the response using the newly generated overall scores.
+
+### Optional Parameters & Week 2 Hand-off
+The endpoint currently accepts `heat_index`, `aqi`, `heat_sensitivity`, and `aqi_sensitivity` as optional query parameters with default values (0.0 for environmental, 5 for sensitivities). 
+- In **Week 2**, Dev B will inject the real values by mapping the path's starting coordinate to `GET /conditions` (for heat/AQI) and loading stored user preferences from `POST /preferences` (for sensitivities). 
+- See `API_CONTRACT.md` for the finalized request/response shapes and Dev B's exact integration checklist.
