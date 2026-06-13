@@ -45,3 +45,39 @@ class PreferencesResponse(BaseModel):
     status: str
     
     model_config = ConfigDict(from_attributes=True)
+
+class RouteRequest(BaseModel):
+    """Request schema for finding routes."""
+    start: Location = Field(..., description="Start coordinate")
+    end: Location = Field(..., description="End coordinate")
+    n_routes: int = Field(default=3, description="Number of candidate routes to fetch and score")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class ScoredRoute(BaseModel):
+    """Schema for a scored route with details."""
+    rank: int = Field(..., description="The score rank of this route (1 being best)")
+    overall_score: float = Field(..., description="Overall comfort score (0.0 to 1.0)")
+    shade_safety_score: float = Field(..., description="Shade safety score (0.0 to 1.0)")
+    heat_safety_score: float = Field(..., description="Heat safety score (0.0 to 1.0)")
+    path: List[Location] = Field(..., description="Simplified list of coordinates representing the path")
+    segment_count: int = Field(..., description="Number of segments in the simplified path")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class ConditionsSummary(BaseModel):
+    """Schema summarizing the environmental conditions used for scoring."""
+    heat_index: float = Field(..., description="Raw heat index in degrees C")
+    aqi_normalised: float = Field(..., description="Normalised AQI (0.0 to 1.0)")
+    fetched_at_lat: float = Field(..., description="Latitude where conditions were fetched")
+    fetched_at_lon: float = Field(..., description="Longitude where conditions were fetched")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class ScoredRoutesResponse(BaseModel):
+    """Response schema for route search and scoring."""
+    routes: List[ScoredRoute] = Field(..., description="Ranked list of scored routes")
+    conditions: ConditionsSummary = Field(..., description="Fetched environmental conditions summary")
+    
+    model_config = ConfigDict(from_attributes=True)
+
