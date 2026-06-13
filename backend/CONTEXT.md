@@ -287,3 +287,32 @@ The `POST /find-routes` endpoint processes routing requests end-to-end as follow
 ### Week 3 tasks remaining (Dev B)
 - Preferences UI — heat sensitivity slider, saved prefs screen
 - Deploy frontend to Vercel free tier
+
+## Week 2 Task 2 — Mobile App (Expo + NativeWind + react-native-maps)
+
+### Monorepo Structure
+The codebase has been restructured into a monorepo containing:
+- `/backend/` — FastAPI python backend application.
+- `/mobile/` — Expo React Native project targeting Web, iOS, and Android platforms.
+
+### Architecture Decisions
+- **Expo Router & File-Based Navigation**: Selected because it mirrors React/Next.js routes structure. It enforces clean routing logic, removes boilerplate stack setups, and operates identically across native platforms and web.
+- **Platform-Split Pattern**: Metro bundler resolves `.web.jsx` and `.native.jsx` files automatically based on target environment platform. This allows us to keep a unified import interface for `HeatMap` components while isolating Leaflet (Web) and react-native-maps (Native) dependencies to avoid bundler conflicts.
+- **NativeWind Styling**: Tailored using NativeWind v4 config. The setup uses:
+  - `babel.config.js` plugin: `"nativewind/babel"`
+  - `metro.config.js` wrapper: `withNativeWind({ input: './global.css' })`
+  - `global.css`: imports `@tailwind base; @tailwind components; @tailwind utilities;`
+- **react-native-maps Selection**: We selected `react-native-maps` for Native platforms because it offers seamless native performance, is lightweight, and runs out-of-the-box on Apple (iOS default) and Google Maps (Android PROVIDER_GOOGLE) without the heavy setup and key/license tracking constraints of Mapbox.
+
+### Color Scale Specification (scoreToColor Stops)
+The score calculation relies on these exact color stops, which are shared/duplicated across visual panels:
+- `0.00–0.33` → interpolate `#FF4444` (hot red) to `#FF8C00` (orange)
+- `0.33–0.66` → interpolate `#FF8C00` (orange) to `#FFD700` (yellow)
+- `0.66–1.00` → interpolate `#FFD700` (yellow) to `#22C55E` (cool green)
+Linear interpolation is performed per R, G, and B channel.
+
+### Local IP Gotcha
+When running on physical mobile devices via Expo Go, the app cannot connect to backend services running on `localhost` or `127.0.0.1`. Developers must configure `EXPO_PUBLIC_API_URL` to point to their machine's local network IP address (e.g., `http://192.168.x.x:8000`) within `mobile/.env`.
+
+### Integration Tests
+Refer to the [INTEGRATION_TEST.md](file:///c:/Users/Chinmay/Desktop/Vs%20Code/HeatPath/mobile/INTEGRATION_TEST.md) file inside the `mobile` folder for the sync verification checklists.
