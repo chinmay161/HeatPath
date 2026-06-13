@@ -183,9 +183,26 @@ The endpoint currently accepts `heat_index`, `aqi`, `heat_sensitivity`, and `aqi
 - GET /conditions/?lat=18.9220&lon=72.8347 (Mumbai)
 - Response: { "heat_index": 39.55, "shade_index": 0.0, "aqi_index": 0.1 }
 - All 11 tests passing
+## Dev B — POST /preferences (Week 1, Task 4 — completed)
 
-### What Dev A needs from me (Week 2 integration)
-- When POST /score-route runs, it should call GET /conditions with the path's
-  start coordinate to get real heat_index and aqi_index values
-- Those slot into comfort_scorer.py's heat_index and aqi parameters
-- shade_index will be populated by Dev A's OSM module and returned alongside
+### Files modified
+- `app/routers/preferences.py` — Replaced 501 stub with full implementation
+  - POST /preferences: saves heat_sensitivity and aqi_sensitivity (1–10) to in-memory store
+  - GET /preferences: returns current settings (Dev A's comfort_scorer reads this in Week 2)
+  - In-memory dict for now — Week 3 upgrade to Supabase or session storage
+- `tests/test_main.py` — Replaced test_update_preferences_stub with:
+  - test_update_preferences: asserts 200 + status=success
+  - test_get_preferences: asserts schema and value ranges
+
+### All 4 Dev B Week 1 tasks complete
+- [x] Weather + AQI pipeline (app/services/weather.py)
+- [x] GET /conditions — live heat index + AQI
+- [x] POST /preferences — heat and AQI sensitivity storage
+- [x] GET /preferences — read back current settings
+- [x] 12 tests passing
+
+### Week 2 integration points for Dev A
+- POST /score-route should call GET /conditions with path start coords
+  to get real heat_index and aqi_index instead of query param defaults
+- POST /score-route should call GET /preferences to load user sensitivity
+  weights instead of hardcoded defaults

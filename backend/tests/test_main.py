@@ -51,12 +51,19 @@ def test_score_route(httpx_mock):
     assert isinstance(data["shade_safety_score"], float)
     assert isinstance(data["overall_score"], float)
 
-def test_update_preferences_stub():
-    """Test the update preferences stub endpoint."""
-    payload = {
-        "heat_sensitivity": 5,
-        "aqi_sensitivity": 5
-    }
+def test_update_preferences():
+    """Test that preferences endpoint saves and returns settings."""
+    payload = {"heat_sensitivity": 8, "aqi_sensitivity": 3}
     response = client.post("/preferences/", json=payload)
-    assert response.status_code == 501
-    assert response.json()["detail"] == "not implemented"
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+
+def test_get_preferences():
+    """Test that GET /preferences returns current settings."""
+    response = client.get("/preferences/")
+    assert response.status_code == 200
+    data = response.json()
+    assert "heat_sensitivity" in data
+    assert "aqi_sensitivity" in data
+    assert 1 <= data["heat_sensitivity"] <= 10
+    assert 1 <= data["aqi_sensitivity"] <= 10
