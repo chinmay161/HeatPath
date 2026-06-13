@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Platform } from 'react-native';
 import MapView, { Polyline, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { scoreToColor } from '../utils/scoreToColor';
@@ -13,6 +13,7 @@ import { scoreToColor } from '../utils/scoreToColor';
  * @param {function} props.onRouteSelect - Callback when a route is tapped
  */
 export default function HeatMap({ routes = [], selectedIndex = 0, startCoord, endCoord, onRouteSelect }) {
+  const mapRef = useRef(null);
   const initialRegion = {
     latitude: 18.9220,
     longitude: 72.8347,
@@ -20,9 +21,47 @@ export default function HeatMap({ routes = [], selectedIndex = 0, startCoord, en
     longitudeDelta: 0.05,
   };
 
+  useEffect(() => {
+    if (mapRef.current && (routes.length > 0 || startCoord || endCoord)) {
+      const coordinates = [];
+      routes.forEach((route) => {
+        if (route.path) {
+          route.path.forEach((pt) => {
+            coordinates.push({
+              latitude: pt.lat,
+              longitude: pt.lon,
+            });
+          });
+        }
+      });
+      if (startCoord && startCoord.lat && startCoord.lon) {
+        coordinates.push({
+          latitude: typeof startCoord.lat === 'number' ? startCoord.lat : parseFloat(startCoord.lat),
+          longitude: typeof startCoord.lon === 'number' ? startCoord.lon : parseFloat(startCoord.lon),
+        });
+      }
+      if (endCoord && endCoord.lat && endCoord.lon) {
+        coordinates.push({
+          latitude: typeof endCoord.lat === 'number' ? endCoord.lat : parseFloat(endCoord.lat),
+          longitude: typeof endCoord.lon === 'number' ? endCoord.lon : parseFloat(endCoord.lon),
+        });
+      }
+      if (coordinates.length > 0) {
+        // Run on next tick to ensure layout has occurred
+        setTimeout(() => {
+          mapRef.current.fitToCoordinates(coordinates, {
+            edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+            animated: true,
+          });
+        }, 100);
+      }
+    }
+  }, [routes, startCoord, endCoord]);
+
   return (
     <View className="flex-1 w-full h-full">
       <MapView
+        ref={mapRef}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         style={{ width: '100%', height: '100%' }}
         initialRegion={initialRegion}

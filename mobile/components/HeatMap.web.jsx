@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import L from 'leaflet';
-import { MapContainer, TileLayer, Polyline, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { scoreToColor } from '../utils/scoreToColor';
 
@@ -11,6 +11,16 @@ L.Icon.Default.mergeOptions({
   iconUrl: require('leaflet/dist/images/marker-icon.png'),
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
+
+function ChangeMapView({ bounds }) {
+  const map = useMap();
+  useEffect(() => {
+    if (bounds && bounds.length > 0) {
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [bounds, map]);
+  return null;
+}
 
 /**
  * Platform-aware HeatMap component for Web (React Leaflet).
@@ -25,6 +35,21 @@ export default function HeatMap({ routes = [], selectedIndex = 0, startCoord, en
   const center = [18.9220, 72.8347]; // Mumbai
   const zoom = 13;
 
+  const bounds = [];
+  if (startCoord && startCoord.lat && startCoord.lon) {
+    bounds.push([startCoord.lat, startCoord.lon]);
+  }
+  if (endCoord && endCoord.lat && endCoord.lon) {
+    bounds.push([endCoord.lat, endCoord.lon]);
+  }
+  routes.forEach((route) => {
+    if (route.path) {
+      route.path.forEach((pt) => {
+        bounds.push([pt.lat, pt.lon]);
+      });
+    }
+  });
+
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }} className="w-full h-full">
       <MapContainer
@@ -36,6 +61,7 @@ export default function HeatMap({ routes = [], selectedIndex = 0, startCoord, en
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        {bounds.length > 0 && <ChangeMapView bounds={bounds} />}
 
         {routes.map((route, index) => {
           const positions = route.path.map((point) => [point.lat, point.lon]);

@@ -67,7 +67,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             "overall_score": scores["overall_score"],
             "shade_safety_score": scores["shade_safety_score"],
             "heat_safety_score": scores["heat_safety_score"],
-            "path": [Location(lat=pt["lat"], lon=pt["lon"]) for pt in simplified_path],
+            "path": [Location(lat=pt["lat"], lon=pt["lon"]) for pt in path],
             "segment_count": len(segments)
         })
         
