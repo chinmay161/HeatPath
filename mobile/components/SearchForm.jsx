@@ -12,6 +12,7 @@ import PlaceSearchInput from './PlaceSearchInput';
 export default function SearchForm({ onSearch, isLoading }) {
   const [startPlace, setStartPlace] = useState(null);
   const [endPlace, setEndPlace] = useState(null);
+  const [activeField, setActiveField] = useState(null); // 'start' | 'end' | null
 
   const handleSubmit = () => {
     if (!startPlace || !endPlace) {
@@ -36,23 +37,27 @@ export default function SearchForm({ onSearch, isLoading }) {
         <Text className="text-xl font-bold text-gray-800">🌿 HeatPath</Text>
       </View>
 
-      <View>
+      <View style={{ zIndex: activeField === 'start' ? 100 : 10 }} className="relative">
         <Text className="text-xs font-semibold text-gray-500 mb-1">From</Text>
         <PlaceSearchInput
           placeholder="Search start location..."
           onPlaceSelected={setStartPlace}
           biasLat={18.9220}
           biasLon={72.8347}
+          onFocus={() => setActiveField('start')}
+          onBlur={() => setActiveField(null)}
         />
       </View>
 
-      <View className="mt-3">
+      <View style={{ zIndex: activeField === 'end' ? 100 : 5 }} className="mt-3 relative">
         <Text className="text-xs font-semibold text-gray-500 mb-1">To</Text>
         <PlaceSearchInput
           placeholder="Search destination..."
           onPlaceSelected={setEndPlace}
           biasLat={18.9220}
           biasLon={72.8347}
+          onFocus={() => setActiveField('end')}
+          onBlur={() => setActiveField(null)}
         />
       </View>
 

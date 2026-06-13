@@ -25,6 +25,8 @@ export default function PlaceSearchInput({
   biasLat = 18.9220,
   biasLon = 72.8347,
   debounceMs = 350,
+  onFocus,
+  onBlur,
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -32,6 +34,41 @@ export default function PlaceSearchInput({
   const [hasSelected, setHasSelected] = useState(false);
 
   const debounceTimer = useRef(null);
+  const blurTimer = useRef(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      if (blurTimer.current) clearTimeout(blurTimer.current);
+    };
+  }, []);
+
+  const handleFocus = (e) => {
+    if (onFocus) {
+      onFocus(e);
+    }
+    if (blurTimer.current) {
+      clearTimeout(blurTimer.current);
+    }
+    // Re-fetch suggestions when focused if text has changed and has not been selected yet
+    if (query.trim().length >= 2 && !hasSelected) {
+      setIsLoading(true);
+      searchPlaces(query, biasLat, biasLon).then((places) => {
+        setResults(places);
+        setIsLoading(false);
+      });
+    }
+  };
+
+  const handleBlur = (e) => {
+    if (onBlur) {
+      onBlur(e);
+    }
+    // Delay clearing suggestions to allow onPress to register first
+    blurTimer.current = setTimeout(() => {
+      setResults([]);
+    }, 200);
+  };
 
   const handleTextChange = (text) => {
     setQuery(text);
@@ -60,6 +97,9 @@ export default function PlaceSearchInput({
   };
 
   const handleSelectResult = (place) => {
+    if (blurTimer.current) {
+      clearTimeout(blurTimer.current);
+    }
     setQuery(place.label);
     setHasSelected(true);
     setResults([]);
@@ -77,6 +117,9 @@ export default function PlaceSearchInput({
     setIsLoading(false);
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
+    }
+    if (blurTimer.current) {
+      clearTimeout(blurTimer.current);
     }
     onPlaceSelected(null);
   };
@@ -166,6 +209,8 @@ export default function PlaceSearchInput({
           value={query}
           onChangeText={handleTextChange}
           placeholderTextColor="#9CA3AF"
+          onFocus={handleFocus}
+          onBlur={handleBlur}
         />
 
         {isLoading && (
