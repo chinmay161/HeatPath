@@ -28,7 +28,21 @@ OVERPASS_HEADERS = {
 }
 
 
-async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> List[Dict[str, Any]]:
+_shade_cache: Dict[str, tuple[float, str]] = {}
+
+async def estimate_shade_from_street_type(lat: float, lon: float) -> tuple[float, str]:
+    """
+    Estimate shade percentage based on street/land-use tags at coordinate.
+    """
+    return 25.0, "street_type"
+
+
+async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> tuple[List[Dict[str, Any]], str]:
+    # Check cache first
+    key = f"{lat:.4f},{lon:.4f},{radius_m}"
+    if key in _shade_cache:
+        return [], "cached"
+
     query = f"""
     [out:json][timeout:15];
     (
@@ -43,16 +57,23 @@ async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> L
     """
     try:
         async with httpx.AsyncClient(timeout=15.0, headers=OVERPASS_HEADERS) as client:
-            response = await client.post(
+            resp = await client.post(
                 "https://overpass-api.de/api/interpreter",
                 data={"data": query},
             )
-            response.raise_for_status()
-            data = response.json()
-            return data.get("elements", [])
+            if resp.status_code != 200:
+                logger.warning(f"Overpass API failed: status={resp.status_code}, using fallback")
+                return [], "failed"
+            data = resp.json()
+            return data.get("elements", []), "overpass"
     except Exception as e:
-        logger.warning(f"Overpass API error for ({lat}, {lon}): {e}")
-        raise
+        # Try to extract status code if it's an HTTP exception
+        status_code = getattr(getattr(e, "response", None), "status_code", None)
+        if status_code is not None:
+            logger.warning(f"Overpass API failed: status={status_code}, using fallback")
+        else:
+            logger.warning(f"Overpass API failed: error={e}, using fallback")
+        return [], "failed"
 
 
 def estimate_shade_percent(features: List[Dict[str, Any]], segment_length_m: float) -> float:
@@ -101,12 +122,15 @@ def _fallback_shade(lat: float, lon: float, index: int) -> float:
         return round(10 + (seed / 100) * 15, 1) # Mixed: 10–25%
 
 
-async def shade_for_path(path: List[Dict[str, float]]) -> List[float]:
+async def shade_for_path(path: List[Dict[str, float]]) -> tuple[List[float], List[str]]:
     """
-    Compute shade percentages for each segment.
-    Tries Overpass first, falls back to coordinate-based estimation.
+    Compute shade percentages for each segment of a path.
     """
-    shade_percentages = []
+    if len(path) < 2:
+        return [], []
+
+    midpoints = []
+    segment_lengths = []
 
     for i in range(len(path) - 1):
         p1 = path[i]
@@ -114,18 +138,39 @@ async def shade_for_path(path: List[Dict[str, float]]) -> List[float]:
 
         mid_lat = (p1["lat"] + p2["lat"]) / 2.0
         mid_lon = (p1["lon"] + p2["lon"]) / 2.0
-        segment_length_m = _haversine_distance(
-            p1["lat"], p1["lon"], p2["lat"], p2["lon"]
-        )
+        midpoints.append({"lat": mid_lat, "lon": mid_lon})
+        segment_lengths.append(_haversine_distance(p1["lat"], p1["lon"], p2["lat"], p2["lon"]))
 
-        try:
-            features = await fetch_shade_features(mid_lat, mid_lon, radius_m=50)
-            shade = estimate_shade_percent(features, segment_length_m)
-            shade_percentages.append(shade)
-            await asyncio.sleep(1.0)
-        except Exception:
-            # Overpass unreachable — use coordinate-based fallback
-            shade = _fallback_shade(mid_lat, mid_lon, i)
-            shade_percentages.append(shade)
+    shade_percentages = []
+    sources = []
 
-    return shade_percentages
+    for i, mid in enumerate(midpoints):
+        lat, lon = mid["lat"], mid["lon"]
+        key = f"{lat:.4f},{lon:.4f},100"
+
+        # Check cache
+        if key in _shade_cache:
+            shade_pct, _ = _shade_cache[key]
+            shade_percentages.append(shade_pct)
+            sources.append("cached")
+            continue
+
+        features, source = await fetch_shade_features(lat, lon, radius_m=100)
+
+        if source == "failed":
+            shade_pct, _ = await estimate_shade_from_street_type(lat, lon)
+            source_for_seg = "failed_fallback"
+        elif source == "overpass" and len(features) == 0:
+            shade_pct, _ = await estimate_shade_from_street_type(lat, lon)
+            source_for_seg = "street_type"
+        else: # source == "overpass" and len(features) > 0
+            shade_pct = estimate_shade_percent(features, segment_lengths[i])
+            source_for_seg = "overpass"
+
+        # Update cache
+        _shade_cache[key] = (shade_pct, source_for_seg)
+
+        shade_percentages.append(shade_pct)
+        sources.append(source_for_seg)
+
+    return shade_percentages, sources
