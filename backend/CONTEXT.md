@@ -183,6 +183,13 @@ The endpoint currently accepts `heat_index`, `aqi`, `heat_sensitivity`, and `aqi
 - GET /conditions/?lat=18.9220&lon=72.8347 (Mumbai)
 - Response: { "heat_index": 39.55, "shade_index": 0.0, "aqi_index": 0.1 }
 - All 11 tests passing
+
+### What Dev A needs from me (Week 2 integration)
+- When POST /score-route runs, it should call GET /conditions with the path's
+  start coordinate to get real heat_index and aqi_index values
+- Those slot into comfort_scorer.py's heat_index and aqi parameters
+- shade_index will be populated by Dev A's OSM module and returned alongside
+
 ## Dev B — POST /preferences (Week 1, Task 4 — completed)
 
 ### Files modified
@@ -206,3 +213,36 @@ The endpoint currently accepts `heat_index`, `aqi`, `heat_sensitivity`, and `aqi
   to get real heat_index and aqi_index instead of query param defaults
 - POST /score-route should call GET /preferences to load user sensitivity
   weights instead of hardcoded defaults
+
+## Week 2 Task 1 — OpenRouteService Integration
+
+### What `ors_client.py` does & why ORS free tier was chosen
+The `ors_client.py` service handles requesting walking routes from OpenRouteService (ORS). The ORS free public API tier was selected because it provides robust, high-quality pedestrian routing with multiple alternative route generation capabilities. It is a cost-effective, standard public API that does not require self-hosting a complex routing engine.
+
+### The `[lon, lat]` → `{"lat", "lon"}` conversion gotcha
+OpenRouteService APIs strictly follow the GeoJSON specification where coordinates are ordered as `[longitude, latitude]`. However, HeatPath's internal data models use `{"lat": lat, "lon": lon}` (latitude first). To avoid mixing up coordinates or leaking ORS-specific formats to our routers and schemas, the ORS client immediately converts the geometry coordinates to `{"lat", "lon"}` objects upon parsing the response.
+
+### Why `simplify_path` exists
+Overpass API query limits require us to budget the number of requests we make. Since shade estimation executes one Overpass query per segment midpoint, long walking routes containing many points would trigger a high number of API calls, easily overloading the Overpass API or triggering 429 Rate Limit responses. The `simplify_path` function evenly downsamples paths with more than 20 points (using slice stepping) while strictly preserving the first (start) and last (end) coordinates of the path.
+
+### How `POST /find-routes` orchestrates the pipeline
+The `POST /find-routes` endpoint processes routing requests end-to-end as follows:
+1. It calls `fetch_candidate_routes` to get up to `n` pedestrian routes between the start and end coordinates.
+2. For each candidate route:
+   a. It simplifies the path coordinates to at most 20 points using `simplify_path`.
+   b. It fetches real-time weather and AQI conditions directly using the service functions (without HTTP loopback) at the start coordinate.
+   c. It computes the shade percentages along each route segment by calling `shade_for_path`.
+   d. It scores each segment's comfort and aggregates them into a route score.
+3. It ranks and sorts the routes by their overall comfort score descending.
+4. It returns the ranked routes along with a summary of the environmental conditions used.
+
+### How `POST /score-route` was updated
+`POST /score-route` was updated to support automatic context resolution. If the `heat_index` and `aqi` query parameters are omitted by the caller (remaining at their default `0.0`), the endpoint dynamically fetches the live weather conditions and AQI at the first coordinate of the path and calculates the corresponding scores. If the values are explicitly supplied, the endpoint respects them (enabling overriding for tests).
+
+### New Environment Variable
+- `ORS_API_KEY`: The API key required to access the OpenRouteService Directions API. Get a free key from [openrouteservice.org](https://openrouteservice.org/).
+
+### What Dev B needs to know for the integration test
+- Ensure `ORS_API_KEY` is defined in `.env`.
+- Dev B can test the integration by calling `POST /find-routes` with coordinates and checking the ranked route options.
+- The `POST /score-route` now auto-fetches conditions for a path when `heat_index` and `aqi` query parameters are omitted, returning a real, live-calculated comfort score.
