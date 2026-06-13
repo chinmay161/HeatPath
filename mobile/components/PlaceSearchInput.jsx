@@ -24,6 +24,7 @@ export default function PlaceSearchInput({
   onPlaceSelected,
   biasLat = 18.9220,
   biasLon = 72.8347,
+  debounceMs = 350,
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -51,7 +52,7 @@ export default function PlaceSearchInput({
         // If query hasn't changed or clear was called in between, update results
         setResults(places);
         setIsLoading(false);
-      }, 350);
+      }, debounceMs);
     } else {
       setResults([]);
       setIsLoading(false);
