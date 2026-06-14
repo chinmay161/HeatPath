@@ -67,6 +67,11 @@ async def estimate_shade_from_street_type(lat: float, lon: float) -> tuple[float
     if api_failed or not elements:
         return 25.0, "street_type"
 
+    for el in elements:
+        tags = el.get("tags", {})
+        if tags.get("bridge") == "yes":
+            return 40.0, "street_type"
+
     matched_scores = []
     for el in elements:
         tags = el.get("tags", {})
@@ -149,7 +154,17 @@ def estimate_shade_percent(features: List[Dict[str, Any]], segment_length_m: flo
     shade = 0.0
     for feature in features:
         tags = feature.get("tags", {})
-        if tags.get("natural") == "tree":
+        if tags.get("bridge") == "yes" and "highway" in tags:
+            shade += 25.0
+        elif tags.get("bridge") == "yes" and "railway" in tags:
+            shade += 20.0
+        elif tags.get("covered") == "yes":
+            shade += 15.0
+        elif tags.get("building") == "roof":
+            shade += 20.0
+        elif tags.get("shelter_type") == "public_transport":
+            shade += 10.0
+        elif tags.get("natural") == "tree":
             shade += 5.0
         elif "building" in tags:
             shade += 8.0
