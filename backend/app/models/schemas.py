@@ -37,8 +37,9 @@ class RouteScoreResponse(BaseModel):
 
 class PreferencesRequest(BaseModel):
     """Request schema for user preferences."""
-    heat_sensitivity: int = Field(default=5, ge=1, le=10, description="1 to 10")
-    aqi_sensitivity:  int = Field(default=5, ge=1, le=10, description="1 to 10")
+    heat_sensitivity: int  = Field(default=5, ge=1, le=10, description="1 to 10")
+    aqi_sensitivity:  int  = Field(default=5, ge=1, le=10, description="1 to 10")
+    avoid_crowds:     bool = Field(default=False, description="Factor crowd density into route scoring")
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -58,13 +59,13 @@ class RouteRequest(BaseModel):
 
 class ScoredRoute(BaseModel):
     """Schema for a scored route with details."""
-    rank:               int           = Field(..., description="Score rank (1 = best)")
-    overall_score:      float         = Field(..., description="Overall comfort score 0–1")
-    shade_safety_score: float         = Field(..., description="Shade safety score 0–1")
-    heat_safety_score:  float         = Field(..., description="Heat safety score 0–1")
+    rank:               int            = Field(..., description="Score rank (1 = best)")
+    overall_score:      float          = Field(..., description="Overall comfort score 0–1")
+    shade_safety_score: float          = Field(..., description="Shade safety score 0–1")
+    heat_safety_score:  float          = Field(..., description="Heat safety score 0–1")
+    crowd_safety_score: float          = Field(..., description="Crowd safety score 0–1 (1 = uncrowded)")
     path:               List[Location] = Field(..., description="Route coordinates")
-    segment_count:      int           = Field(..., description="Number of path segments")
-    shade_source:       str           = "unknown"
+    segment_count:      int            = Field(..., description="Number of path segments")
     model_config = ConfigDict(from_attributes=True)
 
 

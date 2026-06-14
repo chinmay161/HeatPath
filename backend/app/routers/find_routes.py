@@ -10,6 +10,7 @@ from app.models.schemas import (
 from app.services.ors_client import fetch_candidate_routes, simplify_path
 from app.services.weather import get_weather, get_aqi, compute_heat_index
 from app.services.osm_shade import shade_for_path
+from app.services.crowd_density import crowd_for_path
 from app.services.comfort_scorer import score_route as calculate_route_scores
 from app.routers.preferences import _user_preferences
 
@@ -24,7 +25,6 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
     """
     n = min(request.n_routes, 2)
 
-    # 1. Fetch candidate routes + weather simultaneously
     try:
         candidate_paths, (weather, raw_aqi) = await asyncio.gather(
             fetch_candidate_routes(
@@ -47,41 +47,38 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
 
     heat_index     = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
     aqi_normalised = min(raw_aqi / 300.0, 1.0)
+    avoid_crowds   = _user_preferences.get("avoid_crowds", False)
 
-    # 2. Score all routes in parallel
     async def score_one(path):
-        simplified     = simplify_path(path, max_points=8)
-        shade_pcts, sources = await shade_for_path(simplified)
-        
-        import statistics
-        try:
-            route_shade_source = statistics.mode(sources) if sources else "unknown"
-        except Exception:
-            route_shade_source = sources[0] if sources else "unknown"
+        simplified = simplify_path(path, max_points=8)
 
-        segments       = [
+        # shade_for_path returns (shade_percentages, sources)
+        shade_pcts, _sources = await shade_for_path(simplified)
+        crowd_pcts = await crowd_for_path(simplified)
+
+        segments = [
             {
-                "shade_pct":        sp,
+                "shade_pct":        shade_pcts[i],
                 "heat_index":       heat_index,
                 "aqi":              aqi_normalised,
+                "crowd_pct":        crowd_pcts[i] if i < len(crowd_pcts) else 0.0,
                 "heat_sensitivity": _user_preferences["heat_sensitivity"],
                 "aqi_sensitivity":  _user_preferences["aqi_sensitivity"],
+                "avoid_crowds":     avoid_crowds,
             }
-            for sp in shade_pcts
+            for i in range(len(shade_pcts))
         ]
         scores = calculate_route_scores(segments)
         return {
             "overall_score":      scores["overall_score"],
             "shade_safety_score": scores["shade_safety_score"],
             "heat_safety_score":  scores["heat_safety_score"],
+            "crowd_safety_score": scores["crowd_safety_score"],
             "path":               [Location(lat=pt["lat"], lon=pt["lon"]) for pt in path],
             "segment_count":      len(segments),
-            "shade_source":       route_shade_source
         }
 
     scored_list = await asyncio.gather(*[score_one(p) for p in candidate_paths])
-
-    # 3. Rank by overall score
     scored_list = sorted(scored_list, key=lambda x: x["overall_score"], reverse=True)
 
     routes_response = [
@@ -90,9 +87,9 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             overall_score=r["overall_score"],
             shade_safety_score=r["shade_safety_score"],
             heat_safety_score=r["heat_safety_score"],
+            crowd_safety_score=r["crowd_safety_score"],
             path=r["path"],
             segment_count=r["segment_count"],
-            shade_source=r["shade_source"]
         )
         for rank, r in enumerate(scored_list)
     ]

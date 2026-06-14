@@ -108,7 +108,7 @@ export async function getConditions(lat, lon) {
  * @param {number} aqiSensitivity - AQI sensitivity 1–10.
  * @returns {Promise<{status: string}>}
  */
-export async function updatePreferences(heatSensitivity, aqiSensitivity) {
+export async function updatePreferences(heatSensitivity, aqiSensitivity, avoidCrowds = false) {
   const response = await fetch(`${BASE_URL}/preferences/`, {
     method: 'POST',
     headers: {
@@ -118,6 +118,7 @@ export async function updatePreferences(heatSensitivity, aqiSensitivity) {
     body: JSON.stringify({
       heat_sensitivity: heatSensitivity,
       aqi_sensitivity:  aqiSensitivity,
+      avoid_crowds:     avoidCrowds,
     }),
   });
 

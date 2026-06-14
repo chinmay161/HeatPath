@@ -9,6 +9,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="map" />
+        <Stack.Screen name="preferences" />
       </Stack>
     </SafeAreaProvider>
   );

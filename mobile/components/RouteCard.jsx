@@ -171,7 +171,7 @@ export default function RouteCard({ route, isSelected, onPress, bestRoute }) {
       <ScoreBar score={route.overall_score} label="Overall Safety" />
 
       <Text className="text-xs text-gray-500 mt-2 font-medium">
-        {(route.shade_safety_score * 100).toFixed(0)}% shade · {(route.heat_safety_score * 100).toFixed(0)}% heat safe
+        {(route.shade_safety_score * 100).toFixed(0)}% shade · {(route.heat_safety_score * 100).toFixed(0)}% heat safe · {(route.crowd_safety_score * 100).toFixed(0)}% crowd-free
       </Text>
 
       {heatDelta && parseFloat(heatDelta) < 0 && (
