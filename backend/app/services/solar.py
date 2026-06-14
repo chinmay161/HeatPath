@@ -131,26 +131,11 @@ def get_solar_position(lat: float, lon: float) -> dict:
         return {"elevation": 45.0, "azimuth": 180.0, "is_night": False}
 
 
-def elevation_to_shade_multiplier(elevation_deg: float) -> float:
-    """
-    Map solar elevation angle to a shade effectiveness multiplier.
+# elevation_to_shade_multiplier was removed in Shade v3.
+# Sun position is now used inside estimate_shade_percent() geometry
+# for building shadow length calculation only.
+# Trees, structural shade, and forest are sun-independent.
 
-    Args:
-        elevation_deg: Solar elevation angle in degrees.
-
-    Returns:
-        float: A shade multiplier between 0.0 and 1.0.
-    """
-    if elevation_deg <= 0.0:
-        return 0.0
-    elif elevation_deg <= 10.0:
-        return 0.15
-    elif elevation_deg <= 25.0:
-        return 0.45
-    elif elevation_deg <= 45.0:
-        return 0.75
-    else:
-        return 1.0
 
 
 def get_current_elevation(lat: float, lon: float) -> float:

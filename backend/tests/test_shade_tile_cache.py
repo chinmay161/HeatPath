@@ -128,8 +128,8 @@ async def test_shade_for_path_batches_correctly(monkeypatch):
     
     assert len(shade_percentages) == 3
     assert len(sources) == 3
-    # 3 trees * 5.0% = 15.0%
-    assert shade_percentages == [15.0, 15.0, 15.0]
+    # 3 trees * 12.0% = 36.0%
+    assert shade_percentages == [36.0, 36.0, 36.0]
     assert mock_fetch.call_count == 1
 
 @pytest.mark.asyncio
@@ -146,7 +146,7 @@ async def test_shade_for_path_stores_misses_after_fetch(monkeypatch):
     shade_percentages = res["shade_values"]
     sources = res["shade_sources"]
     assert len(shade_percentages) == 1
-    assert shade_percentages[0] == 5.0
+    assert shade_percentages[0] == 12.0
     assert sources[0] == "overpass"
     assert mock_fetch.call_count == 1
     
@@ -155,7 +155,7 @@ async def test_shade_for_path_stores_misses_after_fetch(monkeypatch):
     res2 = await shade_for_path(path)
     shade_percentages2 = res2["shade_values"]
     sources2 = res2["shade_sources"]
-    assert shade_percentages2 == [5.0]
+    assert shade_percentages2 == [12.0]
     assert sources2 == ["cached"]
     assert mock_fetch.call_count == 0
 

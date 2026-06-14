@@ -31,12 +31,14 @@ OVERPASS_HEADERS = {
     "Accept": "application/json",
 }
 
-async def estimate_shade_from_street_type(lat: float, lon: float) -> tuple[float, str]:
+async def estimate_shade_from_street_type(lat: float, lon: float, solar_elevation: float = None) -> tuple[float, str]:
     """
     Estimate shade percentage based on street/land-use tags at coordinate.
     
     This performs a separate lightweight Overpass API query.
     """
+    if solar_elevation is not None and solar_elevation < 0:
+        return (0.0, "night")
     query = f"""
     [out:json][timeout:8];
     (
@@ -299,26 +301,39 @@ def midpoint(p1: Dict[str, float], p2: Dict[str, float]) -> Dict[str, float]:
 async def fetch_shade_for_tile(tile_key_str: str) -> dict:
     """Fetch shade features for a specific tile key using a 60m query radius."""
     parts = tile_key_str.split("_")
-    lat, lon = float(parts[0]), float(parts[1])
-    features, source = await fetch_shade_features(lat, lon, radius_m=60)
+    tile_lat, tile_lon = float(parts[0]), float(parts[1])
+
+    from app.services.solar import get_solar_position
+
+    solar = get_solar_position(tile_lat, tile_lon)
+
+    if solar["is_night"]:
+        return {
+            "shade_pct": 0.0,
+            "source": "night",
+            "solar_elevation": solar["elevation"],
+            "solar_multiplier": 1.0
+        }
+
+    features, source = await fetch_shade_features(tile_lat, tile_lon, radius_m=60)
+
     if source == "overpass" and features:
-        shade_pct = estimate_shade_percent(features, segment_length_m=250)
-        source_res = "overpass"
+        shade = estimate_shade_percent(
+            features,
+            solar_elevation=solar["elevation"],
+            solar_azimuth=solar["azimuth"],
+            segment_length_m=250
+        )
+        data_source = "overpass"
     else:
-        shade_pct, src = await estimate_shade_from_street_type(lat, lon)
-        source_res = "fallback" if source == "failed" else src
-
-    from app.services.solar import get_current_elevation, elevation_to_shade_multiplier
-
-    elevation = get_current_elevation(lat, lon)
-    multiplier = elevation_to_shade_multiplier(elevation)
-    adjusted_shade = shade_pct * multiplier
+        shade, src = await estimate_shade_from_street_type(tile_lat, tile_lon, solar["elevation"])
+        data_source = "fallback" if source == "failed" else src
 
     return {
-        "shade_pct": round(adjusted_shade, 2),
-        "source": source_res,
-        "solar_elevation": round(elevation, 1),
-        "solar_multiplier": multiplier
+        "shade_pct": round(shade, 2),
+        "source": data_source,
+        "solar_elevation": round(solar["elevation"], 1),
+        "solar_multiplier": 1.0
     }
 
 async def shade_for_path(path: List[Dict[str, float]]) -> dict:
@@ -335,10 +350,10 @@ async def shade_for_path(path: List[Dict[str, float]]) -> dict:
         }
 
     # Calculate solar context for the path using starting point
-    from app.services.solar import get_current_elevation, elevation_to_shade_multiplier
+    from app.services.solar import get_current_elevation
     start_pt = path[0]
     solar_elevation = get_current_elevation(start_pt["lat"], start_pt["lon"])
-    solar_multiplier = elevation_to_shade_multiplier(solar_elevation)
+    solar_multiplier = 1.0
 
     # Step 2 — compute segment midpoints:
     midpoints = [midpoint(path[i], path[i+1]) for i in range(len(path)-1)]

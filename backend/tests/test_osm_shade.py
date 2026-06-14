@@ -71,9 +71,9 @@ async def test_shade_for_path(httpx_mock):
     sources = res["shade_sources"]
     
     assert len(shade_percentages) == 2
-    # 5 + 8 = 13% for both segments since same mock is returned
-    assert shade_percentages[0] == 13.0
-    assert shade_percentages[1] == 13.0
+    # 12 + 2 = 14% for both segments since same mock is returned
+    assert shade_percentages[0] == 14.0
+    assert shade_percentages[1] == 14.0
     assert sources[0] == "overpass"
     assert sources[1] == "overpass"
 
@@ -208,12 +208,13 @@ def test_covered_way_scores_18_percent():
     assert estimate_shade_percent(features, solar_elevation=60.0, solar_azimuth=180.0, segment_length_m=250) == 18.0
 
 @pytest.mark.asyncio
-async def test_solar_multiplier_applied_in_tile_fetch(monkeypatch):
+async def test_solar_position_used_in_tile_fetch(monkeypatch):
     import app.services.solar as solar
     import app.services.osm_shade as osm_shade
 
-    # Test 1: get_current_elevation returning 0.0 (multiplier = 0.0 -> shade = 0.0)
-    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 0.0)
+    # Mock get_solar_position to return daytime at noon
+    monkeypatch.setattr(solar, "get_solar_position", lambda lat, lon: {"elevation": 60.0, "azimuth": 180.0, "is_night": False})
+    
     mock_fetch = AsyncMock(return_value=([
         {"tags": {"natural": "tree"}},
         {"tags": {"natural": "tree"}},
@@ -222,25 +223,19 @@ async def test_solar_multiplier_applied_in_tile_fetch(monkeypatch):
     monkeypatch.setattr(osm_shade, "fetch_shade_features", mock_fetch)
 
     result = await osm_shade.fetch_shade_for_tile("18.9250_72.8250")
-    assert result["shade_pct"] == 0.0
-    assert result["solar_elevation"] == 0.0
-    assert result["solar_multiplier"] == 0.0
+    # 3 trees = 3 * 12% = 36%
+    assert result["shade_pct"] == 36.0
+    assert result["solar_elevation"] == 60.0
+    assert result["solar_multiplier"] == 1.0
 
-    # Test 2: get_current_elevation returning 5.0 (multiplier = 0.15 -> 15% * 0.15 = 2.25)
-    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 5.0)
-    result2 = await osm_shade.fetch_shade_for_tile("18.9250_72.8250")
-    assert result2["shade_pct"] == 2.25
-    assert result2["solar_elevation"] == 5.0
-    assert result2["solar_multiplier"] == 0.15
-    assert result2["shade_pct"] < 5.0
 
 @pytest.mark.asyncio
 async def test_night_multiplier_zeros_shade(monkeypatch):
     import app.services.solar as solar
     import app.services.osm_shade as osm_shade
 
-    # Nighttime elevation = -10.0 (multiplier = 0.0)
-    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: -10.0)
+    # Mock get_solar_position to return night
+    monkeypatch.setattr(solar, "get_solar_position", lambda lat, lon: {"elevation": -10.0, "azimuth": 180.0, "is_night": True})
     
     mock_fetch = AsyncMock(return_value=([
         {"tags": {"natural": "tree"}},
