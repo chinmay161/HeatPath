@@ -52,8 +52,10 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
     async def score_one(path):
         simplified = simplify_path(path, max_points=8)
 
-        # shade_for_path returns (shade_percentages, sources)
-        shade_pcts, _sources = await shade_for_path(simplified)
+        # shade_for_path returns a dict with shade_values and solar metadata
+        shade_res = await shade_for_path(simplified)
+        shade_pcts = shade_res["shade_values"]
+        _sources = shade_res["shade_sources"]
         crowd_pcts = await crowd_for_path(simplified)
 
         segments = [

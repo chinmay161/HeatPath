@@ -43,7 +43,9 @@ async def score_route(
             )
         
     path_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in request.path]
-    shade_percentages, sources = await shade_for_path(path_dicts)
+    shade_res = await shade_for_path(path_dicts)
+    shade_percentages = shade_res["shade_values"]
+    sources = shade_res["shade_sources"]
     
     import statistics
     try:

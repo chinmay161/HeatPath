@@ -238,13 +238,24 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
         "solar_multiplier": multiplier
     }
 
-async def shade_for_path(path: List[Dict[str, float]]) -> tuple[List[float], List[str]]:
+async def shade_for_path(path: List[Dict[str, float]]) -> dict:
     """
     Compute shade percentages for each segment of a path using SQLite tile cache batching.
     """
-    # Step 1 — guard: if len(path) < 2: return [], []
+    # Step 1 — guard:
     if len(path) < 2:
-        return [], []
+        return {
+            "shade_values": [],
+            "solar_elevation": 45.0,
+            "solar_multiplier": 1.0,
+            "shade_sources": []
+        }
+
+    # Calculate solar context for the path using starting point
+    from app.services.solar import get_current_elevation, elevation_to_shade_multiplier
+    start_pt = path[0]
+    solar_elevation = get_current_elevation(start_pt["lat"], start_pt["lon"])
+    solar_multiplier = elevation_to_shade_multiplier(solar_elevation)
 
     # Step 2 — compute segment midpoints:
     midpoints = [midpoint(path[i], path[i+1]) for i in range(len(path)-1)]
@@ -285,4 +296,9 @@ async def shade_for_path(path: List[Dict[str, float]]) -> tuple[List[float], Lis
             else:
                 sources.append(src)
                 
-    return shade_percentages, sources
+    return {
+        "shade_values": shade_percentages,
+        "solar_elevation": round(solar_elevation, 1),
+        "solar_multiplier": solar_multiplier,
+        "shade_sources": sources
+    }
