@@ -13,3 +13,5 @@ services:
         sync: false
       - key: ENV
         value: production
+
+# Run once after deploy: python backend/scripts/warmup_shade_cache.py
