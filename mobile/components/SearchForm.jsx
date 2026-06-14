@@ -69,7 +69,10 @@ export default function SearchForm({ onSearch, isLoading }) {
   const isButtonDisabled = isLoading || !startPlace || !endPlace;
 
   return (
-    <View className="bg-white px-4 pt-4 pb-3 shadow-md rounded-b-2xl">
+    <View
+      className="bg-white px-4 pt-4 pb-3 shadow-md rounded-b-2xl"
+      style={{ position: 'relative', zIndex: activeField ? 1000 : 1 }}
+    >
       <View className="flex-row items-center mb-3">
         <Text className="text-xl font-bold text-gray-800">🌿 HeatPath</Text>
       </View>
@@ -148,7 +151,6 @@ export default function SearchForm({ onSearch, isLoading }) {
           <View style={{
             height: '100%', backgroundColor: '#059669',
             borderRadius: 2, width: '100%',
-            animation: 'progress 25s linear forwards',
           }} />
         </View>
       )}

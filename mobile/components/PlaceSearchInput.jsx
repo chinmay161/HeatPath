@@ -230,7 +230,10 @@ export default function PlaceSearchInput({
       </View>
 
       {results.length > 0 && (
-        <View className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-lg max-h-60 overflow-hidden z-50">
+        <View
+          className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-lg max-h-60 overflow-hidden"
+          style={{ zIndex: 1000 }}
+        >
           {Platform.OS === 'web' ? (
             <View style={{ overflowY: 'auto', maxHeight: 240 }}>
               {results.map((item, index) => (
@@ -251,7 +254,10 @@ export default function PlaceSearchInput({
       )}
 
       {showNoPlaces && (
-        <View className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-lg z-50">
+        <View
+          className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-lg"
+          style={{ zIndex: 1000 }}
+        >
           <View className="px-4 py-3">
             <Text className="text-gray-500 text-sm text-center">No places found</Text>
           </View>

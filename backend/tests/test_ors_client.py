@@ -99,6 +99,15 @@ def test_find_routes_endpoint_integration(httpx_mock, monkeypatch):
     # Ensure WAQI_TOKEN is set so that the code makes the HTTP request to WAQI
     monkeypatch.setattr(weather, "WAQI_TOKEN", "dummy_token")
 
+    # Mock solar position to daytime so shade_for_path actually calls
+    # fetch_shade_features (Overpass) instead of short-circuiting on "night"
+    import app.services.solar as solar
+    monkeypatch.setattr(
+        solar, "get_solar_position",
+        lambda lat, lon: {"elevation": 60.0, "azimuth": 180.0, "is_night": False},
+    )
+    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 60.0)
+
     # Mock ORS Directions Response
     mock_geojson = {
         "features": [
@@ -228,4 +237,3 @@ async def test_fetch_candidate_routes_deduplication(httpx_mock):
     # Route 2 is dropped by deduplication because > 80% of its waypoints are within 30m of Route 1.
     assert len(routes) == 1
     assert routes[0] == [{"lat": 18.9220, "lon": 72.8347}, {"lat": 18.9225, "lon": 72.8350}]
-
