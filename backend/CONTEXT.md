@@ -483,3 +483,53 @@ The health check endpoint at `GET /health` now exposes cache statistics:
 }
 ```
 This allows operators to monitor cache size and age on the live deployment.
+
+## Shade v2 — Time-Aware Structural Shade
+
+### solar.py
+This module is a pure Python implementation utilizing only standard library `math` and `datetime` modules. It computes the solar elevation angle above the horizon at any coordinate and time using the NOAA simplified algorithm. This algorithm is accurate to approximately ±0.5° for our purposes, which is more than sufficient for shade estimation.
+
+### elevation_to_shade_multiplier
+The solar elevation angle is mapped to a shade effectiveness multiplier using a step function:
+- `elevation <= 0°` -> `0.0` (sun below horizon, night time, shade is irrelevant)
+- `0° < elevation <= 10°` -> `0.15` (sunrise/sunset, very long shadows, little radiant heat)
+- `10° < elevation <= 25°` -> `0.45` (morning/evening, moderate shadow length)
+- `25° < elevation <= 45°` -> `0.75` (mid-morning/afternoon, significant heat)
+- `elevation > 45°` -> `1.0` (high sun, direct sunlight, shade is at maximum effectiveness)
+
+Rationale: When the sun is high and direct (elevation > 45°), shade features are highly critical to protect walkers from peak radiant heat. At low sun angles, buildings and other surrounding features naturally cast long shadows regardless of immediate overhead cover, reducing the relative importance of local shade features.
+
+### New Overpass Features and Examples
+We updated the query in `fetch_shade_features` to include structurally accurate and surface shade sources:
+- **Bridges & Flyovers**: Road flyovers (`way["bridge"="yes"]["highway"]`) like the Santa Cruz-Chembur Link Road (SCLR) or Eastern Express Highway, and railway bridges (`way["bridge"="yes"]["railway"]`).
+- **Covered Walkways & Awnings**: Covered pathways (`way["covered"="yes"]`) and purpose-built canopy structures/roofs (`way["building"="roof"]`) like the arcade structures in the Crawford Market area.
+- **Bus Shelters**: Public transport shelters (`node/way["amenity"="shelter"]["shelter_type"="public_transport"]`) representing BEST bus shelters in Mumbai.
+
+### New Scoring Weights Verbatim
+The new scoring weights are applied incrementally inside the pure function `estimate_shade_percent`:
+- `bridge=yes` + `highway` (road flyover): `+25%` per element
+- `bridge=yes` + `railway` (railway bridge): `+20%` per element
+- `covered=yes` (covered walkways/markets): `+15%` per element
+- `building=roof` (canopies/arcades): `+20%` per element
+- `shelter_type=public_transport` (bus shelters): `+10%` per element
+The total shade is capped at `95%` as before.
+
+### Application of Solar Multiplier
+The solar multiplier is applied inside `fetch_shade_for_tile` rather than inside `estimate_shade_percent`. This maintains `estimate_shade_percent` as a pure feature-scoring function, decoupling spatial features from time-based conditions and keeping both units highly testable.
+
+### TTL Cache Policy Update (30 days -> 6 hours)
+Since shade is now time-aware and dependent on the current solar position, tiles cached at noon (high shade multiplier) cannot be served at 6am (low shade multiplier) tomorrow. Solar elevation changes meaningfully every 2-3 hours. Changing the TTL policy to 6 hours ensures that cached values remain valid and fresh for the corresponding part of the day while still avoiding redundant Overpass API calls during rapid repeated queries.
+
+### API Response & Caller Updates
+The function `shade_for_path` was refactored to return a dictionary:
+```json
+{
+  "shade_values": [15.0, 25.0],
+  "solar_elevation": 55.4,
+  "solar_multiplier": 1.0,
+  "shade_sources": ["overpass", "cached"]
+}
+```
+All callers of `shade_for_path` have been updated to extract the appropriate fields from the returned dictionary:
+- `find_routes.py`: Updated to unpack `shade_values` and `shade_sources` from the dict.
+- `routes.py`: Updated to parse `shade_values` and `shade_sources` from the dict.
