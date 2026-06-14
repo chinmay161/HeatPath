@@ -50,10 +50,53 @@ def init_db() -> None:
             n = cursor.rowcount
             if n > 0:
                 logger.info(f"[tile_cache] evicted {n} stale tiles (>6h)")
+
+            # Create cache_meta table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS cache_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                );
+            """)
     except Exception as e:
         logger.error(f"[tile_cache] DB initialization failed: {e}")
     finally:
         conn.close()
+
+    # Version Migration Guard
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM cache_meta WHERE key = 'shade_version'")
+            row = cursor.fetchone()
+            has_v3 = row and row[0] == "v3"
+        if not has_v3:
+            invalidate_v2_tiles()
+            with conn:
+                conn.execute("INSERT OR REPLACE INTO cache_meta (key, value) VALUES (?, ?)", ("shade_version", "v3"))
+    except Exception as e:
+        logger.error(f"[tile_cache] Migration check failed: {e}")
+    finally:
+        conn.close()
+
+
+def invalidate_v2_tiles() -> int:
+    """Wipes all non-night tiles (v2 multiplier was applied to these)."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM shade_tiles WHERE source != 'night'")
+            n = cursor.rowcount
+            logger.info(f"[tile_cache] invalidated {n} v2 tiles for shade v3 migration")
+            return n
+    except Exception as e:
+        logger.error(f"[tile_cache] Failed to invalidate v2 tiles: {e}")
+        return 0
+    finally:
+        conn.close()
+
 
 # Run DB initialization and TTL eviction on import
 init_db()

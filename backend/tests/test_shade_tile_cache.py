@@ -180,3 +180,62 @@ async def test_fetch_failure_returns_fallback(monkeypatch):
     assert len(shade_percentages) == 1
     assert shade_percentages[0] == 25.0
     assert sources[0] == "failed_fallback"
+
+
+def test_v3_cache_migration_runs_once(temp_db, monkeypatch):
+    # Insert 3 tiles with source="overpass" (v2-style)
+    # Also we can insert one "night" tile which should NOT be deleted
+    conn = sqlite3.connect(str(temp_db))
+    try:
+        with conn:
+            conn.execute("DELETE FROM cache_meta WHERE key = 'shade_version'")
+            now_str = datetime.now(timezone.utc).isoformat()
+            conn.executemany(
+                "INSERT INTO shade_tiles (tile_key, shade_pct, source, computed_at, radius_m) VALUES (?, ?, ?, ?, ?)",
+                [
+                    ("18.9000_72.8000", 15.0, "overpass", now_str, 60),
+                    ("18.9000_72.8001", 20.0, "street_type", now_str, 60),
+                    ("18.9000_72.8002", 30.0, "fallback", now_str, 60),
+                    ("18.9000_72.8003", 0.0, "night", now_str, 60),
+                ]
+            )
+    finally:
+        conn.close()
+
+    # Track how many times invalidate_v2_tiles is called
+    original_invalidate = tile_cache.invalidate_v2_tiles
+    calls = []
+
+    def mock_invalidate():
+        res = original_invalidate()
+        calls.append(res)
+        return res
+
+    monkeypatch.setattr(tile_cache, "invalidate_v2_tiles", mock_invalidate)
+
+    # Run module import logic (calling init_db)
+    tile_cache.init_db()
+
+    # Assert all 3 non-night tiles deleted, night tile remains
+    conn = sqlite3.connect(str(temp_db))
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT tile_key, source FROM shade_tiles")
+        rows = cursor.fetchall()
+        cursor.execute("SELECT value FROM cache_meta WHERE key = 'shade_version'")
+        version_row = cursor.fetchone()
+    finally:
+        conn.close()
+
+    assert len(rows) == 1
+    assert rows[0][1] == "night"
+    assert version_row is not None and version_row[0] == "v3"
+    assert len(calls) == 1
+    assert calls[0] == 3  # deleted 3 v2-style tiles
+
+    # Run import logic again
+    calls.clear()
+    tile_cache.init_db()
+
+    # Assert invalidate NOT called second time
+    assert len(calls) == 0
