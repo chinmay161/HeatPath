@@ -127,7 +127,7 @@ async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> t
       way["building"="roof"](around:{radius_m},{lat},{lon});
       node["amenity"="shelter"]["shelter_type"="public_transport"](around:{radius_m},{lat},{lon});
     );
-    out tags;
+    out tags geom;
     """
     try:
         async with httpx.AsyncClient(timeout=15.0, headers=OVERPASS_HEADERS) as client:
@@ -148,6 +148,51 @@ async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> t
         else:
             logger.warning(f"Overpass API failed: error={e}, using fallback")
         return [], "failed"
+
+
+def extract_building_height(element: dict) -> float:
+    """
+    Extract building height from elements tags using priority:
+    1. height
+    2. building:levels
+    3. levels
+    Default is 12.0m. Handle non-numeric / malformed values gracefully.
+    """
+    tags = element.get("tags", {}) if element else {}
+    if not tags:
+        return 12.0
+
+    # Priority 1: height
+    if "height" in tags:
+        val = tags["height"]
+        if isinstance(val, (int, float)):
+            return float(val)
+        if isinstance(val, str):
+            val_clean = val.strip().lower()
+            if val_clean.endswith("m"):
+                val_clean = val_clean[:-1].strip()
+            try:
+                return float(val_clean)
+            except ValueError:
+                pass
+
+    # Priority 2: building:levels
+    if "building:levels" in tags:
+        val = tags["building:levels"]
+        try:
+            return float(int(float(val)) * 3.5)
+        except (ValueError, TypeError):
+            pass
+
+    # Priority 3: levels
+    if "levels" in tags:
+        val = tags["levels"]
+        try:
+            return float(int(float(val)) * 3.5)
+        except (ValueError, TypeError):
+            pass
+
+    return 12.0
 
 
 def estimate_shade_percent(features: List[Dict[str, Any]], segment_length_m: float) -> float:

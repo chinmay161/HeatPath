@@ -9,6 +9,7 @@ from app.services.osm_shade import (
     shade_for_path,
     fetch_shade_features,
     estimate_shade_from_street_type,
+    extract_building_height,
 )
 
 @pytest.fixture(autouse=True)
@@ -248,3 +249,18 @@ async def test_night_multiplier_zeros_shade(monkeypatch):
 
     result = await osm_shade.fetch_shade_for_tile("18.9250_72.8250")
     assert result["shade_pct"] == 0.0
+
+
+def test_extract_building_height_from_tag():
+    element = {"tags": {"height": "25m"}}
+    assert extract_building_height(element) == 25.0
+
+
+def test_extract_building_height_from_levels():
+    element = {"tags": {"building:levels": "4"}}
+    assert extract_building_height(element) == 14.0  # 4 * 3.5
+
+
+def test_extract_building_height_default():
+    element = {"tags": {"building": "yes"}}
+    assert extract_building_height(element) == 12.0
