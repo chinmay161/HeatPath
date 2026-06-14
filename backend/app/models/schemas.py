@@ -59,13 +59,17 @@ class RouteRequest(BaseModel):
 
 class ScoredRoute(BaseModel):
     """Schema for a scored route with details."""
-    rank:               int            = Field(..., description="Score rank (1 = best)")
-    overall_score:      float          = Field(..., description="Overall comfort score 0–1")
-    shade_safety_score: float          = Field(..., description="Shade safety score 0–1")
-    heat_safety_score:  float          = Field(..., description="Heat safety score 0–1")
-    crowd_safety_score: float          = Field(..., description="Crowd safety score 0–1 (1 = uncrowded)")
-    path:               List[Location] = Field(..., description="Route coordinates")
-    segment_count:      int            = Field(..., description="Number of path segments")
+    rank:                int            = Field(..., description="Score rank (1 = best)")
+    overall_score:       float          = Field(..., description="Overall comfort score 0–1")
+    shade_safety_score:  float          = Field(..., description="Shade safety score 0–1")
+    heat_safety_score:   float          = Field(..., description="Heat safety score 0–1")
+    crowd_safety_score:  float          = Field(..., description="Crowd safety score 0–1 (1 = uncrowded)")
+    avg_shade_pct:       float          = Field(..., description="Average shade coverage across the route (0-100)")
+    feels_like_c:        float          = Field(..., description="Estimated perceived temperature accounting for shade")
+    shade_segments:      List[float]    = Field(..., description="Shade percentage per route segment")
+    segment_distances_m: List[float]    = Field(..., description="Distance in meters per segment, aligned with shade_segments")
+    path:                List[Location] = Field(..., description="Route coordinates")
+    segment_count:       int            = Field(..., description="Number of path segments")
     model_config = ConfigDict(from_attributes=True)
 
 

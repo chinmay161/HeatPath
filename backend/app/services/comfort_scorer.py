@@ -1,5 +1,8 @@
 from typing import List, Dict, Union
 
+# Max perceived temperature reduction in full shade vs full sun exposure (°C)
+COOLING_FACTOR_C = 7.0
+
 
 def score_segment(
     shade_pct: float,
@@ -102,3 +105,15 @@ def score_route(segments: List[Dict[str, Union[float, int, bool]]]) -> Dict[str,
         "crowd_safety_score": 1.0 - (total_crowd_pct / num_segments / 100.0),
         "overall_score": sum(segment_scores) / num_segments,
     }
+
+
+def estimate_feels_like(heat_index: float, avg_shade_pct: float) -> float:
+    """
+    Estimate the 'feels like' temperature for a route given the ambient
+    heat index and average shade coverage along the route.
+
+    Full shade (100%) reduces perceived heat by up to COOLING_FACTOR_C
+    degrees; no shade (0%) leaves the heat index unchanged.
+    """
+    reduction = (avg_shade_pct / 100.0) * COOLING_FACTOR_C
+    return round(heat_index - reduction, 1)

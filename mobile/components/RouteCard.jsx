@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { scoreToBgClass, scoreToLabel } from '../utils/scoreToColor';
-import ScoreBar from './ScoreBar';
+import { scoreToColor } from '../utils/scoreToColor';
+
+const WALK_SPEED_KMH = 5;
+const COOLING_FACTOR_C = 7.0; // mirrors backend comfort_scorer.COOLING_FACTOR_C
+const SHADE_THRESHOLD = 50;   // segments at/above this % count as "shaded"
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -26,161 +29,248 @@ function routeStats(route) {
       route.path[i+1].lat, route.path[i+1].lon,
     );
   }
-  const walkMins = Math.round((total / 5) * 60);
+  const walkMins = Math.round((total / WALK_SPEED_KMH) * 60);
   return { distanceKm: total.toFixed(2), walkMins };
 }
 
-function buildExplainer(route, bestRoute, distanceKm, walkMins) {
-  const shade    = Math.round(route.shade_safety_score * 100);
-  const heat     = Math.round(route.heat_safety_score  * 100);
-  const score    = Math.round(route.overall_score      * 100);
-  const isTop    = route.rank === 1;
+function getThermalStress(feelsLikeC) {
+  if (feelsLikeC < 27) return { label: 'Low',      color: '#16a34a', bg: '#f0fdf4' };
+  if (feelsLikeC < 32) return { label: 'Moderate', color: '#ca8a04', bg: '#fefce8' };
+  if (feelsLikeC < 39) return { label: 'High',     color: '#ea580c', bg: '#fff7ed' };
+  return                     { label: 'Extreme',  color: '#dc2626', bg: '#fef2f2' };
+}
 
-  if (isTop) {
-    const reasons = [];
-    if (shade >= 40)
-      reasons.push(`${shade}% of this route has shade cover`);
-    else if (shade >= 20)
-      reasons.push(`moderate shade on ${shade}% of the route`);
-    else
-      reasons.push('minimal shade but the coolest path available');
-
-    if (heat >= 70)
-      reasons.push('low heat exposure throughout');
-    else if (heat >= 50)
-      reasons.push('manageable heat levels');
-    else
-      reasons.push('high heat — walk early morning or evening if possible');
-
-    return `HeatPath picked this route because it has ${reasons[0]}, with ${reasons[1]}. `
-      + `At ${walkMins} min for ${distanceKm} km, it scores ${score}/100 for comfort.`;
-  } else {
-    const bestStats = routeStats(bestRoute);
-    const timeDiff  = walkMins - bestStats.walkMins;
-    const heatDiff  = Math.abs(
-      Math.round((route.heat_safety_score - bestRoute.heat_safety_score) * 100)
-    );
-    return `This route is ${timeDiff > 0 ? `${timeDiff} min longer` : 'similar time'} `
-      + `and ${heatDiff}% less heat-safe than Route 1. `
-      + `Choose this only if Route 1 is blocked or unfamiliar.`;
+function getPersona(route, bestRoute, walkMins, bestWalkMins) {
+  if (route.rank === 1) {
+    return {
+      icon: '🌳', name: 'Coolest Route', tagline: 'Best for hot weather',
+      color: '#059669', bg: '#ecfdf5', border: '#6ee7b7',
+    };
   }
+  if (bestRoute && walkMins < bestWalkMins) {
+    return {
+      icon: '⚡', name: 'Fastest Route', tagline: 'Most direct',
+      color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe',
+    };
+  }
+  if (bestRoute && route.crowd_safety_score > bestRoute.crowd_safety_score) {
+    return {
+      icon: '🍃', name: 'Quieter Route', tagline: 'Fewer crowds along the way',
+      color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe',
+    };
+  }
+  return {
+    icon: '🛣️', name: 'Alternative Route', tagline: 'Another way to get there',
+    color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb',
+  };
+}
+
+function exposureSegments(route) {
+  const distances = route.segment_distances_m || [];
+  const shades    = route.shade_segments || [];
+  const total     = distances.reduce((s, d) => s + d, 0) || 1;
+  return distances.map((d, i) => ({
+    widthPct: (d / total) * 100,
+    shadePct: shades[i] ?? 0,
+  }));
+}
+
+function exposureBreakdownMins(route) {
+  const distances = route.segment_distances_m || [];
+  const shades    = route.shade_segments || [];
+  let shadedM = 0, exposedM = 0;
+  distances.forEach((d, i) => {
+    if ((shades[i] ?? 0) >= SHADE_THRESHOLD) shadedM += d;
+    else exposedM += d;
+  });
+  const toMin = m => Math.round((m / 1000 / WALK_SPEED_KMH) * 60);
+  return { shadedMin: toMin(shadedM), exposedMin: toMin(exposedM) };
+}
+
+function buildWhyClaims(route, bestRoute, tempSaved) {
+  const claims = [];
+
+  claims.push(`Feels ${tempSaved.toFixed(1)}°C cooler than a fully-exposed path`);
+
+  const shade = route.avg_shade_pct ?? 0;
+  if (shade >= 50) {
+    claims.push(`${Math.round(shade)}% of this walk is shaded`);
+  } else if (shade >= 25) {
+    claims.push(`Moderate shade across ${Math.round(shade)}% of the walk`);
+  } else {
+    claims.push('Mostly open path — carry water and sun protection');
+  }
+
+  if (bestRoute && route.rank > 1) {
+    const shadeDiff = Math.round((bestRoute.avg_shade_pct ?? 0) - shade);
+    if (shadeDiff > 5) {
+      claims.push(`${shadeDiff}% less shade than the Coolest Route`);
+    }
+    const feelsDiff = (route.feels_like_c ?? 0) - (bestRoute.feels_like_c ?? 0);
+    if (feelsDiff > 0.4) {
+      claims.push(`Feels ${feelsDiff.toFixed(1)}°C warmer than the Coolest Route`);
+    }
+  }
+
+  if (route.crowd_safety_score >= 0.7) {
+    claims.push('Mostly quiet, low-traffic streets');
+  }
+
+  return claims;
 }
 
 export default function RouteCard({ route, isSelected, onPress, bestRoute }) {
   const [showExplainer, setShowExplainer] = useState(false);
-  const isTop = route.rank === 1;
+
   const { distanceKm, walkMins } = routeStats(route);
-
-  const heatDelta = bestRoute && route.rank > 1
-    ? ((route.heat_safety_score - bestRoute.heat_safety_score) * 100).toFixed(0)
-    : null;
-
   const bestStats = bestRoute ? routeStats(bestRoute) : null;
+
+  const persona       = getPersona(route, bestRoute, walkMins, bestStats?.walkMins ?? walkMins);
+  const thermalStress = getThermalStress(route.feels_like_c ?? 0);
+  const tempSaved     = ((route.avg_shade_pct ?? 0) / 100) * COOLING_FACTOR_C;
+  const segments      = exposureSegments(route);
+  const { shadedMin, exposedMin } = exposureBreakdownMins(route);
+  const whyClaims     = buildWhyClaims(route, bestRoute, tempSaved);
+
   const timeDelta = bestStats && route.rank > 1
     ? walkMins - bestStats.walkMins
     : null;
 
-  const explainerText = buildExplainer(route, bestRoute, distanceKm, walkMins);
-
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.8}
-      className={`p-4 mb-3 rounded-2xl bg-white ${
+      activeOpacity={0.85}
+      className={`mb-3 rounded-2xl bg-white overflow-hidden ${
         isSelected
           ? 'border-2 border-emerald-500 shadow-md'
           : 'border border-gray-200 shadow-sm'
       }`}
     >
-      {/* Top row: rank + label */}
-      <View className="flex-row items-center justify-between mb-2">
-        <View className="flex-row items-center">
-          <View className={`w-6 h-6 rounded-full items-center justify-center ${scoreToBgClass(route.overall_score)}`}>
-            <Text className="text-white text-xs font-extrabold">{route.rank}</Text>
+      {/* Persona header */}
+      <View style={{
+        backgroundColor: persona.bg, borderBottomWidth: 1, borderBottomColor: persona.border,
+        paddingHorizontal: 14, paddingVertical: 10,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 18 }}>{persona.icon}</Text>
+          <View>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: persona.color }}>
+              {persona.name}
+            </Text>
+            <Text style={{ fontSize: 11, color: '#6b7280' }}>
+              {persona.tagline}
+            </Text>
           </View>
-          <Text className="text-base font-bold text-gray-800 ml-2">
-            Route {route.rank}
+        </View>
+
+        <TouchableOpacity
+          onPress={e => { e.stopPropagation?.(); setShowExplainer(v => !v); }}
+          style={{
+            backgroundColor: '#fff', borderWidth: 1, borderColor: persona.border,
+            borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
+          }}
+        >
+          <Text style={{ fontSize: 11, fontWeight: '600', color: persona.color }}>
+            {showExplainer ? '✕ close' : 'ℹ️ why?'}
           </Text>
-          {isTop && (
-            <View className="ml-2 bg-emerald-100 px-2 py-0.5 rounded-full">
-              <Text className="text-emerald-700 text-xs font-bold">❄️ Coolest</Text>
-            </View>
-          )}
-        </View>
-        <View className="flex-row items-center gap-2">
-          {/* Why this route button */}
-          <TouchableOpacity
-            onPress={e => { e.stopPropagation?.(); setShowExplainer(v => !v); }}
-            style={{
-              backgroundColor: showExplainer ? '#ecfdf5' : '#f9fafb',
-              borderWidth: 1,
-              borderColor: showExplainer ? '#6ee7b7' : '#e5e7eb',
-              borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
-            }}
-          >
-            <Text style={{ fontSize: 11, color: showExplainer ? '#065f46' : '#6b7280', fontWeight: '600' }}>
-              {showExplainer ? '✕ close' : 'ℹ️ why?'}
-            </Text>
-          </TouchableOpacity>
-          <View className="px-2.5 py-1 rounded-full bg-gray-100">
-            <Text className="text-xs font-semibold text-gray-600">
-              {scoreToLabel(route.overall_score)}
-            </Text>
-          </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
-      {/* Explainer panel */}
-      {showExplainer && (
-        <View style={{
-          backgroundColor: isTop ? '#f0fdf4' : '#fff7ed',
-          borderWidth: 1,
-          borderColor: isTop ? '#bbf7d0' : '#fed7aa',
-          borderRadius: 10, padding: 10, marginBottom: 10,
-        }}>
-          <Text style={{
-            fontSize: 12, lineHeight: 18,
-            color: isTop ? '#065f46' : '#9a3412',
-          }}>
-            {explainerText}
-          </Text>
-        </View>
-      )}
+      <View style={{ padding: 14 }}>
 
-      {/* Walk time + distance row */}
-      <View className="flex-row items-center gap-3 mb-3">
-        <View className="flex-row items-center bg-blue-50 px-2.5 py-1 rounded-full">
-          <Text className="text-xs font-bold text-blue-700">
-            🚶 {walkMins} min
-          </Text>
-        </View>
-        <View className="flex-row items-center bg-gray-100 px-2.5 py-1 rounded-full">
-          <Text className="text-xs font-semibold text-gray-600">
-            📍 {distanceKm} km
-          </Text>
-        </View>
-        {timeDelta !== null && timeDelta > 0 && (
-          <View className="flex-row items-center bg-amber-50 px-2.5 py-1 rounded-full">
-            <Text className="text-xs font-semibold text-amber-700">
-              +{timeDelta} min vs Route 1
-            </Text>
+        {/* Why this route? */}
+        {showExplainer && (
+          <View style={{
+            backgroundColor: persona.bg, borderWidth: 1, borderColor: persona.border,
+            borderRadius: 10, padding: 10, marginBottom: 12, gap: 4,
+          }}>
+            {whyClaims.map((claim, i) => (
+              <Text key={i} style={{ fontSize: 12, color: '#374151', lineHeight: 17 }}>
+                ✓ {claim}
+              </Text>
+            ))}
           </View>
         )}
-      </View>
 
-      <ScoreBar score={route.overall_score} label="Overall Safety" />
+        {/* Time + Feels Like */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'flex-end',
+          justifyContent: 'space-between', marginBottom: 10,
+        }}>
+          <View>
+            <Text style={{ fontSize: 26, fontWeight: '800', color: '#1f2937' }}>
+              {walkMins} min
+            </Text>
+            <Text style={{ fontSize: 12, color: '#9ca3af' }}>
+              {distanceKm} km
+            </Text>
+          </View>
 
-      <Text className="text-xs text-gray-500 mt-2 font-medium">
-        {(route.shade_safety_score * 100).toFixed(0)}% shade · {(route.heat_safety_score * 100).toFixed(0)}% heat safe · {(route.crowd_safety_score * 100).toFixed(0)}% crowd-free
-      </Text>
-
-      {heatDelta && parseFloat(heatDelta) < 0 && (
-        <View className="mt-2 bg-orange-50 border border-orange-100 rounded-xl px-3 py-1.5 flex-row items-center">
-          <Text className="text-xs text-orange-600 font-semibold">
-            🌡️ {Math.abs(heatDelta)}% less heat safe than Route 1
-          </Text>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: thermalStress.color }}>
+              {route.feels_like_c != null ? `${route.feels_like_c.toFixed(1)}°C` : '--'}
+            </Text>
+            <View style={{
+              backgroundColor: thermalStress.bg, borderRadius: 12,
+              paddingHorizontal: 8, paddingVertical: 2, marginTop: 2,
+            }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: thermalStress.color }}>
+                {thermalStress.label} heat stress
+              </Text>
+            </View>
+          </View>
         </View>
-      )}
+
+        {/* Delta badges */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {timeDelta !== null && (
+            <View style={{
+              backgroundColor: timeDelta > 0 ? '#fff7ed' : '#ecfdf5',
+              borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3,
+            }}>
+              <Text style={{
+                fontSize: 11, fontWeight: '600',
+                color: timeDelta > 0 ? '#9a3412' : '#065f46',
+              }}>
+                {timeDelta > 0
+                  ? `+${timeDelta} min vs Coolest Route`
+                  : timeDelta < 0
+                    ? `${Math.abs(timeDelta)} min faster`
+                    : 'Same time as Coolest Route'}
+              </Text>
+            </View>
+          )}
+          <View style={{ backgroundColor: '#eff6ff', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#1e40af' }}>
+              {tempSaved.toFixed(1)}°C cooler than full sun
+            </Text>
+          </View>
+        </View>
+
+        {/* Exposure timeline */}
+        {segments.length > 0 && (
+          <View>
+            <View style={{ flexDirection: 'row', height: 10, borderRadius: 6, overflow: 'hidden' }}>
+              {segments.map((seg, i) => (
+                <View
+                  key={i}
+                  style={{ flex: seg.widthPct, backgroundColor: scoreToColor(seg.shadePct / 100) }}
+                />
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+              <Text style={{ fontSize: 11, color: '#6b7280' }}>
+                ☀️ {exposedMin} min exposed
+              </Text>
+              <Text style={{ fontSize: 11, color: '#6b7280' }}>
+                🌳 {shadedMin} min shaded
+              </Text>
+            </View>
+          </View>
+        )}
+
+      </View>
     </TouchableOpacity>
   );
 }

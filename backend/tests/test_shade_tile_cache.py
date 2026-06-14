@@ -21,7 +21,10 @@ def mock_solar_noon(monkeypatch):
     """
     import app.services.solar as solar
     monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 60.0)
-    monkeypatch.setattr(solar, "get_solar_position", lambda lat, lon: {"elevation": 60.0, "azimuth": 180.0, "is_night": False})
+    monkeypatch.setattr(
+        solar, "get_solar_position",
+        lambda lat, lon: {"elevation": 60.0, "azimuth": 180.0, "is_night": False},
+    )
 
 def test_snap_to_tile_precision():
     # snap_to_tile(18.9347, 72.8353)

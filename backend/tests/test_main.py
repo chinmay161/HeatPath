@@ -57,6 +57,11 @@ def test_score_route(httpx_mock, monkeypatch):
         json=mock_weather
     )
 
+    httpx_mock.add_response(
+        url=re.compile(r"https://air-quality-api\.open-meteo\.com/.*"),
+        json={"current": {"us_aqi": 50}}
+    )
+
     mock_response = {
         "elements": [
             {"tags": {"natural": "tree"}}
