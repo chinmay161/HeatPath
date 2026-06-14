@@ -418,3 +418,68 @@ From live testing feedback and UX screenshots, requiring users to manually type 
 - `render.yaml`: added for one-click Render deployment
 
 ### All 17 tests still passing
+
+## Week 3 Task 1 — SQLite Tile Cache
+
+### Design Rationale
+
+#### Why 250m tiles were chosen over 500m
+250m tiles provide a sweet spot between database size and spatial accuracy. Large 500m tiles introduce the "park-edge problem", where a single shade percentage calculated near a highly shaded area (like a park or dense cluster of buildings) gets incorrectly attributed to distant streets on the other side of the tile, leading to inaccurate route scores. Snapping coordinates to 250m tiles maintains local street-level precision while keeping the grid footprint compact.
+
+#### Why radius_m=60 instead of 100
+With 250m tiles, the radius of the Overpass query must be carefully sized. Using the default `radius_m=100` would query a 200m diameter circle, leading to significant bleed/overlap between adjacent 250m tiles. Restricting `radius_m=60` guarantees that the queried features stay well within the boundary of the snapped tile without bleeding into and duplicate-scoring neighboring tiles.
+
+#### TILE_SIZE constant derivation
+The tile size in degrees is calculated based on the earth's curvature at Mumbai's latitude (18.9°N):
+- 1° latitude ≈ 111 km = 111,000 m.
+- Snapping to a 250m grid requires:
+  TILE_SIZE = 250m / 111,000 m/° ≈ 0.00225°
+Thus, `TILE_SIZE` is exactly `0.00225`.
+
+#### Route-Level Batching & Deduplication
+Previously, shade scoring query loops fetched features sequentially per segment midpoint. If multiple segments shared the same coordinate tile, this resulted in redundant HTTP queries and slow route scoring. Snapping all midpoints along the route first, deduplicating them into unique tile keys, and performing a bulk SQLite check solves this. Only missing tiles are fetched in parallel via `asyncio.gather`, dramatically improving latency.
+
+### SQLite Schema and Implementation
+
+The database file is located at `backend/data/shade_tiles.db` and is ignored by git (added to `.gitignore`). A `.gitkeep` tracks the empty `backend/data/` directory.
+
+The `shade_tiles` table has the following columns:
+- `tile_key` (TEXT PRIMARY KEY): Formatted string representation of snapped coordinate boundary `"{lat4}_{lon4}"` (e.g. `18.9250_72.8250`).
+- `shade_pct` (REAL NOT NULL): Computed shade percentage (0.0 to 95.0).
+- `source` (TEXT NOT NULL): The shade data source: `"overpass"` (from OSM trees/buildings query), `"street_type"` (fallback tags), or `"fallback"` (hardcoded fallback due to overall connection failure).
+- `computed_at` (TEXT NOT NULL): ISO-8601 UTC timestamp recording when the tile was calculated.
+- `radius_m` (INTEGER NOT NULL): Always `60` for 250m tiles.
+
+An index `idx_tile_key` is created on `tile_key` to ensure O(1) bulk fetch queries.
+
+#### 30-Day TTL Rationale
+To keep the SQLite database lean without requiring a background thread, expired rows are evicted at module import. A 30-day TTL was chosen because OpenStreetMap features (like buildings, trees, and street networks) change slowly. Evicting and recalculating once a month ensures data freshness while minimizing unnecessary API calls.
+
+### Warmup Script
+
+The warmup script pre-computes the entire Mumbai grid:
+- **Location**: `backend/scripts/warmup_shade_cache.py`
+- **Mumbai Bounding Box**: Latitudes `18.870` to `19.270`, Longitudes `72.770` to `73.050`.
+- **Usage**:
+  ```bash
+  python backend/scripts/warmup_shade_cache.py [--dry-run]
+  ```
+- **Fair-Use Delay**: The script enforces an `asyncio.sleep(0.5)` delay between Overpass queries to comply with fair-use guidelines and prevent rate-limiting.
+- **Expected Time**: The grid contains 22,250 tiles. Pre-fetching all missing tiles sequentially with a 0.5s delay takes around 3 hours if starting from empty.
+- **Dry-run**: The `--dry-run` flag prints the total grid tiles and missing tiles count without initiating any fetches.
+
+### Cache Stats & Monitoring
+
+The health check endpoint at `GET /health` now exposes cache statistics:
+```json
+{
+  "status": "ok",
+  "env": "production",
+  "shade_cache": {
+    "total_tiles": 42,
+    "oldest_tile": "2026-06-14T06:34:00Z",
+    "db_path": "backend/data/shade_tiles.db"
+  }
+}
+```
+This allows operators to monitor cache size and age on the live deployment.
