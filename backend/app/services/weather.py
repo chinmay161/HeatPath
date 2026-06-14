@@ -39,8 +39,8 @@ async def get_weather(lat: float, lon: float) -> dict:
                 "humidity_pct":  current["relative_humidity_2m"],
                 "feels_like_c":  current["apparent_temperature"],
             }
-    # All retries failed — return fallback based on season
-    return {"temperature_c": 36.0, "humidity_pct": 75, "feels_like_c": 38.0}
+    # All retries failed — realistic Mumbai summer fallback
+    return {"temperature_c": 34.0, "humidity_pct": 65, "feels_like_c": 36.5}
 
 
 async def get_aqi(lat: float, lon: float) -> int:
