@@ -1,13 +1,22 @@
 import pytest
 import logging
+import sqlite3
+import httpx
+from app.services.shade_tile_cache import DB_PATH
 from app.services.osm_shade import (
     estimate_shade_percent,
     shade_for_path,
     fetch_shade_features,
     estimate_shade_from_street_type,
-    _shade_cache
 )
-import httpx
+
+def clear_db():
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        with conn:
+            conn.execute("DELETE FROM shade_tiles")
+    finally:
+        conn.close()
 
 def test_estimate_shade_percent():
     features = [
@@ -28,7 +37,7 @@ def test_estimate_shade_percent_cap():
 
 @pytest.mark.asyncio
 async def test_shade_for_path(httpx_mock):
-    _shade_cache.clear()
+    clear_db()
     # Mock the Overpass API response
     mock_response = {
         "elements": [
@@ -56,7 +65,7 @@ async def test_shade_for_path(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_shade_for_path_error(httpx_mock):
-    _shade_cache.clear()
+    clear_db()
     # Mock an error response (timeout)
     httpx_mock.add_exception(httpx.ReadTimeout("Timeout"))
     # The fallback street-type query is also triggered, let's mock it to fail/timeout too
@@ -75,7 +84,7 @@ async def test_shade_for_path_error(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_fetch_shade_features_returns_tuple(httpx_mock):
-    _shade_cache.clear()
+    clear_db()
     mock_response = {
         "elements": [
             {"tags": {"building": "yes"}},
@@ -89,7 +98,7 @@ async def test_fetch_shade_features_returns_tuple(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_fetch_shade_features_429_returns_failed(httpx_mock, caplog):
-    _shade_cache.clear()
+    clear_db()
     httpx_mock.add_response(url="https://overpass-api.de/api/interpreter", status_code=429)
     with caplog.at_level(logging.WARNING):
         features, source = await fetch_shade_features(18.9347, 72.8353)
@@ -121,7 +130,7 @@ async def test_estimate_shade_from_street_type_no_tags(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_cache_hit_skips_api(httpx_mock):
-    _shade_cache.clear()
+    clear_db()
     mock_response = {
         "elements": [
             {"tags": {"natural": "tree"}}
@@ -146,7 +155,7 @@ async def test_cache_hit_skips_api(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_shade_for_path_uses_fallback_on_failure(httpx_mock):
-    _shade_cache.clear()
+    clear_db()
     # Mock primary query to return 429
     httpx_mock.add_response(url="https://overpass-api.de/api/interpreter", status_code=429)
     # Mock fallback query to return commercial (35%)
