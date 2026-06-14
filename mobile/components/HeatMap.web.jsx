@@ -5,6 +5,9 @@ import { Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { scoreToColor } from '../utils/scoreToColor';
 
+const SHADE_THRESHOLD = 50;  // matches RouteCard.jsx
+const WALK_SPEED_KMH  = 5;   // matches RouteCard.jsx
+
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
@@ -166,6 +169,129 @@ function WaterStopMarkers({ routes }) {
   ));
 }
 
+// ── Exposure zone markers (Phase 3) ─────────────────────────────────────────
+
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) *
+    Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function buildCumulativeDistances(path) {
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) {
+    cum.push(cum[i - 1] + haversineMeters(
+      path[i - 1].lat, path[i - 1].lon,
+      path[i].lat, path[i].lon,
+    ));
+  }
+  return cum;
+}
+
+function pointAtDistance(path, cumDist, targetDist) {
+  const total = cumDist[cumDist.length - 1];
+  const t = Math.max(0, Math.min(targetDist, total));
+
+  let idx = 0;
+  for (let i = 0; i < cumDist.length - 1; i++) {
+    if (cumDist[i + 1] >= t) { idx = i; break; }
+    idx = i;
+  }
+
+  const segStart = cumDist[idx];
+  const segEnd   = cumDist[idx + 1] ?? segStart;
+  const segLen   = segEnd - segStart;
+  const frac     = segLen > 0 ? (t - segStart) / segLen : 0;
+
+  const p1 = path[idx];
+  const p2 = path[idx + 1] ?? p1;
+
+  return {
+    lat: p1.lat + (p2.lat - p1.lat) * frac,
+    lon: p1.lon + (p2.lon - p1.lon) * frac,
+  };
+}
+
+// Group consecutive segments into contiguous exposed/shaded zones
+function buildExposureZones(route) {
+  const distances = route.segment_distances_m || [];
+  const shades    = route.shade_segments || [];
+  if (!distances.length) return [];
+
+  const zones = [];
+  let currentType = (shades[0] ?? 0) >= SHADE_THRESHOLD ? 'shaded' : 'exposed';
+  let zoneStart = 0;
+  let zoneDist  = 0;
+
+  for (let i = 0; i < distances.length; i++) {
+    const type = (shades[i] ?? 0) >= SHADE_THRESHOLD ? 'shaded' : 'exposed';
+    if (type !== currentType) {
+      zones.push({ type: currentType, startDist: zoneStart, distance: zoneDist });
+      zoneStart += zoneDist;
+      zoneDist = 0;
+      currentType = type;
+    }
+    zoneDist += distances[i];
+  }
+  zones.push({ type: currentType, startDist: zoneStart, distance: zoneDist });
+  return zones;
+}
+
+function exposureIcon(type, minutes) {
+  const isShaded = type === 'shaded';
+  const emoji = isShaded ? '🌳' : '☀️';
+  const bg    = isShaded ? '#22c55e' : '#f59e0b';
+  const label = minutes >= 1 ? `${minutes} min` : '<1 min';
+
+  return L.divIcon({
+    html: `<div style="
+      display: flex; align-items: center; gap: 3px;
+      background: ${bg}; color: #fff; font-weight: 700; font-size: 10px;
+      padding: 3px 7px; border-radius: 12px; border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25); white-space: nowrap;
+    ">${emoji} ${label}</div>`,
+    className: '', iconSize: [70, 24], iconAnchor: [35, 32],
+  });
+}
+
+function ExposureZoneMarkers({ route }) {
+  if (!route?.path?.length || !route?.shade_segments?.length) return null;
+
+  const zones = buildExposureZones(route);
+  if (zones.length < 2) return null; // single uniform zone — nothing to show
+
+  const fullPath  = route.path.map(p => ({ lat: p.lat, lon: p.lon }));
+  const cumPath   = buildCumulativeDistances(fullPath);
+  const fullTotal = cumPath[cumPath.length - 1];
+  const simplifiedTotal = zones.reduce((s, z) => s + z.distance, 0);
+
+  if (fullTotal <= 0 || simplifiedTotal <= 0) return null;
+
+  // One marker per zone after the first, placed at the zone's start
+  // (i.e. at each exposure transition), labeled with that zone's duration.
+  return zones.slice(1).map((zone, i) => {
+    const ratio      = zone.startDist / simplifiedTotal;
+    const targetDist = ratio * fullTotal;
+    const pos        = pointAtDistance(fullPath, cumPath, targetDist);
+    const minutes    = Math.round((zone.distance / 1000 / WALK_SPEED_KMH) * 60);
+
+    return (
+      <Marker
+        key={`exposure-${i}`}
+        position={[pos.lat, pos.lon]}
+        icon={exposureIcon(zone.type, minutes)}
+        interactive={false}
+      />
+    );
+  });
+}
+
 export default function HeatMap({
   routes = [],
   selectedIndex = 0,
@@ -245,6 +371,9 @@ export default function HeatMap({
           );
         })()}
 
+        {/* Exposure transition markers — selected route only */}
+        {routes[selectedIndex] && <ExposureZoneMarkers route={routes[selectedIndex]} />}
+
         {/* Start marker */}
         {startCoord?.lat && startCoord?.lon && (
           <Marker
@@ -285,6 +414,10 @@ export default function HeatMap({
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span>🏪</span>
           <span style={{ color: '#374151' }}>Shop</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>☀️ / 🌳</span>
+          <span style={{ color: '#374151' }}>Sun / shade ahead</span>
         </div>
       </div>
     </div>
