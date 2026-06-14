@@ -533,3 +533,69 @@ The function `shade_for_path` was refactored to return a dictionary:
 All callers of `shade_for_path` have been updated to extract the appropriate fields from the returned dictionary:
 - `find_routes.py`: Updated to unpack `shade_values` and `shade_sources` from the dict.
 - `routes.py`: Updated to parse `shade_values` and `shade_sources` from the dict.
+
+
+## Shade v3 — Physical Geometry Model
+
+### Why Shade v2 was Incorrect
+In Shade v2, the solar elevation angle was mapped to a multiplier and applied to the *final* shade score. This was physically incorrect because:
+- Surrounding structures (buildings) cast longer shadows at lower sun angles, which geometry handles naturally. Applying a multiplier afterwards double-penalised the final score.
+- Trees and overhead structural shade (canopies, flyovers) block direct overhead sun regardless of the sun angle; thus, their contribution should not scale down based on the time of day.
+
+### Physical Model Categories
+1. **Trees** (`natural=tree`):
+   - Contribution: +12% per tree node.
+   - Sun-independent (canopy blocks direct overhead sun regardless of sun angle).
+2. **Buildings** (`way` or `relation` with `building` tag):
+   - Shadow length is calculated using the formula: `shadow_length = height / tan(solar_elevation)`.
+   - Shade contribution tier based on shadow length:
+     - `shadow_length >= 250m` (segment length) -> 30%
+     - `shadow_length >= 125m` (half segment length) -> 20%
+     - `shadow_length >= 20m` -> 12%
+     - `shadow_length >= 7m` -> 6%
+     - `shadow_length < 7m` -> 2%
+3. **Forest / Wood** (`landuse=forest` or `natural=wood`):
+   - Contribution: +25% per area element.
+   - Sun-independent.
+4. **Structural Shade** (sun-independent overhead cover):
+   - `bridge=yes` + `highway` -> +25%
+   - `bridge=yes` + `railway` -> +20%
+   - `covered=yes` -> +18%
+   - `building=roof` -> +22%
+   - `amenity=shelter` -> +8%
+   - `shelter_type=public_transport` -> +10%
+
+### Building Height Extraction Priority
+Building height is determined in the following order of tag priority:
+1. `tags["height"]`: Parses value directly, stripping trailing "m".
+2. `tags["building:levels"]`: Calculated as `levels * 3.5` meters.
+3. `tags["levels"]`: Calculated as `levels * 3.5` meters.
+4. Default height of `12.0m` (approx. 3 levels) if no tags exist or if values are malformed.
+
+### Night Override
+If `solar_elevation < 0`, the sun is below the horizon. The model immediately overrides all scores and returns `0.0%` shade.
+
+### API Backward Compatibility
+The API response dictionary shape has been preserved. The `solar_multiplier` field is kept in the output dictionary for backward compatibility with existing route callers in `find_routes.py` and `routes.py`, but its value is now set to `1.0` always.
+
+### SQLite Cache version 3 migration
+All cached tiles calculated with the legacy v2 multiplier must be invalidated.
+- Table `cache_meta` is created with columns `(key TEXT PRIMARY KEY, value TEXT)`.
+- On import, a version guard checks if `cache_meta` contains the row `shade_version="v3"`.
+- If missing, the migration calls `invalidate_v2_tiles()` to run `DELETE FROM shade_tiles WHERE source != 'night'`, and sets `shade_version` to `"v3"` in `cache_meta`.
+
+### Deleted Functions
+- `elevation_to_shade_multiplier()` was completely deleted from `solar.py`.
+
+
+### Physical Scorer Refinements (Shade v3 Continuous & Vector Model)
+To eliminate mathematical discontinuities and step functions, and to model the true physical nature of shadows, the scoring was refined:
+- **Night Override (100% Shade):** Rather than returning 0% shade at night (which penalized routing comfort scores), nighttime queries now return 100% shade, representing zero solar exposure.
+- **Continuous Shadow Interpolation:** Changed step thresholds into a continuous piece-wise linear function:
+  - `shadow_length = 0` -> 2% contribution
+  - `shadow_length = 7` -> 6%
+  - `shadow_length = 20` -> 12%
+  - `shadow_length = 125` -> 20%
+  - `shadow_length = 250` -> 30%
+- **Tree Canopy Scaling:** Rather than a flat +12% per tree node, trees now parse crown/radius tags (e.g. `crown_diameter`, `radius`, `width`, `height`) and scale their contribution proportionally (capped at 25%).
+- **Building Shadow Direction Vector:** Incorporated a solar azimuth factor. If tile coordinates are provided, the building center and bearing from the building to the tile are calculated. The building's shade contribution is scaled by the cosine of the angle difference between this bearing and the shadow direction (direction opposite to the sun's azimuth).
