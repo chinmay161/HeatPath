@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { findRoutes, getConditions } from '../api/heatpath';
 import SearchForm from '../components/SearchForm';
+import DepartureTimePicker from '../components/DepartureTimePicker';
 
 const DEFAULT_LAT = 18.9220;
 const DEFAULT_LON = 72.8347;
@@ -226,6 +227,30 @@ export default function SearchScreen() {
 
         {/* Search form */}
         <SearchForm onSearch={handleSearch} isLoading={isLoading} />
+
+        {/* When are you leaving? */}
+        <DepartureTimePicker currentHeat={currentHeat} />
+
+        {/* Cool Spots Nearby */}
+        <TouchableOpacity
+          onPress={() => router.push('/cool-spots')}
+          style={{
+            backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#bbf7d0',
+            borderRadius: 12, padding: 12, marginTop: 12,
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+          }}
+        >
+          <Text style={{ fontSize: 18 }}>🌳</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#065f46' }}>
+              Cool Spots Nearby
+            </Text>
+            <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>
+              Parks, AC spaces & water points around you
+            </Text>
+          </View>
+          <Text style={{ color: '#059669', fontWeight: '700' }}>→</Text>
+        </TouchableOpacity>
 
         {/* Heat index toggle — only shows if heat data loaded */}
         {currentHeat && (

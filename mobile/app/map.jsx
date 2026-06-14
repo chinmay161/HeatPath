@@ -209,6 +209,14 @@ export default function MapScreen() {
 
   const backButtonTop = isDesktop ? 16 : insets.top + 8;
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
+
   const RouteList = () => (
     <>
       <HeatWarningBanner conditions={conditions} />
@@ -260,7 +268,7 @@ export default function MapScreen() {
             onRouteSelect={setSelectedRoute}
           />
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={handleBack}
             style={{ position: 'absolute', top: 16, left: 16, zIndex: 1000 }}
             className="bg-white/90 px-3 py-2 rounded-full flex-row items-center justify-center shadow-md border border-gray-100"
           >
@@ -305,7 +313,7 @@ export default function MapScreen() {
           onRouteSelect={setSelectedRoute}
         />
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={{ position: 'absolute', top: backButtonTop, left: 16, zIndex: 1000 }}
           className="bg-white/90 px-3 py-2 rounded-full flex-row items-center justify-center shadow-md border border-gray-100"
         >
