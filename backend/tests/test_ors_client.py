@@ -130,15 +130,14 @@ def test_find_routes_endpoint_integration(httpx_mock, monkeypatch):
         json=mock_weather
     )
     
-    # Mock WAQI AQI Response
+    # Mock Open-Meteo AQI Response
     mock_aqi = {
-        "status": "ok",
-        "data": {
-            "aqi": 80
+        "current": {
+            "us_aqi": 80
         }
     }
     httpx_mock.add_response(
-        url=re.compile(r"https://api.waqi.info/.*"),
+        url=re.compile(r"https://air-quality-api.open-meteo.com/.*"),
         json=mock_aqi
     )
     

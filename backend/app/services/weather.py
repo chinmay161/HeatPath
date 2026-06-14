@@ -45,20 +45,17 @@ async def get_weather(lat: float, lon: float) -> dict:
 
 async def get_aqi(lat: float, lon: float) -> int:
     """
-    Returns AQI (0–500 scale) from WAQI API.
-    Falls back to 50 (Good) if token missing or API fails.
+    Returns AQI (0–500 scale) from Open-Meteo Air Quality API.
+    Falls back to 50 (Good) if the API fails.
     """
-    if not WAQI_TOKEN:
-        return 50  # safe fallback
-
-    url = f"https://api.waqi.info/feed/geo:{lat};{lon}/?token={WAQI_TOKEN}"
+    url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(url)
             r.raise_for_status()
             data = r.json()
-        if data["status"] == "ok":
-            return int(data["data"]["aqi"])
+            if "current" in data and "us_aqi" in data["current"]:
+                return int(data["current"]["us_aqi"])
     except Exception:
         pass
     return 50
