@@ -27,4 +27,10 @@ async def health_check():
     """
     Health check endpoint.
     """
-    return {"status": "ok", "env": config.ENV}
+    from app.services.shade_tile_cache import cache_stats
+    stats = cache_stats()
+    return {
+        "status": "ok",
+        "env": config.ENV,
+        "shade_cache": stats
+    }
