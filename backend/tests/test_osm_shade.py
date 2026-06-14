@@ -20,6 +20,7 @@ def mock_solar_noon(monkeypatch):
     """
     import app.services.solar as solar
     monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 60.0)
+    monkeypatch.setattr(solar, "get_solar_position", lambda lat, lon: {"elevation": 60.0, "azimuth": 180.0, "is_night": False})
 
 def clear_db():
     conn = sqlite3.connect(DB_PATH)
@@ -33,13 +34,13 @@ def test_estimate_shade_percent():
     features = [
         {"tags": {"natural": "tree"}},          # 12%
         {"tags": {"natural": "tree"}},          # 12%
-        {"tags": {"building": "yes"}},          # height 12m @ 60deg elevation -> shadow 6.9m < 7.0m -> 2%
+        {"tags": {"building": "yes"}},          # height 12m @ 60deg elevation -> shadow 6.9m -> ~5.96%
         {"tags": {"landuse": "forest"}},        # 25%
         {"tags": {"natural": "wood"}},          # 25%
         {"tags": {"amenity": "shelter"}},       # 8%
     ]
-    # Total expected: 12 + 12 + 2 + 25 + 25 + 8 = 84
-    assert estimate_shade_percent(features, solar_elevation=60.0, solar_azimuth=180.0, segment_length_m=100.0) == 84.0
+    # Total expected: 12 + 12 + 5.96 + 25 + 25 + 8 = 87.96
+    assert estimate_shade_percent(features, solar_elevation=60.0, solar_azimuth=180.0, segment_length_m=100.0) == pytest.approx(87.96, 0.01)
 
 
 def test_estimate_shade_percent_cap():
@@ -71,9 +72,9 @@ async def test_shade_for_path(httpx_mock):
     sources = res["shade_sources"]
     
     assert len(shade_percentages) == 2
-    # 12 + 2 = 14% for both segments since same mock is returned
-    assert shade_percentages[0] == 14.0
-    assert shade_percentages[1] == 14.0
+    # 12 + 5.96 = 17.96% for both segments since same mock is returned
+    assert shade_percentages[0] == pytest.approx(17.96, 0.01)
+    assert shade_percentages[1] == pytest.approx(17.96, 0.01)
     assert sources[0] == "overpass"
     assert sources[1] == "overpass"
 
@@ -230,7 +231,7 @@ async def test_solar_position_used_in_tile_fetch(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_night_multiplier_zeros_shade(monkeypatch):
+async def test_night_multiplier_hundreds_shade(monkeypatch):
     import app.services.solar as solar
     import app.services.osm_shade as osm_shade
 
@@ -245,7 +246,7 @@ async def test_night_multiplier_zeros_shade(monkeypatch):
     monkeypatch.setattr(osm_shade, "fetch_shade_features", mock_fetch)
 
     result = await osm_shade.fetch_shade_for_tile("18.9250_72.8250")
-    assert result["shade_pct"] == 0.0
+    assert result["shade_pct"] == 100.0
 
 
 def test_extract_building_height_from_tag():
@@ -265,26 +266,26 @@ def test_extract_building_height_default():
 
 def test_building_shadow_high_noon():
     features = [{"type": "way", "tags": {"building": "yes", "height": "20"}}]
-    # 20m building at 70° elevation -> shadow = 20/tan(70°) = 7.3m -> 6%
+    # 20m building at 70° elevation -> shadow = 20/tan(70°) = 7.28m -> 6.13%
     result = estimate_shade_percent(features, solar_elevation=70.0,
                                     solar_azimuth=180.0, segment_length_m=250)
-    assert result == 6.0
+    assert result == pytest.approx(6.13, 0.01)
 
 
 def test_building_shadow_low_sun():
     features = [{"type": "way", "tags": {"building": "yes", "height": "20"}}]
-    # 20m building at 20° elevation -> shadow = 20/tan(20°) = 54.9m -> 12%
+    # 20m building at 20° elevation -> shadow = 20/tan(20°) = 54.95m -> 14.66%
     result = estimate_shade_percent(features, solar_elevation=20.0,
                                     solar_azimuth=180.0, segment_length_m=250)
-    assert result == 12.0
+    assert result == pytest.approx(14.66, 0.01)
 
 
 def test_building_shadow_very_low_sun():
     features = [{"type": "way", "tags": {"building": "yes", "height": "20"}}]
-    # 20m building at 8° elevation -> shadow = 20/tan(8°) = 142m -> 20%
+    # 20m building at 8° elevation -> shadow = 20/tan(8°) = 142.31m -> 21.39%
     result = estimate_shade_percent(features, solar_elevation=8.0,
                                     solar_azimuth=180.0, segment_length_m=250)
-    assert result == 20.0
+    assert result == pytest.approx(21.39, 0.01)
 
 
 def test_tree_contribution_sun_independent():
@@ -301,11 +302,53 @@ def test_structural_shade_sun_independent():
     assert result_noon == result_morning == 25.0
 
 
-def test_night_returns_zero_regardless_of_features():
+def test_night_returns_hundred_percent_regardless_of_features():
     features = [
         {"type": "node", "tags": {"natural": "tree"}},
         {"type": "way", "tags": {"building": "yes", "height": "30"}},
         {"type": "way", "tags": {"bridge": "yes", "highway": "primary"}}
     ]
     assert estimate_shade_percent(features, solar_elevation=-5.0,
-                                  solar_azimuth=0.0) == 0.0
+                                  solar_azimuth=0.0) == 100.0
+
+
+def test_tree_contribution_with_canopy_radius():
+    # Large tree with width=24m (radius = 12m) -> should scale up to cap 25.0
+    large_tree = [{"type": "node", "tags": {"natural": "tree", "width": "24m"}}]
+    assert estimate_shade_percent(large_tree, 60.0, 180.0) == 25.0
+
+    # Small tree with crown_diameter=2m (radius = 1m) -> should scale down to 4.0 (12 * 1 / 3)
+    small_tree = [{"type": "node", "tags": {"natural": "tree", "crown_diameter": "2m"}}]
+    assert estimate_shade_percent(small_tree, 60.0, 180.0) == 4.0
+
+
+def test_building_shadow_directional_factor():
+    # Building is North of tile, sun in South (azimuth = 180) -> shadow is cast North -> covers tile (factor ~1.0)
+    building_north = [{
+        "type": "way",
+        "lat": 18.9350, "lon": 72.8350,
+        "tags": {"building": "yes", "height": "20"}
+    }]
+    # Tile is at 18.9340, 72.8350 (South of building)
+    # Solar azimuth is 0 (sun in North) -> shadow cast South -> factor = cos(0) = 1.0
+    result_shaded = estimate_shade_percent(
+        building_north,
+        solar_elevation=20.0,
+        solar_azimuth=0.0,
+        segment_length_m=250,
+        tile_lat=18.9340,
+        tile_lon=72.8350
+    )
+    # 14.66 * 1.0 = 14.66
+    assert result_shaded == pytest.approx(14.66, 0.01)
+
+    # Solar azimuth is 180 (sun in South) -> shadow cast North -> does not cover tile (factor = cos(180) = 0.0)
+    result_not_shaded = estimate_shade_percent(
+        building_north,
+        solar_elevation=20.0,
+        solar_azimuth=180.0,
+        segment_length_m=250,
+        tile_lat=18.9340,
+        tile_lon=72.8350
+    )
+    assert result_not_shaded == 0.0

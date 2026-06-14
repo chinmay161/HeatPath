@@ -197,17 +197,50 @@ def extract_building_height(element: dict) -> float:
     return 12.0
 
 
+def get_element_center(element: dict) -> tuple[float, float]:
+    """
+    Find the center coordinate of an OSM element.
+    """
+    geom = element.get("geometry")
+    if geom:
+        lats = [pt["lat"] for pt in geom if pt and "lat" in pt]
+        lons = [pt["lon"] for pt in geom if pt and "lon" in pt]
+        if lats and lons:
+            return sum(lats) / len(lats), sum(lons) / len(lons)
+    if "lat" in element and "lon" in element:
+        return float(element["lat"]), float(element["lon"])
+    return None
+
+
+def calculate_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate the bearing from point 1 to point 2 in degrees clockwise from North.
+    """
+    d_lon = math.radians(lon2 - lon1)
+    lat1_r = math.radians(lat1)
+    lat2_r = math.radians(lat2)
+    
+    y = math.sin(d_lon) * math.cos(lat2_r)
+    x = (math.cos(lat1_r) * math.sin(lat2_r) -
+         math.sin(lat1_r) * math.cos(lat2_r) * math.cos(d_lon))
+    
+    bearing = math.degrees(math.atan2(y, x))
+    return bearing % 360
+
+
 def estimate_shade_percent(
     features: List[Dict[str, Any]],
     solar_elevation: float,
     solar_azimuth: float,
     segment_length_m: float = 250,
+    tile_lat: float = None,
+    tile_lon: float = None,
 ) -> float:
     """
-    Estimate shade percentage with physical geometry and sun angle.
+    Estimate shade percentage with physical geometry, sun angle, and shadow direction.
     """
     if solar_elevation < 0:
-        return 0.0
+        return 100.0  # Night override returns 100% shade because there is no solar exposure
 
     shade = 0.0
     for feature in features:
@@ -230,7 +263,27 @@ def estimate_shade_percent(
             shade += 8.0
         # Trees:
         elif tags.get("natural") == "tree":
-            shade += 12.0
+            canopy_radius = 3.0  # default
+            for radius_tag in ["crown_diameter", "diameter_crown", "radius", "width"]:
+                if radius_tag in tags:
+                    try:
+                        val = float(tags[radius_tag].replace("m", "").strip())
+                        if radius_tag in ["crown_diameter", "diameter_crown", "width"]:
+                            canopy_radius = val / 2.0
+                        else:
+                            canopy_radius = val
+                        break
+                    except (ValueError, AttributeError):
+                        pass
+            else:
+                if "height" in tags:
+                    try:
+                        h = float(tags["height"].replace("m", "").strip())
+                        canopy_radius = max(1.0, h * 0.25)
+                    except (ValueError, AttributeError):
+                        pass
+            tree_contrib = 12.0 * (canopy_radius / 3.0)
+            shade += min(tree_contrib, 25.0)
         # Forest / Wood:
         elif tags.get("landuse") == "forest" or tags.get("natural") == "wood":
             shade += 25.0
@@ -243,17 +296,35 @@ def estimate_shade_percent(
             else:
                 shadow_length = height / math.tan(elevation_rad)
 
-            if shadow_length >= segment_length_m:
-                contrib = 30.0
-            elif shadow_length >= segment_length_m * 0.5:
-                contrib = 20.0
-            elif shadow_length >= 20.0:
-                contrib = 12.0
-            elif shadow_length >= 7.0:
-                contrib = 6.0
+            # Piece-wise linear continuous mapping for shadow contribution
+            # Points: (0, 2.0), (7.0, 6.0), (20.0, 12.0), (125.0, 20.0), (250.0, 30.0)
+            L = shadow_length
+            if L < 0.0:
+                base_contrib = 2.0
+            elif L < 7.0:
+                base_contrib = 2.0 + (6.0 - 2.0) * (L - 0.0) / (7.0 - 0.0)
+            elif L < 20.0:
+                base_contrib = 6.0 + (12.0 - 6.0) * (L - 7.0) / (20.0 - 7.0)
+            elif L < 125.0:
+                base_contrib = 12.0 + (20.0 - 12.0) * (L - 20.0) / (125.0 - 20.0)
+            elif L < 250.0:
+                base_contrib = 20.0 + (30.0 - 20.0) * (L - 125.0) / (250.0 - 125.0)
             else:
-                contrib = 2.0
-            shade += contrib
+                base_contrib = 30.0
+
+            # Building shadow direction factor (azimuth/shadow vector)
+            directional_factor = 1.0
+            if tile_lat is not None and tile_lon is not None:
+                b_center = get_element_center(feature)
+                if b_center:
+                    b_lat, b_lon = b_center
+                    bearing = calculate_bearing(b_lat, b_lon, tile_lat, tile_lon)
+                    shadow_dir = (solar_azimuth + 180) % 360
+                    diff = abs(bearing - shadow_dir)
+                    diff = min(diff, 360 - diff)
+                    directional_factor = max(0.0, math.cos(math.radians(diff)))
+
+            shade += base_contrib * directional_factor
 
     return min(shade, 95.0)
 
@@ -309,7 +380,7 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
 
     if solar["is_night"]:
         return {
-            "shade_pct": 0.0,
+            "shade_pct": 100.0,
             "source": "night",
             "solar_elevation": solar["elevation"],
             "solar_multiplier": 1.0
@@ -322,7 +393,9 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
             features,
             solar_elevation=solar["elevation"],
             solar_azimuth=solar["azimuth"],
-            segment_length_m=250
+            segment_length_m=250,
+            tile_lat=tile_lat,
+            tile_lon=tile_lon,
         )
         data_source = "overpass"
     else:
