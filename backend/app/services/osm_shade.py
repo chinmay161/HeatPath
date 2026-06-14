@@ -195,29 +195,67 @@ def extract_building_height(element: dict) -> float:
     return 12.0
 
 
-def estimate_shade_percent(features: List[Dict[str, Any]], segment_length_m: float) -> float:
+def estimate_shade_percent(
+    features: List[Dict[str, Any]],
+    solar_elevation: float,
+    solar_azimuth: float,
+    segment_length_m: float = 250,
+) -> float:
+    """
+    Estimate shade percentage with physical geometry and sun angle.
+    """
+    if solar_elevation < 0:
+        return 0.0
+
     shade = 0.0
     for feature in features:
         tags = feature.get("tags", {})
+        if not tags:
+            continue
+
+        # Structural shade rules:
         if tags.get("bridge") == "yes" and "highway" in tags:
             shade += 25.0
         elif tags.get("bridge") == "yes" and "railway" in tags:
             shade += 20.0
         elif tags.get("covered") == "yes":
-            shade += 15.0
+            shade += 18.0
         elif tags.get("building") == "roof":
-            shade += 20.0
+            shade += 22.0
         elif tags.get("shelter_type") == "public_transport":
             shade += 10.0
-        elif tags.get("natural") == "tree":
-            shade += 5.0
-        elif "building" in tags:
-            shade += 8.0
-        elif tags.get("landuse") == "forest" or tags.get("natural") == "wood":
-            shade += 10.0
         elif tags.get("amenity") == "shelter":
-            shade += 5.0
+            shade += 8.0
+        # Trees:
+        elif tags.get("natural") == "tree":
+            shade += 12.0
+        # Forest / Wood:
+        elif tags.get("landuse") == "forest" or tags.get("natural") == "wood":
+            shade += 25.0
+        # Buildings:
+        elif "building" in tags:
+            height = extract_building_height(feature)
+            elevation_rad = math.radians(solar_elevation)
+            if elevation_rad <= 0:
+                shadow_length = 0.0
+            else:
+                shadow_length = height / math.tan(elevation_rad)
+
+            if shadow_length >= segment_length_m:
+                contrib = 30.0
+            elif shadow_length >= segment_length_m * 0.5:
+                contrib = 20.0
+            elif shadow_length >= 20.0:
+                contrib = 12.0
+            elif shadow_length >= 7.0:
+                contrib = 6.0
+            else:
+                contrib = 2.0
+            shade += contrib
+
     return min(shade, 95.0)
+
+
 
 
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

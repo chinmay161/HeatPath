@@ -31,20 +31,21 @@ def clear_db():
 
 def test_estimate_shade_percent():
     features = [
-        {"tags": {"natural": "tree"}},          # 5%
-        {"tags": {"natural": "tree"}},          # 5%
-        {"tags": {"building": "yes"}},          # 8%
-        {"tags": {"landuse": "forest"}},        # 10%
-        {"tags": {"natural": "wood"}},          # 10%
-        {"tags": {"amenity": "shelter"}},       # 5%
+        {"tags": {"natural": "tree"}},          # 12%
+        {"tags": {"natural": "tree"}},          # 12%
+        {"tags": {"building": "yes"}},          # height 12m @ 60deg elevation -> shadow 6.9m < 7.0m -> 2%
+        {"tags": {"landuse": "forest"}},        # 25%
+        {"tags": {"natural": "wood"}},          # 25%
+        {"tags": {"amenity": "shelter"}},       # 8%
     ]
-    # Total expected: 5 + 5 + 8 + 10 + 10 + 5 = 43
-    assert estimate_shade_percent(features, 100.0) == 43.0
+    # Total expected: 12 + 12 + 2 + 25 + 25 + 8 = 84
+    assert estimate_shade_percent(features, solar_elevation=60.0, solar_azimuth=180.0, segment_length_m=100.0) == 84.0
+
 
 def test_estimate_shade_percent_cap():
     features = [{"tags": {"landuse": "forest"}} for _ in range(10)]
-    # 100% cap at 95%
-    assert estimate_shade_percent(features, 100.0) == 95.0
+    # 250% cap at 95%
+    assert estimate_shade_percent(features, solar_elevation=60.0, solar_azimuth=180.0, segment_length_m=100.0) == 95.0
 
 @pytest.mark.asyncio
 async def test_shade_for_path(httpx_mock):
@@ -199,11 +200,12 @@ async def test_shade_for_path_uses_fallback_on_failure(httpx_mock):
 
 def test_bridge_feature_scores_25_percent():
     features = [{"type": "way", "tags": {"bridge": "yes", "highway": "primary"}}]
-    assert estimate_shade_percent(features, 250) == 25.0
+    assert estimate_shade_percent(features, solar_elevation=60.0, solar_azimuth=180.0, segment_length_m=250) == 25.0
 
-def test_covered_way_scores_15_percent():
+
+def test_covered_way_scores_18_percent():
     features = [{"type": "way", "tags": {"covered": "yes"}}]
-    assert estimate_shade_percent(features, 250) == 15.0
+    assert estimate_shade_percent(features, solar_elevation=60.0, solar_azimuth=180.0, segment_length_m=250) == 18.0
 
 @pytest.mark.asyncio
 async def test_solar_multiplier_applied_in_tile_fetch(monkeypatch):
@@ -264,3 +266,51 @@ def test_extract_building_height_from_levels():
 def test_extract_building_height_default():
     element = {"tags": {"building": "yes"}}
     assert extract_building_height(element) == 12.0
+
+
+def test_building_shadow_high_noon():
+    features = [{"type": "way", "tags": {"building": "yes", "height": "20"}}]
+    # 20m building at 70° elevation -> shadow = 20/tan(70°) = 7.3m -> 6%
+    result = estimate_shade_percent(features, solar_elevation=70.0,
+                                    solar_azimuth=180.0, segment_length_m=250)
+    assert result == 6.0
+
+
+def test_building_shadow_low_sun():
+    features = [{"type": "way", "tags": {"building": "yes", "height": "20"}}]
+    # 20m building at 20° elevation -> shadow = 20/tan(20°) = 54.9m -> 12%
+    result = estimate_shade_percent(features, solar_elevation=20.0,
+                                    solar_azimuth=180.0, segment_length_m=250)
+    assert result == 12.0
+
+
+def test_building_shadow_very_low_sun():
+    features = [{"type": "way", "tags": {"building": "yes", "height": "20"}}]
+    # 20m building at 8° elevation -> shadow = 20/tan(8°) = 142m -> 20%
+    result = estimate_shade_percent(features, solar_elevation=8.0,
+                                    solar_azimuth=180.0, segment_length_m=250)
+    assert result == 20.0
+
+
+def test_tree_contribution_sun_independent():
+    features = [{"type": "node", "tags": {"natural": "tree"}}]
+    result_noon = estimate_shade_percent(features, 70.0, 180.0)
+    result_morning = estimate_shade_percent(features, 15.0, 90.0)
+    assert result_noon == result_morning == 12.0
+
+
+def test_structural_shade_sun_independent():
+    features = [{"type": "way", "tags": {"bridge": "yes", "highway": "primary"}}]
+    result_noon = estimate_shade_percent(features, 70.0, 180.0)
+    result_morning = estimate_shade_percent(features, 15.0, 90.0)
+    assert result_noon == result_morning == 25.0
+
+
+def test_night_returns_zero_regardless_of_features():
+    features = [
+        {"type": "node", "tags": {"natural": "tree"}},
+        {"type": "way", "tags": {"building": "yes", "height": "30"}},
+        {"type": "way", "tags": {"bridge": "yes", "highway": "primary"}}
+    ]
+    assert estimate_shade_percent(features, solar_elevation=-5.0,
+                                  solar_azimuth=0.0) == 0.0
