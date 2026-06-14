@@ -14,11 +14,15 @@
 #    Element types: 27 ways
 #    No relation-type buildings returned; all building features are ways.
 
+# Tile caching is handled by shade_tile_cache.py (SQLite, 250m tiles, 30d TTL)
+# Do NOT add module-level caching here — it has no TTL and leaks memory.
+
 import logging
 import math
 import asyncio
 import httpx
 from typing import List, Dict, Any
+from app.services.shade_tile_cache import tile_key, get_tiles, store_tiles
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +30,6 @@ OVERPASS_HEADERS = {
     "User-Agent": "HeatPath/1.0 (heatpath-app@gmail.com)",
     "Accept": "application/json",
 }
-
-
-_shade_cache: Dict[str, tuple[float, str]] = {}  # TODO Week 3: replace with Redis TTL cache
 
 async def estimate_shade_from_street_type(lat: float, lon: float) -> tuple[float, str]:
     """
@@ -106,11 +107,6 @@ async def estimate_shade_from_street_type(lat: float, lon: float) -> tuple[float
 
 
 async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> tuple[List[Dict[str, Any]], str]:
-    # Check cache first
-    key = f"{lat:.4f},{lon:.4f},{radius_m}"
-    if key in _shade_cache:
-        return [], "cached"
-
     query = f"""
     [out:json][timeout:15];
     (
@@ -190,55 +186,71 @@ def _fallback_shade(lat: float, lon: float, index: int) -> float:
         return round(10 + (seed / 100) * 15, 1) # Mixed: 10–25%
 
 
+def midpoint(p1: Dict[str, float], p2: Dict[str, float]) -> Dict[str, float]:
+    """Calculate the midpoint between two coordinates."""
+    return {
+        "lat": (p1["lat"] + p2["lat"]) / 2.0,
+        "lon": (p1["lon"] + p2["lon"]) / 2.0
+    }
+
+async def fetch_shade_for_tile(tile_key_str: str) -> dict:
+    """Fetch shade features for a specific tile key using a 60m query radius."""
+    parts = tile_key_str.split("_")
+    lat, lon = float(parts[0]), float(parts[1])
+    features, source = await fetch_shade_features(lat, lon, radius_m=60)
+    if source == "overpass" and features:
+        shade = estimate_shade_percent(features, segment_length_m=250)
+        return {"shade_pct": shade, "source": "overpass"}
+    else:
+        shade, src = await estimate_shade_from_street_type(lat, lon)
+        db_src = "fallback" if source == "failed" else src
+        return {"shade_pct": shade, "source": db_src}
+
 async def shade_for_path(path: List[Dict[str, float]]) -> tuple[List[float], List[str]]:
     """
-    Compute shade percentages for each segment of a path.
+    Compute shade percentages for each segment of a path using SQLite tile cache batching.
     """
+    # Step 1 — guard: if len(path) < 2: return [], []
     if len(path) < 2:
         return [], []
 
-    midpoints = []
-    segment_lengths = []
+    # Step 2 — compute segment midpoints:
+    midpoints = [midpoint(path[i], path[i+1]) for i in range(len(path)-1)]
 
-    for i in range(len(path) - 1):
-        p1 = path[i]
-        p2 = path[i + 1]
+    # Step 3 — snap ALL midpoints to tile keys:
+    keys = [tile_key(m["lat"], m["lon"]) for m in midpoints]
+    unique_keys = list(set(keys))
 
-        mid_lat = (p1["lat"] + p2["lat"]) / 2.0
-        mid_lon = (p1["lon"] + p2["lon"]) / 2.0
-        midpoints.append({"lat": mid_lat, "lon": mid_lon})
-        segment_lengths.append(_haversine_distance(p1["lat"], p1["lon"], p2["lat"], p2["lon"]))
+    # Step 4 — bulk SQLite lookup:
+    cached = await get_tiles(unique_keys)
+    initially_cached_keys = set(cached.keys())
+    missing_keys = [k for k in unique_keys if k not in cached]
 
-    shade_percentages = []
+    # Step 5 — fetch missing tiles in parallel:
+    if missing_keys:
+        tasks = [fetch_shade_for_tile(k) for k in missing_keys]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        fetched = {}
+        for key, result in zip(missing_keys, results):
+            if isinstance(result, Exception):
+                logger.warning(f"[shade] tile {key} fetch failed: {result}")
+                fetched[key] = {"shade_pct": 25.0, "source": "fallback"}
+            else:
+                fetched[key] = result
+        await store_tiles(fetched)
+        cached.update(fetched)
+
+    # Step 6 — assemble per-segment results:
+    shade_percentages = [cached[keys[i]]["shade_pct"] for i in range(len(midpoints))]
     sources = []
-
-    for i, mid in enumerate(midpoints):
-        lat, lon = mid["lat"], mid["lon"]
-        key = f"{lat:.4f},{lon:.4f},100"
-
-        # Check cache
-        if key in _shade_cache:
-            shade_pct, _ = _shade_cache[key]
-            shade_percentages.append(shade_pct)
+    for k in keys:
+        if k in initially_cached_keys:
             sources.append("cached")
-            continue
-
-        features, source = await fetch_shade_features(lat, lon, radius_m=100)
-
-        if source == "failed":
-            shade_pct, _ = await estimate_shade_from_street_type(lat, lon)
-            source_for_seg = "failed_fallback"
-        elif source == "overpass" and len(features) == 0:
-            shade_pct, _ = await estimate_shade_from_street_type(lat, lon)
-            source_for_seg = "street_type"
-        else: # source == "overpass" and len(features) > 0
-            shade_pct = estimate_shade_percent(features, segment_lengths[i])
-            source_for_seg = "overpass"
-
-        # Update cache
-        _shade_cache[key] = (shade_pct, source_for_seg)
-
-        shade_percentages.append(shade_pct)
-        sources.append(source_for_seg)
-
+        else:
+            src = cached[k]["source"]
+            if src == "fallback":
+                sources.append("failed_fallback")
+            else:
+                sources.append(src)
+                
     return shade_percentages, sources
