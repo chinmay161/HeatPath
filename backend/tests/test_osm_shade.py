@@ -2,6 +2,7 @@ import pytest
 import logging
 import sqlite3
 import httpx
+from unittest.mock import AsyncMock
 from app.services.shade_tile_cache import DB_PATH
 from app.services.osm_shade import (
     estimate_shade_percent,
@@ -9,6 +10,15 @@ from app.services.osm_shade import (
     fetch_shade_features,
     estimate_shade_from_street_type,
 )
+
+@pytest.fixture(autouse=True)
+def mock_solar_noon(monkeypatch):
+    """
+    Globally mock solar elevation to 60.0 degrees (multiplier = 1.0) for OSM shade tests,
+    ensuring that the existing test assertions are deterministic and unaffected by the time of day.
+    """
+    import app.services.solar as solar
+    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 60.0)
 
 def clear_db():
     conn = sqlite3.connect(DB_PATH)
@@ -54,7 +64,9 @@ async def test_shade_for_path(httpx_mock):
         {"lat": 0.0, "lon": 0.02}
     ]
     
-    shade_percentages, sources = await shade_for_path(path)
+    res = await shade_for_path(path)
+    shade_percentages = res["shade_values"]
+    sources = res["shade_sources"]
     
     assert len(shade_percentages) == 2
     # 5 + 8 = 13% for both segments since same mock is returned
@@ -76,7 +88,9 @@ async def test_shade_for_path_error(httpx_mock):
         {"lat": 0.0, "lon": 0.01}
     ]
     
-    shade_percentages, sources = await shade_for_path(path)
+    res = await shade_for_path(path)
+    shade_percentages = res["shade_values"]
+    sources = res["shade_sources"]
     
     assert len(shade_percentages) == 1
     assert shade_percentages[0] == 25.0  # fallback defaults to 25.0
@@ -145,9 +159,14 @@ async def test_cache_hit_skips_api(httpx_mock):
     ]
     
     # First call: cache miss, calls API
-    p1, s1 = await shade_for_path(path)
+    res1 = await shade_for_path(path)
+    p1 = res1["shade_values"]
+    s1 = res1["shade_sources"]
+    
     # Second call: cache hit, skips API
-    p2, s2 = await shade_for_path(path)
+    res2 = await shade_for_path(path)
+    p2 = res2["shade_values"]
+    s2 = res2["shade_sources"]
     
     assert p1 == p2
     assert s1 == ["overpass"]
@@ -171,6 +190,61 @@ async def test_shade_for_path_uses_fallback_on_failure(httpx_mock):
         {"lat": 18.9348, "lon": 72.8354}
     ]
     
-    shade_percentages, sources = await shade_for_path(path)
+    res = await shade_for_path(path)
+    shade_percentages = res["shade_values"]
+    sources = res["shade_sources"]
     assert shade_percentages[0] == 35.0
     assert sources[0] == "failed_fallback"
+
+def test_bridge_feature_scores_25_percent():
+    features = [{"type": "way", "tags": {"bridge": "yes", "highway": "primary"}}]
+    assert estimate_shade_percent(features, 250) == 25.0
+
+def test_covered_way_scores_15_percent():
+    features = [{"type": "way", "tags": {"covered": "yes"}}]
+    assert estimate_shade_percent(features, 250) == 15.0
+
+@pytest.mark.asyncio
+async def test_solar_multiplier_applied_in_tile_fetch(monkeypatch):
+    import app.services.solar as solar
+    import app.services.osm_shade as osm_shade
+
+    # Test 1: get_current_elevation returning 0.0 (multiplier = 0.0 -> shade = 0.0)
+    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 0.0)
+    mock_fetch = AsyncMock(return_value=([
+        {"tags": {"natural": "tree"}},
+        {"tags": {"natural": "tree"}},
+        {"tags": {"natural": "tree"}}
+    ], "overpass"))
+    monkeypatch.setattr(osm_shade, "fetch_shade_features", mock_fetch)
+
+    result = await osm_shade.fetch_shade_for_tile("18.9250_72.8250")
+    assert result["shade_pct"] == 0.0
+    assert result["solar_elevation"] == 0.0
+    assert result["solar_multiplier"] == 0.0
+
+    # Test 2: get_current_elevation returning 5.0 (multiplier = 0.15 -> 15% * 0.15 = 2.25)
+    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 5.0)
+    result2 = await osm_shade.fetch_shade_for_tile("18.9250_72.8250")
+    assert result2["shade_pct"] == 2.25
+    assert result2["solar_elevation"] == 5.0
+    assert result2["solar_multiplier"] == 0.15
+    assert result2["shade_pct"] < 5.0
+
+@pytest.mark.asyncio
+async def test_night_multiplier_zeros_shade(monkeypatch):
+    import app.services.solar as solar
+    import app.services.osm_shade as osm_shade
+
+    # Nighttime elevation = -10.0 (multiplier = 0.0)
+    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: -10.0)
+    
+    mock_fetch = AsyncMock(return_value=([
+        {"tags": {"natural": "tree"}},
+        {"tags": {"building": "yes"}},
+        {"tags": {"landuse": "forest"}}
+    ], "overpass"))
+    monkeypatch.setattr(osm_shade, "fetch_shade_features", mock_fetch)
+
+    result = await osm_shade.fetch_shade_for_tile("18.9250_72.8250")
+    assert result["shade_pct"] == 0.0

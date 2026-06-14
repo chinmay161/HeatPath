@@ -13,6 +13,15 @@ from app.services.osm_shade import shade_for_path
 
 # Shared temp_db fixture from conftest.py handles DB isolation automatically
 
+@pytest.fixture(autouse=True)
+def mock_solar_noon(monkeypatch):
+    """
+    Globally mock solar elevation to 60.0 degrees (multiplier = 1.0) for OSM shade tests,
+    ensuring that the existing test assertions are deterministic and unaffected by the time of day.
+    """
+    import app.services.solar as solar
+    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 60.0)
+
 def test_snap_to_tile_precision():
     # snap_to_tile(18.9347, 72.8353)
     # Assert result rounds to nearest 0.00225 boundary
@@ -78,10 +87,10 @@ async def test_store_tiles_single_transaction(temp_db):
         assert isinstance(parsed_dt, datetime)
 
 @pytest.mark.asyncio
-async def test_ttl_eviction_removes_old_tiles(temp_db):
-    # Insert a tile with computed_at = 31 days ago
+async def test_ttl_is_6_hours_not_30_days(temp_db):
+    # Insert a tile with computed_at = 7 hours ago
     conn = sqlite3.connect(str(temp_db))
-    old_time = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+    old_time = (datetime.now(timezone.utc) - timedelta(hours=7)).isoformat()
     conn.execute(
         "INSERT INTO shade_tiles (tile_key, shade_pct, source, computed_at, radius_m) VALUES (?, ?, ?, ?, ?)",
         ("18.9000_72.8000", 15.0, "overpass", old_time, 60)
@@ -113,7 +122,9 @@ async def test_shade_for_path_batches_correctly(monkeypatch):
         {"lat": 18.9343, "lon": 72.8353}
     ]
     
-    shade_percentages, sources = await shade_for_path(path)
+    res = await shade_for_path(path)
+    shade_percentages = res["shade_values"]
+    sources = res["shade_sources"]
     
     assert len(shade_percentages) == 3
     assert len(sources) == 3
@@ -131,7 +142,9 @@ async def test_shade_for_path_stores_misses_after_fetch(monkeypatch):
         {"lat": 18.9341, "lon": 72.8351}
     ]
     
-    shade_percentages, sources = await shade_for_path(path)
+    res = await shade_for_path(path)
+    shade_percentages = res["shade_values"]
+    sources = res["shade_sources"]
     assert len(shade_percentages) == 1
     assert shade_percentages[0] == 5.0
     assert sources[0] == "overpass"
@@ -139,7 +152,9 @@ async def test_shade_for_path_stores_misses_after_fetch(monkeypatch):
     
     # Second call (identical path)
     mock_fetch.reset_mock()
-    shade_percentages2, sources2 = await shade_for_path(path)
+    res2 = await shade_for_path(path)
+    shade_percentages2 = res2["shade_values"]
+    sources2 = res2["shade_sources"]
     assert shade_percentages2 == [5.0]
     assert sources2 == ["cached"]
     assert mock_fetch.call_count == 0
@@ -159,7 +174,9 @@ async def test_fetch_failure_returns_fallback(monkeypatch):
         {"lat": 18.9341, "lon": 72.8351}
     ]
     
-    shade_percentages, sources = await shade_for_path(path)
+    res = await shade_for_path(path)
+    shade_percentages = res["shade_values"]
+    sources = res["shade_sources"]
     assert len(shade_percentages) == 1
     assert shade_percentages[0] == 25.0
     assert sources[0] == "failed_fallback"
