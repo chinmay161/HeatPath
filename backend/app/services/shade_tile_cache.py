@@ -43,13 +43,13 @@ def init_db() -> None:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tile_key ON shade_tiles(tile_key);")
             
-            # TTL Eviction (evict tiles computed > 30 days ago)
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+            # TTL Eviction (evict tiles computed > 6 hours ago)
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
             cursor = conn.cursor()
             cursor.execute("DELETE FROM shade_tiles WHERE computed_at < ?", (cutoff,))
             n = cursor.rowcount
             if n > 0:
-                logger.info(f"[tile_cache] evicted {n} stale tiles (>30d)")
+                logger.info(f"[tile_cache] evicted {n} stale tiles (>6h)")
     except Exception as e:
         logger.error(f"[tile_cache] DB initialization failed: {e}")
     finally:

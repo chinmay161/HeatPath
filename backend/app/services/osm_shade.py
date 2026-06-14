@@ -219,12 +219,24 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
     lat, lon = float(parts[0]), float(parts[1])
     features, source = await fetch_shade_features(lat, lon, radius_m=60)
     if source == "overpass" and features:
-        shade = estimate_shade_percent(features, segment_length_m=250)
-        return {"shade_pct": shade, "source": "overpass"}
+        shade_pct = estimate_shade_percent(features, segment_length_m=250)
+        source_res = "overpass"
     else:
-        shade, src = await estimate_shade_from_street_type(lat, lon)
-        db_src = "fallback" if source == "failed" else src
-        return {"shade_pct": shade, "source": db_src}
+        shade_pct, src = await estimate_shade_from_street_type(lat, lon)
+        source_res = "fallback" if source == "failed" else src
+
+    from app.services.solar import get_current_elevation, elevation_to_shade_multiplier
+
+    elevation = get_current_elevation(lat, lon)
+    multiplier = elevation_to_shade_multiplier(elevation)
+    adjusted_shade = shade_pct * multiplier
+
+    return {
+        "shade_pct": round(adjusted_shade, 2),
+        "source": source_res,
+        "solar_elevation": round(elevation, 1),
+        "solar_multiplier": multiplier
+    }
 
 async def shade_for_path(path: List[Dict[str, float]]) -> tuple[List[float], List[str]]:
     """
