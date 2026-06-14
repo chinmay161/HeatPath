@@ -8,6 +8,17 @@ from app.services import weather
 
 client = TestClient(app)
 
+@pytest.fixture(autouse=True)
+def mock_solar_noon(monkeypatch):
+    """
+    Globally mock solar elevation to 60.0 degrees (multiplier = 1.0) for ORS client tests,
+    ensuring that the existing test assertions are deterministic and unaffected by the time of day.
+    """
+    import app.services.solar as solar
+    monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 60.0)
+    monkeypatch.setattr(solar, "get_solar_position", lambda lat, lon: {"elevation": 60.0, "azimuth": 180.0, "is_night": False})
+
+
 @pytest.mark.asyncio
 async def test_fetch_candidate_routes_success(httpx_mock):
     from app.services.ors_client import _route_cache

@@ -62,7 +62,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             {
                 "shade_pct":        shade_pcts[i],
                 "heat_index":       heat_index,
-                "aqi":              aqi_normalised,
+                "aqi":              raw_aqi,
                 "crowd_pct":        crowd_pcts[i] if i < len(crowd_pcts) else 0.0,
                 "heat_sensitivity": _user_preferences["heat_sensitivity"],
                 "aqi_sensitivity":  _user_preferences["aqi_sensitivity"],

@@ -35,7 +35,7 @@ async def score_route(
             weather = await get_weather(start_point.lat, start_point.lon)
             raw_aqi = await get_aqi(start_point.lat, start_point.lon)
             heat_index = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
-            aqi = min(raw_aqi / 300.0, 1.0)
+            aqi = float(raw_aqi)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
