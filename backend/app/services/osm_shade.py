@@ -116,8 +116,13 @@ async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> t
       way["landuse"="forest"](around:{radius_m},{lat},{lon});
       way["natural"="wood"](around:{radius_m},{lat},{lon});
       way["amenity"="shelter"](around:{radius_m},{lat},{lon});
+      way["bridge"="yes"]["highway"](around:{radius_m},{lat},{lon});
+      way["bridge"="yes"]["railway"](around:{radius_m},{lat},{lon});
+      way["covered"="yes"](around:{radius_m},{lat},{lon});
+      way["building"="roof"](around:{radius_m},{lat},{lon});
+      node["amenity"="shelter"]["shelter_type"="public_transport"](around:{radius_m},{lat},{lon});
     );
-    out body;
+    out tags;
     """
     try:
         async with httpx.AsyncClient(timeout=15.0, headers=OVERPASS_HEADERS) as client:
