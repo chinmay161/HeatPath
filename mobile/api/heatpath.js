@@ -1,7 +1,7 @@
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
 export async function findRoutes(startLat, startLon, endLat, endLon) {
-  const response = await fetch(${API_URL}/find-routes/, {
+  const response = await fetch(API_URL + '/find-routes/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -15,19 +15,19 @@ export async function findRoutes(startLat, startLon, endLat, endLon) {
 }
 
 export async function getConditions(lat, lon) {
-  const response = await fetch(${API_URL}/conditions/?lat=&lon=);
+  const response = await fetch(API_URL + '/conditions/?lat=' + lat + '&lon=' + lon);
   if (!response.ok) throw new Error('Failed to get conditions');
   return response.json();
 }
 
 export async function getPreferences() {
-  const response = await fetch(${API_URL}/preferences/);
+  const response = await fetch(API_URL + '/preferences/');
   if (!response.ok) throw new Error('Failed to get preferences');
   return response.json();
 }
 
 export async function updatePreferences(heatSensitivity, aqiSensitivity, avoidCrowds) {
-  const response = await fetch(${API_URL}/preferences/, {
+  const response = await fetch(API_URL + '/preferences/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

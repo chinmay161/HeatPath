@@ -10,7 +10,7 @@ export async function searchPlaces(query, biasLat = 18.9220, biasLon = 72.8347) 
   });
 
   try {
-    const response = await fetch(${PHOTON_URL}?);
+    const response = await fetch(PHOTON_URL + '?' + params.toString());
     if (!response.ok) return [];
     const data = await response.json();
 
