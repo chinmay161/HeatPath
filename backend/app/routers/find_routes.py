@@ -1,3 +1,5 @@
+# Router for finding and scoring candidate routes.
+
 """
 Router for finding and scoring candidate routes.
 """
