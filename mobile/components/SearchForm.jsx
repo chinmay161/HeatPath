@@ -91,7 +91,7 @@ export default function SearchForm({ onSearch, isLoading }) {
           </TouchableOpacity>
         </View>
 
-        {startPlace && !activeField && (
+        {startPlace && activeField !== 'start' && (
           <View className="flex-row items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mb-1">
             <Text className="text-xs text-emerald-700 flex-1" numberOfLines={1}>
               📍 {startPlace.label}
