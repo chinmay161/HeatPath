@@ -1,7 +1,9 @@
 import { View, Text, ActivityIndicator, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCurrentConditions } from '../../hooks/useCurrentConditions';
 import { getThermalStress } from '../../utils/thermalStress';
 import { colors } from '../../theme/colors';
+import { shadows, spacing, EXTRA_TOP_PADDING } from '../../theme/styles';
 import SearchCard from '../../components/SearchCard';
 import ExploreGrid from '../../components/ExploreGrid';
 
@@ -13,6 +15,7 @@ function getGreeting() {
 }
 
 export default function Home() {
+  const insets = useSafeAreaInsets();
   const conditionsData = useCurrentConditions();
   const location = conditionsData.location;
   const conditions = conditionsData.conditions;
@@ -27,7 +30,11 @@ export default function Home() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <View style={{
+        paddingHorizontal: spacing.xl, paddingTop: insets.top + EXTRA_TOP_PADDING,
+        paddingBottom: spacing.lg, flexDirection: 'row',
+        justifyContent: 'space-between', alignItems: 'flex-start',
+      }}>
         <View>
           <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '600', letterSpacing: 0.5 }}>
             {getGreeting().toUpperCase()}
@@ -39,25 +46,25 @@ export default function Home() {
         <View style={{
           width: 36, height: 36, borderRadius: 18,
           backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
-          borderWidth: 1, borderColor: colors.border,
+          ...shadows.sm,
         }}>
           <Text style={{ fontSize: 18 }}>FOX</Text>
         </View>
       </View>
 
-      <View style={{ paddingHorizontal: 20 }}>
+      <View style={{ paddingHorizontal: spacing.xl }}>
         {loading ? (
           <View style={{
             borderRadius: 20, padding: 24, backgroundColor: colors.surface,
             alignItems: 'center', justifyContent: 'center', minHeight: 140,
-            borderWidth: 1, borderColor: colors.border,
+            ...shadows.sm,
           }}>
             <ActivityIndicator color={colors.primary} />
           </View>
         ) : error || heatIndex == null ? (
           <View style={{
-            borderRadius: 20, padding: 20, backgroundColor: colors.surface,
-            borderWidth: 1, borderColor: colors.border,
+            borderRadius: 20, padding: spacing.xl, backgroundColor: colors.surface,
+            ...shadows.sm,
           }}>
             <Text style={{ color: colors.textSecondary }}>
               Could not get current conditions. Allow location access and try again.
@@ -65,7 +72,7 @@ export default function Home() {
           </View>
         ) : (
           <View style={{
-            borderRadius: 20, padding: 20,
+            borderRadius: 20, padding: spacing.xl, ...shadows.md,
             backgroundColor: isHotStress ? '#F97316' : colors.primary,
           }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -83,7 +90,7 @@ export default function Home() {
               <View style={{ alignItems: 'flex-end' }}>
                 <View style={{
                   backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 12,
-                  paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8,
+                  paddingHorizontal: spacing.sm, paddingVertical: 4, marginBottom: spacing.sm,
                 }}>
                   <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>
                     {stress.label.toUpperCase()} STRESS
@@ -96,7 +103,7 @@ export default function Home() {
             {isHeatwave && (
               <View style={{
                 backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12,
-                padding: 10, marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 8,
+                padding: spacing.sm, marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
               }}>
                 <Text style={{ fontSize: 16 }}>!</Text>
                 <Text style={{ fontSize: 12, color: '#FFFFFF', flex: 1, lineHeight: 17 }}>
@@ -107,11 +114,11 @@ export default function Home() {
           </View>
         )}
 
-        <View style={{ marginTop: 16 }}>
+        <View style={{ marginTop: spacing.lg, position: 'relative', zIndex: 10 }}>
           <SearchCard currentLocation={location} />
         </View>
 
-        <View style={{ marginTop: 20, marginBottom: 32 }}>
+        <View style={{ marginTop: spacing.xl, marginBottom: spacing.xxl + spacing.sm, position: 'relative', zIndex: 1 }}>
           <ExploreGrid />
         </View>
       </View>

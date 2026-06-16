@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Map, MapPin, Clock, TrendingDown } from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import { shadows, spacing } from '../theme/styles';
 
 const ITEMS = [
   { key: 'heatmap', label: 'City Heat Map', sub: 'Live hot & cool zones', icon: Map, route: '/(tabs)/heatmap', dark: true },
@@ -16,10 +17,10 @@ export default function ExploreGrid() {
 
   return (
     <View>
-      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.5, marginBottom: 10 }}>
+      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.5, marginBottom: spacing.md }}>
         EXPLORE
       </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
         {ITEMS.map(function (item) {
           const Icon = item.icon;
           return (
@@ -27,16 +28,16 @@ export default function ExploreGrid() {
               key={item.key}
               onPress={function () { router.push(item.route); }}
               style={{
-                width: '47%', borderRadius: 18, padding: 14, minHeight: 100,
+                width: '47%', borderRadius: 18, padding: spacing.lg, minHeight: 100,
                 backgroundColor: item.dark ? colors.darkSurface : colors.surface,
-                borderWidth: item.dark ? 0 : 1, borderColor: colors.border,
                 justifyContent: 'space-between',
+                ...shadows.sm,
               }}
             >
               <Icon size={20} color={item.dark ? colors.darkTextPrimary : colors.primary} />
               <View>
                 <Text style={{
-                  fontSize: 14, fontWeight: '700', marginTop: 8,
+                  fontSize: 14, fontWeight: '700', marginTop: spacing.sm,
                   color: item.dark ? colors.darkTextPrimary : colors.textPrimary,
                 }}>
                   {item.label}

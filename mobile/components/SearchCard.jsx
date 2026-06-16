@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import PlaceSearchInput from './PlaceSearchInput';
 import { colors } from '../theme/colors';
+import { shadows, spacing } from '../theme/styles';
 
 export default function SearchCard(props) {
   const currentLocation = props.currentLocation;
@@ -11,7 +12,6 @@ export default function SearchCard(props) {
   const [endPlace, setEndPlace] = useState(null);
   const router = useRouter();
 
-  const startLabel = startPlace ? startPlace.label : (currentLocation ? currentLocation.label : '');
   const startValue = startPlace
     ? startPlace.label
     : (currentLocation ? currentLocation.label : '');
@@ -36,8 +36,8 @@ export default function SearchCard(props) {
 
   return (
     <View style={{
-      backgroundColor: colors.surface, borderRadius: 20, padding: 16,
-      borderWidth: 1, borderColor: colors.border, gap: 10,
+      backgroundColor: colors.surface, borderRadius: 20, padding: spacing.lg,
+      ...shadows.md, gap: spacing.md,
       position: 'relative', zIndex: 1,
     }}>
       <View style={{ position: 'relative', zIndex: 21 }}>
@@ -61,10 +61,9 @@ export default function SearchCard(props) {
         />
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, position: 'relative', zIndex: 1 }}>
-
+      <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: 4, position: 'relative', zIndex: 1 }}>
         <View style={{
-          paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14,
+          paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: 14,
           backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border,
           justifyContent: 'center',
         }}>
@@ -77,8 +76,9 @@ export default function SearchCard(props) {
           onPress={handleFindRoute}
           disabled={!canSearch}
           style={{
-            flex: 1, borderRadius: 14, paddingVertical: 12, alignItems: 'center',
+            flex: 1, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center',
             backgroundColor: canSearch ? colors.primary : colors.border,
+            ...(canSearch ? shadows.sm : {}),
           }}
         >
           <Text style={{
