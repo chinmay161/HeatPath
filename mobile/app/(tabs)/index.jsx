@@ -1,8 +1,9 @@
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, ScrollView } from 'react-native';
 import { useCurrentConditions } from '../../hooks/useCurrentConditions';
 import { getThermalStress } from '../../utils/thermalStress';
 import { colors } from '../../theme/colors';
 import SearchCard from '../../components/SearchCard';
+import ExploreGrid from '../../components/ExploreGrid';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -25,7 +26,7 @@ export default function Home() {
   const isHotStress = stress && (stress.label === 'High' || stress.label === 'Extreme');
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={{ paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View>
           <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '600', letterSpacing: 0.5 }}>
@@ -109,7 +110,11 @@ export default function Home() {
         <View style={{ marginTop: 16 }}>
           <SearchCard currentLocation={location} />
         </View>
+
+        <View style={{ marginTop: 20, marginBottom: 32 }}>
+          <ExploreGrid />
+        </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }

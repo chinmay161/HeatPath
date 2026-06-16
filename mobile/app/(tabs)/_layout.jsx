@@ -1,12 +1,6 @@
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { Home, MapPin, Map, BarChart3, User } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
-
-function TabIcon({ emoji, focused }) {
-  return (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>
-  );
-}
 
 export default function TabsLayout() {
   return (
@@ -21,35 +15,45 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="??" focused={focused} />,
+          tabBarIcon: function (props) {
+            return <Home size={22} color={props.color} />;
+          },
         }}
       />
       <Tabs.Screen
         name="spots"
         options={{
           title: 'Spots',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="??" focused={focused} />,
+          tabBarIcon: function (props) {
+            return <MapPin size={22} color={props.color} />;
+          },
         }}
       />
       <Tabs.Screen
         name="heatmap"
         options={{
           title: 'Heat Map',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="???" focused={focused} />,
+          tabBarIcon: function (props) {
+            return <Map size={22} color={props.color} />;
+          },
         }}
       />
       <Tabs.Screen
         name="impact"
         options={{
           title: 'Impact',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="??" focused={focused} />,
+          tabBarIcon: function (props) {
+            return <BarChart3 size={22} color={props.color} />;
+          },
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="??" focused={focused} />,
+          tabBarIcon: function (props) {
+            return <User size={22} color={props.color} />;
+          },
         }}
       />
     </Tabs>
