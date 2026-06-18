@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#cdd3c9;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#15241C;-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:26px}
+h1,h2,h3,h4{margin:0}
+button{font-family:inherit}
+@keyframes hp-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes hp-ring{0%{transform:scale(.85);opacity:.55}100%{transform:scale(1.7);opacity:0}}
+@keyframes hp-prog{0%{width:8%}100%{width:96%}}
+.hp-scroll::-webkit-scrollbar{width:10px}
+.hp-scroll::-webkit-scrollbar-thumb{background:#cfd6cb;border-radius:8px;border:3px solid #fff}
+.hp-scroll::-webkit-scrollbar-track{background:transparent}
+</style>
+</helmet>
+
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="20" fill="#102b1e"/><g transform="translate(30 28)" fill="none" stroke="#A6DD3A" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 0v18M20 44v-8M5 16c0 9 7 13 15 13s15-4 15-13c0-7-4-11-4-11s-4 4-11 4-11-4-15 7z"/></g></svg>
+</template>
+
+<div style="width:1240px;max-width:100%;border-radius:18px;overflow:hidden;border:1px solid #b8c0b3;box-shadow:0 50px 90px -40px rgba(20,40,30,.6);background:#fff">
+  <!-- browser chrome -->
+  <div style="height:44px;background:#EDF1E8;border-bottom:1px solid #e0e6d8;display:flex;align-items:center;gap:14px;padding:0 16px;flex:0 0 auto">
+    <div style="display:flex;gap:7px"><span style="width:12px;height:12px;border-radius:50%;background:#e06c5e"></span><span style="width:12px;height:12px;border-radius:50%;background:#e6b34a"></span><span style="width:12px;height:12px;border-radius:50%;background:#5bb86a"></span></div>
+    <div style="flex:1;max-width:440px;margin:0 auto;height:26px;background:#fff;border:1px solid #e0e6d8;border-radius:8px;display:flex;align-items:center;gap:7px;padding:0 11px;font:500 12px 'Space Grotesk';color:#8A988E"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1C7C4A" stroke-width="2.5"><rect x="4" y="9" width="16" height="12" rx="2"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/></svg>app.heatpath.in{{ urlPath }}</div>
+  </div>
+
+  <div style="display:flex;height:760px">
+    <!-- sidebar -->
+    <div style="width:236px;flex:0 0 auto;border-right:1px solid #EAEFE5;background:#FBFCF9;padding:22px 16px;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:10px;padding:0 6px 18px">
+        <span style="width:34px;height:34px;border-radius:11px;background:linear-gradient(150deg,#1C7C4A,#0E4F2E);display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#A6DD3A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8M12 22v-4M5 10c0 4 3 6 7 6s7-2 7-6c0-3-2-5-2-5s-2 2-5 2-5-2-7 3z"/></svg></span>
+        <span style="font:700 19px 'Bricolage Grotesque';color:#102b1e">HeatPath</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;margin-top:6px">{{ nav }}</div>
+      <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;background:#fff;border:1px solid #EAEFE5">
+        <span style="width:36px;height:36px;border-radius:50%;background:#E6F4E2;display:flex;align-items:center;justify-content:center;color:#1C7C4A"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg></span>
+        <div><div style="font-weight:700;font-size:13px">Aanya R.</div><div style="font-size:11px;color:#8A988E">Heat-sensitive</div></div>
+      </div>
+    </div>
+
+    <!-- main -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:{{ mainBg }}">
+
+      <!-- ===== HOME ===== -->
+      <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid #EEF2EA;flex:0 0 auto">
+          <div style="display:flex;align-items:center;gap:8px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#1C7C4A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.6"/></svg><span style="font:700 16px 'Bricolage Grotesque'">Indiranagar, Bengaluru</span><span style="font-size:13px;color:#8A988E">· Mon 17 Jun</span></div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <button onClick="{{ goSearch }}" style="display:flex;align-items:center;gap:10px;background:#F4F6F1;border:1px solid #E6EBE1;border-radius:12px;padding:9px 14px;width:300px;cursor:pointer;text-align:left" style-hover="border-color:#1C7C4A"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6B7A70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span style="color:#9aa89d;font-size:14px">Search a destination…</span></button>
+            <div style="position:relative;width:42px;height:42px;border-radius:50%;background:radial-gradient(120% 120% at 50% 22%,#EEF9E6,#CDEBD2);border:2px solid #fff;box-shadow:0 0 0 2px #A6DD3A,0 6px 12px -5px rgba(0,0,0,.3);overflow:hidden;flex:0 0 auto"><video data-mascot src="mascot/blink.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 26%;mix-blend-mode:multiply"></video></div>
+          </div>
+        </div>
+        <div class="hp-scroll" style="flex:1;overflow-y:auto;padding:22px 28px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;gap:18px;border-radius:24px;padding:22px 24px;background:linear-gradient(120deg,#FFF6EC,#FDE6Cf);border:1px solid #F6DCC2;align-items:center">
+            <div style="flex:0 0 auto"><div style="font-size:12.5px;color:#9a6a3c;font-weight:700;letter-spacing:.04em">FEELS LIKE NOW</div><div style="display:flex;align-items:flex-start;gap:10px;margin-top:2px"><span style="font:700 64px/1 'Space Grotesk';color:#b5560f">41°</span><span style="margin-top:8px;padding:6px 12px;border-radius:9px;background:#E8843A;color:#fff;font:700 12px 'Space Grotesk'">HIGH STRESS</span></div></div>
+            <div style="width:1px;height:64px;background:#f0cba6"></div>
+            <div style="display:flex;gap:26px;flex:1">
+              <div><div style="font:700 22px 'Space Grotesk';color:#102b1e">36°</div><div style="font-size:12px;color:#9a6a3c">real temp</div></div>
+              <div><div style="font:700 22px 'Space Grotesk';color:#102b1e">58%</div><div style="font-size:12px;color:#9a6a3c">humidity</div></div>
+              <div><div style="font:700 22px 'Space Grotesk';color:#102b1e">UV 9</div><div style="font-size:12px;color:#9a6a3c">very high</div></div>
+              <div><div style="font:700 22px 'Space Grotesk';color:#C8322A">47°</div><div style="font-size:12px;color:#9a6a3c">peak 3 PM</div></div>
+            </div>
+            <button onClick="{{ goSearch }}" style="flex:0 0 auto;border:none;border-radius:14px;padding:14px 22px;font:700 15px 'Plus Jakarta Sans';color:#fff;background:linear-gradient(150deg,#1C7C4A,#0E5b34);box-shadow:0 12px 24px -12px rgba(28,124,74,.7);cursor:pointer" style-hover="filter:brightness(1.07)">Start a cool walk</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px">
+            <div style="background:#fff;border:1px solid #E6EBE1;border-radius:22px;padding:20px;box-shadow:0 16px 32px -26px rgba(20,40,30,.3)">
+              <h4 style="font:700 17px 'Bricolage Grotesque'">Plan a cool walk</h4>
+              <button onClick="{{ goSearch }}" style="display:flex;align-items:center;gap:11px;background:#F4F6F1;border:1px solid #E6EBE1;border-radius:14px;padding:13px 15px;margin-top:14px;width:100%;cursor:pointer;text-align:left" style-hover="border-color:#1C7C4A"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6B7A70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span style="color:#9aa89d;font-size:15px;flex:1">Where do you want to walk?</span><span style="display:flex;align-items:center;gap:6px;background:#1C7C4A;color:#fff;border-radius:9px;padding:7px 11px;font-size:13px;font-weight:700"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="3"/></svg>GPS</span></button>
+              <div style="font-size:12px;color:#8A988E;font-weight:700;letter-spacing:.05em;margin:18px 0 10px">RECENT</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <button onClick="{{ goSearch }}" style="display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:13px;border:1px solid #EEF2EA;background:#fff;cursor:pointer;text-align:left;width:100%" style-hover="border-color:#1C7C4A"><span style="width:34px;height:34px;border-radius:10px;background:#E6F4E2;display:flex;align-items:center;justify-content:center;color:#1C7C4A"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 14 3 3.3a1 1 0 0 1-.7 1.7H4.7a1 1 0 0 1-.7-1.7L7 14h-.3a1 1 0 0 1-.7-1.7L9 9h-.2A1 1 0 0 1 8 7.3L12 3l4 4.3a1 1 0 0 1-.8 1.7H15l3 3.3a1 1 0 0 1-.7 1.7H17Z"/></svg></span><div style="flex:1"><div style="font-weight:700;font-size:14px">Cubbon Park</div><div style="font-size:12px;color:#8A988E">1.4 km · 71% shade route</div></div><span style="padding:4px 9px;border-radius:7px;background:#E6F4E2;color:#16633B;font:700 11px 'Space Grotesk'">SAFE</span></button>
+                <button onClick="{{ goSearch }}" style="display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:13px;border:1px solid #EEF2EA;background:#fff;cursor:pointer;text-align:left;width:100%" style-hover="border-color:#1C7C4A"><span style="width:34px;height:34px;border-radius:10px;background:#E1ECFB;display:flex;align-items:center;justify-content:center;color:#2563C9"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></svg></span><div style="flex:1"><div style="font-weight:700;font-size:14px">Metro · MG Road</div><div style="font-size:12px;color:#8A988E">0.9 km · shaded arcade</div></div><span style="padding:4px 9px;border-radius:7px;background:#FCEEDD;color:#b5560f;font:700 11px 'Space Grotesk'">HIGH</span></button>
+              </div>
+            </div>
+            <div style="background:#102b1e;border-radius:22px;padding:20px;color:#fff;box-shadow:0 18px 34px -24px rgba(20,40,30,.6);display:flex;flex-direction:column">
+              <div style="display:flex;justify-content:space-between;align-items:center"><h4 style="font:700 17px 'Bricolage Grotesque';color:#fff">Best time to walk</h4><span style="font-size:12px;color:#9fb7a6">today</span></div>
+              <div style="display:flex;align-items:flex-end;gap:7px;flex:1;margin-top:16px;min-height:120px">
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end"><div style="width:100%;height:32%;background:#29A35A;border-radius:6px"></div><span style="font:600 11px 'Space Grotesk';color:#9fb7a6">6a</span></div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end"><div style="width:100%;height:26%;background:#3ec06f;border-radius:6px"></div><span style="font:700 11px 'Space Grotesk';color:#A6DD3A">7a</span></div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end"><div style="width:100%;height:48%;background:#E5B23C;border-radius:6px"></div><span style="font:600 11px 'Space Grotesk';color:#9fb7a6">9a</span></div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end"><div style="width:100%;height:74%;background:#E8843A;border-radius:6px"></div><span style="font:600 11px 'Space Grotesk';color:#9fb7a6">12p</span></div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end"><div style="width:100%;height:100%;background:#C8322A;border-radius:6px"></div><span style="font:600 11px 'Space Grotesk';color:#9fb7a6">3p</span></div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end"><div style="width:100%;height:58%;background:#E8843A;border-radius:6px"></div><span style="font:600 11px 'Space Grotesk';color:#9fb7a6">5p</span></div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end"><div style="width:100%;height:34%;background:#29A35A;border-radius:6px"></div><span style="font:600 11px 'Space Grotesk';color:#9fb7a6">7p</span></div>
+              </div>
+              <div style="margin-top:14px;display:inline-flex;align-items:center;gap:7px;background:rgba(166,221,58,.16);color:#A6DD3A;padding:8px 13px;border-radius:100px;font-size:13px;font-weight:700;align-self:flex-start"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Best window — 7:00 AM</div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h4 style="font:700 17px 'Bricolage Grotesque'">Cool spots near you</h4><button onClick="{{ goCoolspots }}" style="background:none;border:none;font-size:13px;color:#1C7C4A;font-weight:700;cursor:pointer">View all →</button></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+              <div style="background:#fff;border:1px solid #E6EBE1;border-radius:18px;padding:16px;box-shadow:0 14px 28px -24px rgba(20,40,30,.3);display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:#E6F4E2;display:flex;align-items:center;justify-content:center;color:#1C7C4A;flex:0 0 auto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 14 3 3.3a1 1 0 0 1-.7 1.7H4.7a1 1 0 0 1-.7-1.7L7 14h-.3a1 1 0 0 1-.7-1.7L9 9h-.2A1 1 0 0 1 8 7.3L12 3l4 4.3a1 1 0 0 1-.8 1.7H15l3 3.3a1 1 0 0 1-.7 1.7H17Z"/></svg></span><div><div style="font-weight:700;font-size:14px">Cubbon Park</div><div style="font-size:12px;color:#8A988E">4 min · −6° cooler</div></div></div>
+              <div style="background:#fff;border:1px solid #E6EBE1;border-radius:18px;padding:16px;box-shadow:0 14px 28px -24px rgba(20,40,30,.3);display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:#E1ECFB;display:flex;align-items:center;justify-content:center;color:#2563C9;flex:0 0 auto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7Z"/></svg></span><div><div style="font-weight:700;font-size:14px">BWSSB Fountain</div><div style="font-size:12px;color:#8A988E">6 min · mist zone</div></div></div>
+              <div style="background:#fff;border:1px solid #E6EBE1;border-radius:18px;padding:16px;box-shadow:0 14px 28px -24px rgba(20,40,30,.3);display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:#E1ECFB;display:flex;align-items:center;justify-content:center;color:#2563C9;flex:0 0 auto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h20M2 12h20M2 18h12M17 16a2 2 0 1 1 1 3.7"/></svg></span><div><div style="font-weight:700;font-size:14px">Garuda Mall</div><div style="font-size:12px;color:#8A988E">8 min · AC refuge</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== SEARCHING ===== -->
+      <sc-if value="{{ isSearching }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;background:linear-gradient(180deg,#F4F8EF,#E7F2DE)">
+        <div style="position:relative;width:240px;height:240px">
+          <div style="position:absolute;inset:0;border-radius:50%;border:2px solid #A6DD3A;animation:hp-ring 2.4s ease-out infinite"></div>
+          <div style="position:absolute;inset:0;border-radius:50%;border:2px solid #A6DD3A;animation:hp-ring 2.4s ease-out infinite 1.2s"></div>
+          <div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(120% 120% at 50% 20%,#EEF9E6,#CFEBD3);border:1px solid #C3E4C6;overflow:hidden;box-shadow:0 24px 44px -22px rgba(28,124,74,.5)"><video data-mascot src="mascot/walking.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 44%;mix-blend-mode:multiply"></video></div>
+        </div>
+        <h3 style="margin:36px 0 0;font:700 30px 'Bricolage Grotesque';color:#102b1e">Finding your coolest path…</h3>
+        <p style="margin:12px 0 0;font-size:16px;color:#5d6f62;max-width:340px;line-height:1.5">Patho's checking shade cover, surface heat and crowd levels along every route to Cubbon Park.</p>
+        <div style="width:300px;margin-top:28px;height:9px;border-radius:100px;background:#D5E6CC;overflow:hidden"><div style="height:100%;border-radius:100px;background:linear-gradient(90deg,#1C7C4A,#A6DD3A);animation:hp-prog 1.7s ease-out forwards"></div></div>
+      </div>
+      </sc-if>
+
+      <!-- ===== ROUTES (results, map + rail) ===== -->
+      <sc-if value="{{ isRoutes }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;min-height:0">
+        <!-- map -->
+        <div style="flex:1;position:relative;background:linear-gradient(135deg,#E9F0E1,#DDE8d2);overflow:hidden;min-width:0">
+          <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px);background-size:42px 42px"></div>
+          <div style="position:absolute;top:60px;left:80px;width:180px;height:150px;background:#cfe0bd;border-radius:18px"></div>
+          <div style="position:absolute;bottom:80px;right:120px;width:240px;height:180px;background:#cfe0bd;border-radius:18px"></div>
+          <div style="position:absolute;top:300px;left:300px;width:120px;height:120px;background:#cfe0bd;border-radius:18px"></div>
+          <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 700 760" preserveAspectRatio="none" fill="none">
+            <path d="M120 660 C 220 600, 200 460, 320 430 S 480 380, 540 220 L 600 120" stroke="#1C7C4A" stroke-width="9" stroke-linecap="round" stroke-dasharray="0.1 14" opacity=".35"/>
+            <path d="M120 660 C 220 600, 200 460, 320 430" stroke="{{ segA }}" stroke-width="9" stroke-linecap="round"/>
+            <path d="M320 430 C 380 414, 430 400, 470 350" stroke="{{ segB }}" stroke-width="9" stroke-linecap="round"/>
+            <path d="M470 350 C 510 300, 520 260, 540 220 L 600 120" stroke="{{ segC }}" stroke-width="9" stroke-linecap="round"/>
+          </svg>
+          <span style="position:absolute;left:104px;top:644px;width:26px;height:26px;border-radius:50%;background:#2563C9;border:4px solid #fff;box-shadow:0 6px 14px -4px rgba(0,0,0,.4)"></span>
+          <span style="position:absolute;left:586px;top:104px;width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(45deg);background:#1C7C4A;border:4px solid #fff;box-shadow:0 6px 14px -4px rgba(0,0,0,.4)"></span>
+          <div style="position:absolute;top:18px;left:18px;display:flex;gap:8px"><span style="padding:7px 13px;border-radius:100px;background:#fff;box-shadow:0 6px 14px -8px rgba(0,0,0,.3);font:700 12px 'Space Grotesk';color:#102b1e">{{ selectedLabel }} route · live</span></div>
+          <div style="position:absolute;bottom:18px;left:18px;display:flex;gap:10px;background:#fff;border-radius:12px;padding:9px 13px;box-shadow:0 6px 16px -8px rgba(0,0,0,.3);font-size:12px"><span style="display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#16633B"><span style="width:14px;height:5px;border-radius:3px;background:#1C7C4A"></span>Shade</span><span style="display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#b5560f"><span style="width:14px;height:5px;border-radius:3px;background:#E8843A"></span>Sun</span></div>
+        </div>
+        <!-- rail -->
+        <div style="width:404px;flex:0 0 auto;border-left:1px solid #EAEFE5;display:flex;flex-direction:column;background:#fff">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid #EEF2EA">
+            <div style="display:flex;align-items:center;gap:10px"><button onClick="{{ goHome }}" style="width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid #E6EBE1;display:flex;align-items:center;justify-content:center;color:#15241C;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><div><div style="font-size:12px;color:#6B7A70;font-weight:600">3 routes to</div><div style="font:700 18px 'Bricolage Grotesque'">Cubbon Park</div></div></div>
+            <div style="position:relative;width:42px;height:42px;border-radius:50%;background:radial-gradient(120% 120% at 50% 22%,#EEF9E6,#CDEBD2);border:2px solid #fff;box-shadow:0 0 0 2px #A6DD3A,0 6px 12px -5px rgba(0,0,0,.3);overflow:hidden;flex:0 0 auto"><video data-mascot src="mascot/blink.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 26%;mix-blend-mode:multiply"></video></div>
+          </div>
+          <div class="hp-scroll" style="flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:13px">
+            <div style="display:flex;align-items:center;gap:13px;background:linear-gradient(120deg,#F2FBE6,#E2F3CC);border:1px solid #CDE89B;border-radius:18px;padding:13px 15px">
+              <div style="position:relative;width:60px;height:60px;border-radius:16px;background:radial-gradient(120% 120% at 50% 20%,#fff,#ddeebb);overflow:hidden;flex:0 0 auto;border:1px solid #cfe39e"><video data-mascot src="mascot/excited.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 24%;mix-blend-mode:multiply"></video></div>
+              <div><div style="font:700 16px 'Bricolage Grotesque';color:#3c4f12">Great find!</div><div style="font-size:13px;color:#5d6f3a;line-height:1.4">Tap a route to preview it on the map.</div></div>
+            </div>
+            {{ routeCards }}
+            <button onClick="{{ startRoute }}" style="margin-top:4px;border:none;border-radius:14px;padding:14px;font:700 15px 'Plus Jakarta Sans';color:#fff;background:linear-gradient(150deg,#1C7C4A,#0E5b34);box-shadow:0 14px 26px -12px rgba(28,124,74,.7);cursor:pointer">Start the {{ selectedLabel }} route →</button>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== HEATMAP (dark) ===== -->
+      <sc-if value="{{ isHeatmap }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid #22332B;flex:0 0 auto">
+          <div><div style="font-size:12px;color:#8DA396;font-weight:600">Bengaluru · live</div><div style="font:700 18px 'Bricolage Grotesque';color:#E8F0EA">City heat map</div></div>
+          <div style="position:relative;width:42px;height:42px;border-radius:50%;background:radial-gradient(120% 120% at 50% 22%,#FCEEDD,#F4CBA8);border:2px solid #1C2B25;box-shadow:0 0 0 2px #C8322A,0 6px 12px -5px rgba(0,0,0,.5);overflow:hidden;flex:0 0 auto"><video data-mascot src="mascot/alert.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 26%;mix-blend-mode:multiply"></video><span style="position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#C8322A;border:2px solid #0E1A16;animation:hp-pulse 1.2s ease-in-out infinite"></span></div>
+        </div>
+        <div class="hp-scroll" style="flex:1;overflow-y:auto;padding:22px 28px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:center;gap:14px;background:linear-gradient(120deg,#2a120e,#3a1813);border:1px solid #6e2a20;border-radius:18px;padding:14px 16px">
+            <div style="position:relative;width:54px;height:54px;border-radius:14px;background:radial-gradient(120% 120% at 50% 20%,#fcebd9,#e9b48c);overflow:hidden;flex:0 0 auto"><video data-mascot src="mascot/alert.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 24%;mix-blend-mode:multiply"></video></div>
+            <div style="flex:1"><div style="display:flex;align-items:center;gap:6px;color:#ff8d6b;font:700 15px 'Bricolage Grotesque'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>Heatwave advisory in effect</div><div style="font-size:13px;color:#d9b3a8;margin-top:2px;line-height:1.4">Feels-like temperatures reach <b style="color:#fff">47°</b> by 3 PM. Avoid open-sun walks between 12–4 PM.</div></div>
+          </div>
+          <div style="display:flex;gap:14px">
+            <div style="flex:1;background:#16241E;border:1px solid #22332B;border-radius:18px;padding:16px"><div style="font:700 30px 'Space Grotesk';color:#E8843A">42°</div><div style="font-size:12px;color:#8DA396;margin-top:2px">city average feels-like</div></div>
+            <div style="flex:1;background:#16241E;border:1px solid #22332B;border-radius:18px;padding:16px"><div style="font:700 30px 'Space Grotesk';color:#C8322A">7</div><div style="font-size:12px;color:#8DA396;margin-top:2px">active hotspots</div></div>
+            <div style="flex:1;background:#16241E;border:1px solid #22332B;border-radius:18px;padding:16px"><div style="font:700 30px 'Space Grotesk';color:#A6DD3A">12</div><div style="font-size:12px;color:#8DA396;margin-top:2px">cool refuges open</div></div>
+          </div>
+          <div style="flex:1;display:flex;gap:16px;min-height:0">
+            <div style="flex:1;border-radius:20px;overflow:hidden;position:relative;border:1px solid #22332B;background:#0b1512;min-height:300px">
+              <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(7,1fr);gap:3px;padding:3px">{{ heatCells }}</div>
+              <span style="position:absolute;top:33%;left:62%;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #C8322A;box-shadow:0 0 0 5px rgba(200,50,42,.3)"></span>
+              <span style="position:absolute;bottom:12px;left:12px;padding:6px 11px;border-radius:8px;background:rgba(14,26,22,.85);font:700 12px 'Space Grotesk';color:#cfe0d6">MG Road · 47° hotspot</span>
+            </div>
+            <div style="width:260px;flex:0 0 auto;display:flex;flex-direction:column;gap:12px">
+              <div style="background:#16241E;border:1px solid #22332B;border-radius:18px;padding:16px"><div style="font-size:12px;color:#8DA396;font-weight:700;letter-spacing:.04em">SEVERITY</div><div style="display:flex;flex-direction:column;gap:9px;margin-top:12px"><div style="display:flex;align-items:center;gap:10px"><span style="width:14px;height:14px;border-radius:4px;background:#29A35A"></span><span style="font-size:13px;color:#cfe0d6;flex:1">Safe</span><span style="font:600 12px 'Space Grotesk';color:#8DA396">&lt;35°</span></div><div style="display:flex;align-items:center;gap:10px"><span style="width:14px;height:14px;border-radius:4px;background:#E5B23C"></span><span style="font-size:13px;color:#cfe0d6;flex:1">Caution</span><span style="font:600 12px 'Space Grotesk';color:#8DA396">35–40°</span></div><div style="display:flex;align-items:center;gap:10px"><span style="width:14px;height:14px;border-radius:4px;background:#E8843A"></span><span style="font-size:13px;color:#cfe0d6;flex:1">High</span><span style="font:600 12px 'Space Grotesk';color:#8DA396">40–45°</span></div><div style="display:flex;align-items:center;gap:10px"><span style="width:14px;height:14px;border-radius:4px;background:#C8322A"></span><span style="font-size:13px;color:#cfe0d6;flex:1">Extreme</span><span style="font:600 12px 'Space Grotesk';color:#8DA396">&gt;45°</span></div></div></div>
+              <button onClick="{{ goHome }}" style="border:1px solid #2c5a3d;background:rgba(166,221,58,.12);color:#A6DD3A;border-radius:14px;padding:13px;font:700 14px 'Plus Jakarta Sans';cursor:pointer">Plan around hotspots</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== COOLSPOTS (empty / disappointed) ===== -->
+      <sc-if value="{{ isCoolspots }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid #EEF2EA;flex:0 0 auto">
+          <div style="font:700 18px 'Bricolage Grotesque'">Cool spots near you</div>
+          <div style="display:flex;align-items:center;gap:8px;background:#F4F6F1;border:1px solid #E6EBE1;border-radius:100px;padding:7px 14px;font-size:13px;font-weight:600;color:#445349">Radius: {{ radiusLabel }}</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px">
+          <div style="width:180px;height:180px;border-radius:50%;background:radial-gradient(120% 120% at 50% 20%,#F2F4EF,#DDE3D6);border:1px solid #E0E7DA;overflow:hidden;position:relative;box-shadow:0 18px 36px -22px rgba(20,40,30,.4)"><video data-mascot src="mascot/disappointed.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 26%;mix-blend-mode:multiply"></video></div>
+          <h3 style="margin:24px 0 0;font:700 26px 'Bricolage Grotesque';color:#102b1e">No cool refuges within {{ radiusLabel }}</h3>
+          <p style="margin:10px 0 0;font-size:15px;color:#5d6f62;line-height:1.5;max-width:420px">Everything nearby is in full sun right now. Patho suggests widening the search radius or waiting for cooler hours.</p>
+          <div style="display:flex;gap:12px;margin-top:24px">
+            <button onClick="{{ widen }}" style="border:none;border-radius:14px;padding:14px 22px;font:700 15px 'Plus Jakarta Sans';color:#fff;background:#1C7C4A;cursor:pointer">{{ widenLabel }}</button>
+            <button onClick="{{ goHome }}" style="border:1px solid #D5DFCE;border-radius:14px;padding:14px 22px;font:700 14px 'Plus Jakarta Sans';color:#16633B;background:#fff;cursor:pointer">Back to home</button>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== IMPACT (dark) ===== -->
+      <sc-if value="{{ isImpact }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid #22332B;flex:0 0 auto">
+          <div style="font:700 18px 'Bricolage Grotesque';color:#E8F0EA">Your impact</div>
+          <div style="position:relative;width:42px;height:42px;border-radius:50%;background:radial-gradient(120% 120% at 50% 22%,#EEF9E6,#CDEBD2);border:2px solid #1C2B25;box-shadow:0 0 0 2px #A6DD3A,0 6px 12px -5px rgba(0,0,0,.5);overflow:hidden;flex:0 0 auto"><video data-mascot src="mascot/blink.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 26%;mix-blend-mode:multiply"></video></div>
+        </div>
+        <div class="hp-scroll" style="flex:1;overflow-y:auto;padding:22px 28px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px">
+            <div style="position:relative;border-radius:24px;overflow:hidden;background:linear-gradient(135deg,#16331f,#0f5b34);border:1px solid #2c5a3d;padding:22px;display:flex;align-items:center;gap:18px">
+              <div style="position:absolute;inset:0;background:radial-gradient(circle at 80% 10%,rgba(166,221,58,.28),transparent 55%)"></div>
+              <div style="position:relative;width:120px;height:120px;border-radius:22px;background:radial-gradient(120% 120% at 50% 18%,#f3ffe0,#cdeeb0);overflow:hidden;flex:0 0 auto;border:1px solid #bfe293;box-shadow:0 12px 26px -14px rgba(0,0,0,.5)"><video data-mascot src="mascot/mvp.mp4" muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 22%;mix-blend-mode:multiply"></video></div>
+              <div style="position:relative"><div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:100px;background:rgba(166,221,58,.2);color:#A6DD3A;font:700 11px 'Space Grotesk';letter-spacing:.08em">MVP THIS WEEK</div><div style="font:700 26px 'Bricolage Grotesque';color:#fff;margin-top:9px;line-height:1.15">You dodged the worst of<br>the heat 5 days running</div></div>
+            </div>
+            <div style="background:#16241E;border:1px solid #22332B;border-radius:24px;padding:22px;display:flex;flex-direction:column;justify-content:center">
+              <div style="font-size:12px;color:#8DA396;font-weight:700;letter-spacing:.04em">CUMULATIVE HEAT AVOIDED</div>
+              <div style="display:flex;align-items:flex-end;gap:8px;margin-top:4px"><span style="font:700 54px/1 'Space Grotesk';color:#A6DD3A">12.6</span><span style="font-size:16px;color:#8DA396;margin-bottom:8px;font-weight:600">°-hours / month</span></div>
+              <div style="display:flex;align-items:flex-end;gap:5px;height:60px;margin-top:16px">
+                <div style="flex:1;height:30%;background:#1f4a30;border-radius:4px"></div><div style="flex:1;height:44%;background:#256138;border-radius:4px"></div><div style="flex:1;height:38%;background:#1f4a30;border-radius:4px"></div><div style="flex:1;height:62%;background:#2f7a45;border-radius:4px"></div><div style="flex:1;height:54%;background:#256138;border-radius:4px"></div><div style="flex:1;height:78%;background:#3c9a55;border-radius:4px"></div><div style="flex:1;height:70%;background:#2f7a45;border-radius:4px"></div><div style="flex:1;height:100%;background:#A6DD3A;border-radius:4px"></div>
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+            <div style="background:#16241E;border:1px solid #22332B;border-radius:18px;padding:18px"><div style="display:flex;align-items:center;gap:7px;color:#E8843A"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.5-4.3 1-6-.2 2 1.3 3.3 2.5 4.5C16 9.3 17 11 17 13a5 5 0 0 1-10 .5"/></svg><span style="font:700 26px 'Space Grotesk';color:#E8F0EA">7</span></div><div style="font-size:12px;color:#8DA396;margin-top:4px">day cool streak</div></div>
+            <div style="background:#16241E;border:1px solid #22332B;border-radius:18px;padding:18px"><div style="font:700 26px 'Space Grotesk';color:#E8F0EA">31</div><div style="font-size:12px;color:#8DA396;margin-top:4px">cool walks taken</div></div>
+            <div style="background:#16241E;border:1px solid #22332B;border-radius:18px;padding:18px"><div style="font:700 26px 'Space Grotesk';color:#E8F0EA">5</div><div style="font-size:12px;color:#8DA396;margin-top:4px">badges earned</div></div>
+            <div style="background:#16241E;border:1px solid #22332B;border-radius:18px;padding:18px"><div style="font:700 26px 'Space Grotesk';color:#E8F0EA">−6°</div><div style="font-size:12px;color:#8DA396;margin-top:4px">avg route cooling</div></div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1;display:flex;align-items:center;gap:12px;background:#16241E;border:1px solid #22332B;border-radius:16px;padding:14px 16px"><span style="width:40px;height:40px;border-radius:12px;background:rgba(166,221,58,.16);display:flex;align-items:center;justify-content:center;color:#A6DD3A"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="m8.5 13-1.5 8 5-3 5 3-1.5-8"/></svg></span><div><div style="font-size:13px;font-weight:700;color:#cfe0d6">Shade Pro</div><div style="font-size:11px;color:#8DA396">50 shaded km</div></div></div>
+            <div style="flex:1;display:flex;align-items:center;gap:12px;background:#16241E;border:1px solid #22332B;border-radius:16px;padding:14px 16px"><span style="width:40px;height:40px;border-radius:12px;background:rgba(37,99,201,.18);display:flex;align-items:center;justify-content:center;color:#6ea2ff"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7Z"/></svg></span><div><div style="font-size:13px;font-weight:700;color:#cfe0d6">Hydrated</div><div style="font-size:11px;color:#8DA396">refilled 20×</div></div></div>
+            <div style="flex:1;display:flex;align-items:center;gap:12px;background:#16241E;border:1px solid #22332B;border-radius:16px;padding:14px 16px"><span style="width:40px;height:40px;border-radius:12px;background:rgba(232,132,58,.16);display:flex;align-items:center;justify-content:center;color:#f0a064"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></span><div><div style="font-size:13px;font-weight:700;color:#cfe0d6">Early Bird</div><div style="font-size:11px;color:#8DA396">10 dawn walks</div></div></div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:840}}">
+class Component extends DCLogic {
+  state = { view: 'home', route: 'coolest', radius: 1 };
+
+  go(view){ this.setState({ view }); }
+  goSearch(){
+    this.setState({ view: 'searching' });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.setState({ view: 'routes' }), 1700);
+  }
+  componentWillUnmount(){ clearTimeout(this._t); }
+  componentDidMount(){ this.bindVideos(); }
+  componentDidUpdate(){ this.bindVideos(); }
+  bindVideos(){
+    document.querySelectorAll('video[data-mascot]').forEach(v => { v.muted = true; const p = v.play(); if (p && p.catch) p.catch(()=>{}); });
+  }
+
+  navItem(key, label, icon, view, active){
+    return React.createElement('button', {
+      key, onClick: () => this.go(view),
+      style: {
+        display:'flex', alignItems:'center', gap:'11px', padding:'11px 13px', borderRadius:'12px',
+        border:'none', cursor:'pointer', width:'100%', textAlign:'left', font:"600 14px 'Plus Jakarta Sans'",
+        background: active ? '#E6F4E2' : 'transparent', color: active ? '#16633B' : '#5d6f62',
+        fontWeight: active ? 700 : 600
+      }
+    },
+      React.createElement('svg', { width:19, height:19, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2.1, strokeLinecap:'round', strokeLinejoin:'round', dangerouslySetInnerHTML:{ __html: icon } }),
+      label
+    );
+  }
+
+  routeCard(key, data){
+    const active = this.state.route === key;
+    return React.createElement('button', {
+      key, onClick: () => this.setState({ route: key }),
+      style: {
+        textAlign:'left', cursor:'pointer', width:'100%',
+        border: active ? '1.5px solid #1C7C4A' : '1px solid #E6EBE1', borderRadius:'18px', padding:'16px',
+        background: active ? 'linear-gradient(180deg,#F6FBF2,#fff)' : '#fff',
+        boxShadow: active ? '0 14px 28px -22px rgba(28,124,74,.5)' : 'none', transition:'all .15s'
+      }
+    },
+      React.createElement('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
+        React.createElement('div', { style:{ display:'flex', alignItems:'center', gap:'9px' } },
+          React.createElement('span', { style:{ width:'34px', height:'34px', borderRadius:'11px', background:data.iconBg, display:'flex', alignItems:'center', justifyContent:'center', color:data.iconColor }, dangerouslySetInnerHTML:{ __html:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${data.icon}</svg>` } }),
+          React.createElement('div', null,
+            React.createElement('div', { style:{ font:"700 16px 'Bricolage Grotesque'" } }, data.title),
+            React.createElement('div', { style:{ fontSize:'11px', color:'#6B7A70' } }, data.sub)
+          )
+        ),
+        React.createElement('span', { style:{ padding:'5px 10px', borderRadius:'8px', background:data.sevBg, color:data.sevColor, font:"700 11px 'Space Grotesk'" } }, data.sev)
+      ),
+      React.createElement('div', { style:{ display:'flex', gap:'20px', marginTop:'13px' } },
+        [['walk time', data.min, '#102b1e'], ['feels-like', data.feels, data.feelsColor], ['in shade', data.shade, '#1C7C4A']].map((c,i) =>
+          React.createElement('div', { key:i },
+            React.createElement('div', { style:{ font:"700 24px 'Space Grotesk'", color:c[2] } }, c[1]),
+            React.createElement('div', { style:{ fontSize:'11px', color:'#8A988E' } }, c[0])
+          )
+        )
+      ),
+      React.createElement('div', { style:{ display:'flex', height:'13px', borderRadius:'100px', overflow:'hidden', gap:'2px', marginTop:'13px' } },
+        data.bar.map((seg,i) => React.createElement('div', { key:i, style:{ flex:seg[0], background:seg[1] } }))
+      )
+    );
+  }
+
+  renderVals(){
+    const v = this.state.view;
+    const dark = v === 'heatmap' || v === 'impact';
+    const routes = {
+      coolest: { title:'Coolest', sub:'most shade · gentlest', sev:'SAFE', sevBg:'#29A35A', sevColor:'#fff', icon:'<path d="M12 2a7 7 0 1 0 10 10 9 9 0 1 1-10-10Z"/>', iconBg:'#E6F4E2', iconColor:'#1C7C4A', min:'24 min', feels:'38°', feelsColor:'#E8843A', shade:'71%', bar:[[3,'#1C7C4A'],[1.2,'#E8843A'],[2.6,'#1C7C4A'],[.8,'#E5B23C'],[2,'#1C7C4A']], seg:['#1C7C4A','#1C7C4A','#1C7C4A'] },
+      fastest: { title:'Fastest', sub:'least time', sev:'HIGH', sevBg:'#E8843A', sevColor:'#fff', icon:'<path d="M13 2 3 14h9l-1 8 10-12h-9Z"/>', iconBg:'#E1ECFB', iconColor:'#2563C9', min:'16 min', feels:'47°', feelsColor:'#C8322A', shade:'22%', bar:[[1,'#1C7C4A'],[3,'#E8843A'],[1,'#1C7C4A'],[2.5,'#C8322A'],[1,'#E5B23C']], seg:['#E8843A','#C8322A','#E8843A'] },
+      quietest: { title:'Quietest', sub:'low crowd', sev:'CAUTION', sevBg:'#E5B23C', sevColor:'#3d2c00', icon:'<path d="M3 12a9 9 0 0 1 9-9M21 12a9 9 0 0 1-9 9"/><path d="M9 12a3 3 0 0 1 6 0"/>', iconBg:'#EAF0E6', iconColor:'#445349', min:'27 min', feels:'42°', feelsColor:'#E5B23C', shade:'54%', bar:[[2.4,'#1C7C4A'],[1.4,'#E5B23C'],[2,'#1C7C4A'],[1.4,'#E8843A'],[1.6,'#1C7C4A']], seg:['#1C7C4A','#E5B23C','#E8843A'] }
+    };
+    const ICON = {
+      home:'<path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2h-3v-7H8v7H5a2 2 0 0 1-2-2Z"/>',
+      routes:'<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+      heatmap:'<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2Z"/><path d="M9 4v16M15 6v16"/>',
+      coolspots:'<path d="m17 14 3 3.3a1 1 0 0 1-.7 1.7H4.7a1 1 0 0 1-.7-1.7L7 14h-.3a1 1 0 0 1-.7-1.7L9 9h-.2A1 1 0 0 1 8 7.3L12 3l4 4.3a1 1 0 0 1-.8 1.7H15l3 3.3a1 1 0 0 1-.7 1.7H17Z"/>',
+      impact:'<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>'
+    };
+    const navActive = (k) => v === k || (k==='home' && (v==='searching')) || (k==='routes' && v==='routes');
+    const nav = [
+      this.navItem('home','Home',ICON.home,'home', v==='home'||v==='searching'),
+      this.navItem('routes','Routes',ICON.routes,'routes', v==='routes'),
+      this.navItem('heatmap','Heat map',ICON.heatmap,'heatmap', v==='heatmap'),
+      this.navItem('coolspots','Cool spots',ICON.coolspots,'coolspots', v==='coolspots'),
+      this.navItem('impact','Impact',ICON.impact,'impact', v==='impact')
+    ];
+    const routeCards = ['coolest','fastest','quietest'].map(k => this.routeCard(k, routes[k]));
+    const sevColors = { '#1C7C4A':'#1C7C4A' };
+    const cur = routes[this.state.route];
+    // heat cells (10x7)
+    const palette = ['#29A35A','#29A35A','#E5B23C','#E8843A','#E8843A','#E5B23C','#E8843A','#C8322A','#E5B23C','#29A35A'];
+    const heatCells = Array.from({length:70}).map((_,i) => {
+      const seeds = ['#29A35A','#29A35A','#E5B23C','#E8843A','#C8322A','#E8843A','#E5B23C','#29A35A'];
+      const c = palette[(i*7+ (i%5)) % palette.length];
+      return React.createElement('div', { key:i, style:{ background:c, borderRadius:'4px', opacity: c==='#29A35A'?0.82:1 } });
+    });
+    const radiusLabel = this.state.radius >= 3 ? '3 km' : '1 km';
+    return {
+      isHome: v==='home', isSearching: v==='searching', isRoutes: v==='routes',
+      isHeatmap: v==='heatmap', isCoolspots: v==='coolspots', isImpact: v==='impact',
+      mainBg: dark ? '#0E1A16' : '#fff',
+      urlPath: v==='home'?'' : v==='routes'||v==='searching'?'/routes' : '/'+v,
+      nav, routeCards, heatCells,
+      selectedLabel: cur.title,
+      segA: cur.seg[0], segB: cur.seg[1], segC: cur.seg[2],
+      radiusLabel, widenLabel: this.state.radius >= 3 ? 'Notify me when one opens' : 'Widen search to 3 km',
+      goHome: () => this.go('home'), goSearch: () => this.goSearch(),
+      goCoolspots: () => this.go('coolspots'),
+      startRoute: () => this.go('impact'),
+      widen: () => this.setState({ radius: 3 })
+    };
+  }
+}
+</script>
+</body>
+</html>

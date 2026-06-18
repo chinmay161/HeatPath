@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "HeatPath",
+    "slug": "heatpath",
+    "version": "1.0.0",
+    "scheme": "heatpath",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.heatpath.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1C7C4A"
+      },
+      "package": "in.heatpath.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-video",
+      "expo-location"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

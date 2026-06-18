@@ -28,3 +28,6 @@ Thumbs.db
 
 # SQLite tile cache database
 backend/data/shade_tiles.db
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/

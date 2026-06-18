@@ -9,6 +9,17 @@ from app.services.weather import get_weather, get_aqi, compute_heat_index
 router = APIRouter(prefix="/conditions", tags=["Conditions"])
 
 
+def _severity(heat_index: float) -> str:
+    """Derive a display-safe severity label from the Steadman heat index."""
+    if heat_index >= 41:
+        return "EXTREME"
+    if heat_index >= 35:
+        return "HIGH"
+    if heat_index >= 28:
+        return "CAUTION"
+    return "SAFE"
+
+
 @router.get("/", response_model=ConditionsResponse)
 async def get_conditions(
     lat: float = Query(..., description="Latitude",  examples=[18.9220]),
@@ -32,6 +43,10 @@ async def get_conditions(
 
     return ConditionsResponse(
         heat_index=heat_index,
-        shade_index=0.0,   # Dev A's OSM shade module populates this
+        shade_index=0.0,                      # Dev A's OSM shade module populates this
         aqi_index=aqi_index,
+        temperature_c=weather["temperature_c"],
+        humidity_pct=weather["humidity_pct"],
+        feels_like_c=weather["feels_like_c"],
+        severity=_severity(heat_index),
     )
