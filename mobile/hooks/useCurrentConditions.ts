@@ -25,7 +25,7 @@ export function useCurrentConditions(lat: number | null, lon: number | null): St
   useEffect(() => {
     if (lat == null || lon == null) return;
     let cancelled = false;
-    setState({ data: null, loading: true, error: null });
+    setState(prev => ({ ...prev, loading: true, error: null }));
 
     fetch(`${API_BASE}/conditions/?lat=${lat}&lon=${lon}`)
       .then(r => {

@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { usePhotonSearch } from '../../hooks/usePhotonSearch';
 import type { PlaceSuggestion } from '../../hooks/usePhotonSearch';
+import { useRecentSearches } from '../../hooks/useRecentSearches';
 import Icon from '../../components/Icon';
 import { colors, fonts } from '../../theme/colors';
 
@@ -23,9 +24,11 @@ export default function DestinationScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { startLat, startLon } = useLocalSearchParams<{ startLat: string; startLon: string }>();
+  const { startLat, startLon, mode } = useLocalSearchParams<{ startLat: string; startLon: string; mode?: string }>();
   const biasLat = startLat ? parseFloat(startLat) : null;
   const biasLon = startLon ? parseFloat(startLon) : null;
+
+  const { addRecent } = useRecentSearches();
 
   const [query, setQuery] = useState('');
   const inputRef = useRef<TextInput>(null);
@@ -39,16 +42,23 @@ export default function DestinationScreen() {
   const { results, loading, error } = usePhotonSearch(query, biasLat, biasLon);
 
   const onSelect = (place: PlaceSuggestion) => {
-    router.replace({
-      pathname: '/(tabs)/searching' as any,
-      params: {
-        startLat,
-        startLon,
-        endLat: String(place.lat),
-        endLon: String(place.lon),
-        destName: place.name,
-      },
-    });
+    if (mode === 'from') {
+      router.replace({
+        pathname: '/(tabs)/' as any,
+        params: {
+          fromLat: String(place.lat),
+          fromLon: String(place.lon),
+          fromName: place.name,
+          fromToken: String(Date.now()) + '_' + Math.random().toString(36).slice(2),
+        },
+      });
+    } else {
+      addRecent(place.name, place.lat, place.lon);
+      router.replace({
+        pathname: '/(tabs)/searching' as any,
+        params: { startLat, startLon, endLat: String(place.lat), endLon: String(place.lon), destName: place.name },
+      });
+    }
   };
 
   const onBack = () => router.back();
@@ -66,7 +76,7 @@ export default function DestinationScreen() {
           ref={inputRef}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search destination…"
+          placeholder={mode === 'from' ? 'Search start location…' : 'Search destination…'}
           placeholderTextColor={colors.muted2}
           style={styles.input}
           autoCorrect={false}

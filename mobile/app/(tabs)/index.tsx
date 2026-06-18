@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useUserLocation } from '../../hooks/useUserLocation';
@@ -18,7 +18,9 @@ import { BlockedBanner } from '../../components/BlockedBanner';
 import { BestTimeChart, IconChip, Button } from '../../components/ui';
 import Icon from '../../components/Icon';
 import { colors, fonts, radius } from '../../theme/colors';
-import { bestTime, coolSpots } from '../../data/mockData';
+import { bestTime } from '../../data/mockData';
+import { useNearbyCoolSpots, type CoolSpot } from '../../hooks/useNearbyCoolSpots';
+import { useRecentSearches, type RecentSearch } from '../../hooks/useRecentSearches';
 
 function aqiLabel(index: number): string {
   if (index < 0.10) return 'Good';
@@ -33,14 +35,46 @@ function formatDate(): string {
   });
 }
 
+function formatRelativeDate(ts: number): string {
+  const now = new Date();
+  const then = new Date(ts);
+  const diffDays = Math.floor((now.setHours(0,0,0,0) - then.setHours(0,0,0,0)) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return new Date(ts).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
 export default function HomeScreen() {
   const { isDesktop } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const { location, locationLabel, loading: locLoading, error: locError } = useUserLocation();
+
+  // "From" field override — null means use GPS
+  const params = useLocalSearchParams<{ fromLat?: string; fromLon?: string; fromName?: string; fromToken?: string }>();
+  const [fromOverride, setFromOverride] = useState<{ lat: number; lon: number; label: string } | null>(null);
+  const lastFromTokenRef = useRef<string | null>(null);
+
+  // Consume a "from" pick navigated back from destination.tsx with mode=from
+  useEffect(() => {
+    if (params.fromToken && params.fromToken !== lastFromTokenRef.current && params.fromLat && params.fromLon) {
+      lastFromTokenRef.current = params.fromToken;
+      setFromOverride({ lat: parseFloat(params.fromLat), lon: parseFloat(params.fromLon), label: params.fromName || 'Selected location' });
+    }
+  }, [params.fromToken]);
+
+  const fromLat = fromOverride?.lat ?? location?.lat ?? null;
+  const fromLon = fromOverride?.lon ?? location?.lon ?? null;
+  const fromLabel = fromOverride?.label ?? locationLabel ?? 'Your location';
+
   const { data: cond, loading: condLoading, error: condError } =
-    useCurrentConditions(location?.lat ?? null, location?.lon ?? null);
+    useCurrentConditions(fromLat, fromLon);
+
+  const { spots: nearbySpots, loading: spotsLoading } =
+    useNearbyCoolSpots(location?.lat ?? null, location?.lon ?? null);
+
+  const { recents } = useRecentSearches();
 
   const locationText = locationLabel ?? (location ? 'Your location' : 'Locating…');
   const dateText = formatDate();
@@ -58,9 +92,18 @@ export default function HomeScreen() {
   const onSearch = () => {
     router.push({
       pathname: '/(tabs)/destination' as any,
-      params: location
-        ? { startLat: String(location.lat), startLon: String(location.lon) }
+      params: fromLat != null && fromLon != null
+        ? { startLat: String(fromLat), startLon: String(fromLon) }
         : {},
+    });
+  };
+  const onFromPress = () => {
+    router.push({
+      pathname: '/(tabs)/destination' as any,
+      params: {
+        mode: 'from',
+        ...(location ? { startLat: String(location.lat), startLon: String(location.lon) } : {}),
+      },
     });
   };
   const onCoolspots = () => router.push('/(tabs)/coolspots' as any);
@@ -68,22 +111,41 @@ export default function HomeScreen() {
 
   // ─── Shared ──────────────────────────────────────────────────────────────────
 
+  // Compact single-row bar for the desktop header only
   const SearchBar = (
     <TouchableOpacity
       onPress={onSearch}
-      style={[styles.searchBar, isDesktop && styles.searchBarDesktop]}
+      style={[styles.searchBar, styles.searchBarDesktop]}
       activeOpacity={0.85}
     >
       <Icon name="search" size={20} stroke={colors.muted} />
-      <Text style={styles.searchPlaceholder}>
-        {isDesktop ? 'Search a destination…' : 'Where do you want to walk?'}
-      </Text>
-      {!isDesktop && (
-        <View style={styles.gpsChip}>
-          <Icon name="gps" size={17} stroke="#fff" />
-        </View>
-      )}
+      <Text style={styles.searchPlaceholder}>Search a destination…</Text>
     </TouchableOpacity>
+  );
+
+  // Two-row From / To panel for the Plan card (desktop) and mobile
+  const SearchPanel = (
+    <View style={styles.searchPanel}>
+      <TouchableOpacity onPress={onFromPress} style={styles.searchPanelRow} activeOpacity={0.85}>
+        <Icon name="pin" size={16} stroke={fromOverride ? colors.forest : colors.muted} width={2} />
+        <Text style={[styles.searchPanelFromText, fromOverride != null && { color: colors.ink }]} numberOfLines={1}>
+          {fromLabel}
+        </Text>
+        {fromOverride != null && (
+          <TouchableOpacity onPress={() => setFromOverride(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="close" size={14} stroke={colors.muted} />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+      <View style={styles.searchPanelSep} />
+      <TouchableOpacity onPress={onSearch} style={styles.searchPanelRow} activeOpacity={0.85}>
+        <Icon name="search" size={17} stroke={colors.muted} />
+        <Text style={styles.searchPlaceholder}>
+          {isDesktop ? 'Search a destination…' : 'Where do you want to walk?'}
+        </Text>
+        {!isDesktop && <View style={styles.gpsChip}><Icon name="gps" size={17} stroke="#fff" /></View>}
+      </TouchableOpacity>
+    </View>
   );
 
   const BestTime = (
@@ -140,20 +202,26 @@ export default function HomeScreen() {
           <View style={{ flexDirection: 'row', gap: 18 }}>
             <View style={[styles.card, { flex: 1.3, padding: 20 }]}>
               <Text style={styles.cardTitle}>Plan a cool walk</Text>
-              <View style={{ marginTop: 14 }}>{SearchBar}</View>
-              <Text style={styles.recentLabel}>RECENT</Text>
-              <RecentRow
-                onPress={onSearch}
-                icon="park" bg="#E6F4E2" color={colors.forest}
-                title="Cubbon Park" meta="1.4 km · 71% shade route"
-                sev="SAFE" sevTone="green"
-              />
-              <RecentRow
-                onPress={onSearch}
-                icon="scan" bg="#E1ECFB" color={colors.coolBlue}
-                title="Metro · MG Road" meta="0.9 km · shaded arcade"
-                sev="HIGH" sevTone="warm"
-              />
+              <View style={{ marginTop: 14 }}>{SearchPanel}</View>
+              {recents.length > 0 && (
+                <>
+                  <Text style={styles.recentLabel}>RECENT</Text>
+                  {recents.map(r => (
+                    <RecentRow
+                      key={r.id}
+                      title={r.name}
+                      meta={formatRelativeDate(r.timestamp)}
+                      onPress={() => {
+                        if (fromLat == null || fromLon == null) return;
+                        router.push({
+                          pathname: '/(tabs)/searching' as any,
+                          params: { startLat: String(fromLat), startLon: String(fromLon), endLat: String(r.lat), endLon: String(r.lon), destName: r.name },
+                        });
+                      }}
+                    />
+                  ))}
+                </>
+              )}
             </View>
             <View style={{ flex: 1 }}>{BestTime}</View>
           </View>
@@ -165,9 +233,12 @@ export default function HomeScreen() {
                 <Text style={{ fontFamily: fonts.uiBold, fontSize: 13, color: colors.forest }}>View all →</Text>
               </TouchableOpacity>
             </View>
-            <View style={{ flexDirection: 'row', gap: 14 }}>
-              {coolSpots.map((s) => <CoolSpotCard key={s.name} spot={s} />)}
-            </View>
+            <CoolSpotsRow
+              spots={nearbySpots}
+              loading={locLoading || spotsLoading}
+              startLat={location?.lat ?? null}
+              startLon={location?.lon ?? null}
+            />
           </View>
         </ScrollView>
       </View>
@@ -202,7 +273,7 @@ export default function HomeScreen() {
           sevLabel={sevLabel}
           aqiIndex={aqiIndex}
         />
-        {SearchBar}
+        {SearchPanel}
 
         <View style={{ flexDirection: 'row', gap: 9 }}>
           <QuickLink onPress={onCoolspots} icon="park" bg="#E6F4E2" color={colors.forest} label="Cool spots" />
@@ -376,7 +447,7 @@ function QuickLink({ icon, bg, color, label, onPress }: any) {
   );
 }
 
-function RecentRow({ icon, bg, color, title, meta, sev, sevTone, onPress }: any) {
+function RecentRow({ icon = 'pin', bg = '#E8F2E6', color = colors.forest, title, meta, sev, sevTone, onPress }: any) {
   const pillBg = sevTone === 'green' ? '#E6F4E2' : '#FCEEDD';
   const pillFg = sevTone === 'green' ? '#16633B' : '#b5560f';
   return (
@@ -386,27 +457,94 @@ function RecentRow({ icon, bg, color, title, meta, sev, sevTone, onPress }: any)
         <Text style={{ fontFamily: fonts.uiBold, fontSize: 14, color: colors.ink }}>{title}</Text>
         <Text style={{ fontFamily: fonts.ui, fontSize: 12, color: colors.muted2 }}>{meta}</Text>
       </View>
-      <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100, backgroundColor: pillBg }}>
-        <Text style={{ fontFamily: fonts.uiBold, fontSize: 12, color: pillFg }}>{sev}</Text>
-      </View>
+      {sev ? (
+        <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100, backgroundColor: pillBg }}>
+          <Text style={{ fontFamily: fonts.uiBold, fontSize: 12, color: pillFg }}>{sev}</Text>
+        </View>
+      ) : (
+        <Icon name="back" size={16} stroke={colors.muted2} style={{ transform: [{ rotate: '180deg' }] } as any} />
+      )}
     </TouchableOpacity>
   );
 }
 
-function CoolSpotCard({ spot }: any) {
-  const map: Record<string, [string, string]> = {
+function CoolSpotsRow({ spots, loading, startLat, startLon }: {
+  spots: CoolSpot[];
+  loading: boolean;
+  startLat: number | null;
+  startLon: number | null;
+}) {
+  const router = useRouter();
+  if (loading) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }}>
+        <ActivityIndicator size="small" color={colors.forest} />
+        <Text style={{ fontFamily: fonts.ui, fontSize: 13, color: colors.muted }}>
+          Finding cool spots nearby…
+        </Text>
+      </View>
+    );
+  }
+  if (spots.length === 0) {
+    return (
+      <View style={[styles.card, { padding: 18, alignItems: 'center' }]}>
+        <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 13, color: colors.muted }}>
+          No cool spots found within 1.5 km
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <View style={{ flexDirection: 'row', gap: 14 }}>
+      {spots.map(s => (
+        <CoolSpotCard
+          key={s.id}
+          spot={s}
+          onPress={() => {
+            if (startLat == null || startLon == null) return;
+            router.push({
+              pathname: '/(tabs)/searching' as any,
+              params: { startLat: String(startLat), startLon: String(startLon), endLat: String(s.lat), endLon: String(s.lon), destName: s.name },
+            });
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+function CoolSpotCard({ spot, onPress }: { spot: CoolSpot; onPress: () => void }) {
+  const chipMap: Record<string, [string, string]> = {
     green: ['#E6F4E2', colors.forest],
     blue: ['#E1ECFB', colors.coolBlue],
   };
-  const [bg, color] = map[spot.tone] || map.green;
+  const [chipBg, chipColor] = chipMap[spot.tone] || chipMap.green;
+  const badgeBg = spot.tone === 'green' ? '#D6F0D0' : '#DDE9F9';
+  const badgeFg = spot.tone === 'green' ? '#16633B'  : '#1E52A0';
+  const distLabel =
+    spot.distanceM < 1000
+      ? `${Math.round(spot.distanceM)} m`
+      : `${(spot.distanceM / 1000).toFixed(1)} km`;
+
   return (
-    <View style={[styles.card, { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }]}>
-      <IconChip name={spot.icon} bg={bg} color={color} size={44} radius={13} iconSize={22} />
-      <View>
-        <Text style={{ fontFamily: fonts.uiBold, fontSize: 14, color: colors.ink }}>{spot.name}</Text>
-        <Text style={{ fontFamily: fonts.ui, fontSize: 12, color: colors.muted2 }}>{spot.meta}</Text>
+    <TouchableOpacity onPress={onPress} style={[styles.card, { flex: 1, padding: 14 }]} activeOpacity={0.82}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <IconChip name={spot.icon} bg={chipBg} color={chipColor} size={42} radius={13} iconSize={21} />
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={{ fontFamily: fonts.uiBold, fontSize: 13, color: colors.ink }}>
+            {spot.name}
+          </Text>
+          <Text style={{ fontFamily: fonts.ui, fontSize: 11.5, color: colors.muted2 }}>
+            {spot.walkMin} min · {distLabel}
+          </Text>
+        </View>
       </View>
-    </View>
+      <View style={{ marginTop: 10, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 100, backgroundColor: badgeBg, alignSelf: 'flex-start' }}>
+        <Text style={{ fontFamily: fonts.uiBold, fontSize: 10, color: badgeFg, letterSpacing: 0.5 }}>
+          {spot.badge}
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -508,6 +646,34 @@ const styles = StyleSheet.create({
     width: 300,
     borderRadius: 12,
     paddingVertical: 9,
+  },
+  searchPanel: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 16,
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 10px 22px -18px rgba(20,40,30,0.4)' }
+      : { shadowColor: '#14281e', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.1, shadowRadius: 11, elevation: 2 }),
+  } as any,
+  searchPanelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 13,
+    paddingHorizontal: 15,
+  },
+  searchPanelSep: {
+    height: 1,
+    backgroundColor: colors.line,
+    marginHorizontal: 13,
+  },
+  searchPanelFromText: {
+    flex: 1,
+    fontFamily: fonts.ui,
+    fontSize: 13,
+    color: colors.muted2,
   },
   searchPlaceholder: {
     color: '#9aa89d',
