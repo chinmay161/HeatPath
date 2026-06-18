@@ -1,10 +1,13 @@
+// No static import of react-leaflet — Leaflet touches `window` at module-eval
+// time, which crashes during Expo Router's SSR pass (Node has no window).
+// We require() it lazily after the typeof-window guard instead.
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from 'react-leaflet';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { fonts } from '../theme/colors';
 import type { ScoredRoute } from '../hooks/useFindRoutes';
 
-// Inject Leaflet CSS from CDN once per page load
+// ─── Leaflet CSS ──────────────────────────────────────────────────────────────
+
 function useLeafletCSS() {
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -18,8 +21,13 @@ function useLeafletCSS() {
   }, []);
 }
 
-// Re-fit map bounds whenever the selected route changes
+// ─── FitBounds ────────────────────────────────────────────────────────────────
+
+// Defined at module level (not inside RouteMap) to keep a stable component
+// reference across renders. Uses require() to get useMap — valid because this
+// component is only ever mounted inside a MapContainer (always client-side).
 function FitBounds({ routes, selectedIdx }: { routes: ScoredRoute[]; selectedIdx: number }) {
+  const { useMap } = require('react-leaflet') as typeof import('react-leaflet');
   const map = useMap();
   useEffect(() => {
     const r = routes[selectedIdx];
@@ -30,17 +38,18 @@ function FitBounds({ routes, selectedIdx }: { routes: ScoredRoute[]; selectedIdx
   return null;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function shadePctToColor(pct: number): string {
-  if (pct >= 60) return '#1C7C4A'; // forest green
-  if (pct >= 40) return '#E5B23C'; // caution amber
-  if (pct >= 20) return '#E8843A'; // high orange
-  return '#C8322A';                // extreme red
+  if (pct >= 60) return '#1C7C4A';
+  if (pct >= 40) return '#E5B23C';
+  if (pct >= 20) return '#E8843A';
+  return '#C8322A';
 }
 
-// Split the full ORS path into N equal-point chunks and assign shade colors.
+// Split the full ORS path into N equal-point chunks and assign shade colours.
 // shade_segments (≤7 values) come from a simplified 8-point path, not the full
-// path, so we approximate by dividing path evenly — visually correct, not
-// meter-accurate to the actual shade boundaries.
+// path, so we approximate by dividing evenly — visually reasonable.
 function buildSegments(
   path: { lat: number; lon: number }[],
   shadeSegs: number[],
@@ -54,8 +63,7 @@ function buildSegments(
   return shadeSegs
     .map((pct, i) => {
       const start = i * chunkSize;
-      // Overlap by one point so adjacent segments connect without a gap
-      const end = Math.min(start + chunkSize + 1, path.length);
+      const end = Math.min(start + chunkSize + 1, path.length); // +1 for line continuity
       return {
         positions: path.slice(start, end).map(p => [p.lat, p.lon] as [number, number]),
         color: shadePctToColor(pct),
@@ -63,6 +71,8 @@ function buildSegments(
     })
     .filter(s => s.positions.length >= 2);
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 type Props = {
   routes: ScoredRoute[];
@@ -83,11 +93,26 @@ export function RouteMap({
   endLon,
   routeTitle,
 }: Props) {
+  // Always call hooks first — no conditional hook calls.
   useLeafletCSS();
+
+  // SSR guard: Leaflet requires window/document. Return a placeholder during
+  // the server rendering pass so the static export doesn't crash.
+  if (typeof window === 'undefined') {
+    return (
+      <View style={[styles.outer, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color="#1C7C4A" />
+      </View>
+    );
+  }
+
+  // Client-only from here. require() is cached by Node/Metro so this is
+  // effectively free on subsequent renders.
+  const { MapContainer, TileLayer, Polyline, CircleMarker } =
+    require('react-leaflet') as typeof import('react-leaflet');
 
   const selected = routes[selectedIdx];
   const segments = selected ? buildSegments(selected.path, selected.shade_segments) : [];
-
   const center: [number, number] = [
     startLat ?? selected?.path[0]?.lat ?? 12.97,
     startLon ?? selected?.path[0]?.lon ?? 77.59,
@@ -95,11 +120,10 @@ export function RouteMap({
 
   return (
     <View style={styles.outer}>
-      {/* Absolute-fill so the map stretches to fill the flex parent */}
       <MapContainer
         center={center}
         zoom={14}
-        // @ts-ignore — react-leaflet style prop is CSSProperties; we pass a compatible object
+        // @ts-ignore — react-leaflet style accepts CSSProperties; we pass a compatible object
         style={styles.mapFill}
         zoomControl
         scrollWheelZoom
@@ -120,7 +144,7 @@ export function RouteMap({
           ) : null,
         )}
 
-        {/* Active route — color-coded by shade segment */}
+        {/* Active route — colour-coded by shade segment */}
         {segments.map((seg, i) => (
           <Polyline
             key={`seg-${selectedIdx}-${i}`}
@@ -129,7 +153,7 @@ export function RouteMap({
           />
         ))}
 
-        {/* Start marker (blue circle) */}
+        {/* Start marker (blue) */}
         {startLat != null && startLon != null && (
           <CircleMarker
             center={[startLat, startLon]}
@@ -138,7 +162,7 @@ export function RouteMap({
           />
         )}
 
-        {/* End marker (green circle) */}
+        {/* End marker (green) */}
         {endLat != null && endLon != null && (
           <CircleMarker
             center={[endLat, endLon]}
@@ -148,7 +172,7 @@ export function RouteMap({
         )}
       </MapContainer>
 
-      {/* Route label chip — sits above the map */}
+      {/* Route label chip */}
       <View style={styles.chip} pointerEvents="none">
         <Text style={styles.chipText}>{routeTitle} route · live</Text>
       </View>
@@ -168,9 +192,9 @@ export function RouteMap({
   );
 }
 
-const SHADOW_WEB = {
-  boxShadow: '0 6px 16px -8px rgba(0,0,0,0.30)',
-} as any;
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const SHADOW = { boxShadow: '0 6px 16px -8px rgba(0,0,0,0.30)' } as any;
 
 const styles = StyleSheet.create({
   outer: {
@@ -197,7 +221,7 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     backgroundColor: '#fff',
     zIndex: 1000,
-    ...SHADOW_WEB,
+    ...SHADOW,
   },
   chipText: {
     fontFamily: fonts.dataBold,
@@ -215,7 +239,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 13,
     zIndex: 1000,
-    ...SHADOW_WEB,
+    ...SHADOW,
   },
   legendItem: {
     flexDirection: 'row',
