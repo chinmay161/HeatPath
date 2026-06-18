@@ -7,6 +7,7 @@ import { colors } from '../../theme/colors';
 import { shadows, spacing, EXTRA_TOP_PADDING } from '../../theme/styles';
 import { TreeDeciduous, Droplet, Building2 } from 'lucide-react-native';
 import CoolSpotsMap from '../../components/CoolSpotsMap';
+import MascotLoader from '../../components/MascotLoader';
 
 const DEFAULT_LAT = 18.9220;
 const DEFAULT_LON = 72.8347;
@@ -167,10 +168,7 @@ export default function Spots() {
 
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: spacing.md, color: colors.textSecondary, fontSize: 13 }}>
-            Finding cool spots near you...
-          </Text>
+          <MascotLoader message="Finding cool spots near you..." size={100} />
         </View>
       ) : (
         <View style={{ flex: 1 }}>

@@ -5,6 +5,7 @@ import { getThermalStress } from '../../utils/thermalStress';
 import { colors } from '../../theme/colors';
 import { shadows, spacing, EXTRA_TOP_PADDING } from '../../theme/styles';
 import SearchCard from '../../components/SearchCard';
+import MascotLoader from '../../components/MascotLoader';
 import ExploreGrid from '../../components/ExploreGrid';
 
 function getGreeting() {
@@ -55,11 +56,10 @@ export default function Home() {
       <View style={{ paddingHorizontal: spacing.xl }}>
         {loading ? (
           <View style={{
-            borderRadius: 20, padding: 24, backgroundColor: colors.surface,
-            alignItems: 'center', justifyContent: 'center', minHeight: 140,
+            borderRadius: 20, backgroundColor: colors.surface,
             ...shadows.sm,
           }}>
-            <ActivityIndicator color={colors.primary} />
+            <MascotLoader message="Checking conditions..." size={80} />
           </View>
         ) : error || heatIndex == null ? (
           <View style={{
