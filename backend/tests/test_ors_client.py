@@ -202,6 +202,58 @@ def test_find_routes_endpoint_integration(httpx_mock, monkeypatch):
     assert data["conditions"]["fetched_at_lon"] == 72.8347
 
 
+def test_find_routes_path_has_multiple_points(monkeypatch):
+    path = [
+        {"lat": 18.9220, "lon": 72.8347},
+        {"lat": 18.9250, "lon": 72.8349},
+        {"lat": 18.9280, "lon": 72.8351},
+        {"lat": 18.9310, "lon": 72.8353},
+        {"lat": 18.9340, "lon": 72.8354},
+        {"lat": 18.9398, "lon": 72.8355},
+    ]
+
+    import app.routers.find_routes as find_routes_router
+
+    async def fake_fetch_candidate_routes(*args, **kwargs):
+        return [path]
+
+    async def fake_get_weather(lat, lon):
+        return {"temperature_c": 34.0, "humidity_pct": 65.0, "feels_like_c": 36.5}
+
+    async def fake_get_aqi(lat, lon):
+        return 80
+
+    async def fake_shade_for_path(route_path):
+        return {
+            "shade_values": [35.0 for _ in range(len(route_path) - 1)],
+            "solar_elevation": 60.0,
+            "solar_multiplier": 1.0,
+            "shade_sources": ["street_type" for _ in range(len(route_path) - 1)],
+        }
+
+    async def fake_crowd_for_path(route_path):
+        return [0.0 for _ in range(len(route_path) - 1)]
+
+    monkeypatch.setattr(find_routes_router, "fetch_candidate_routes", fake_fetch_candidate_routes)
+    monkeypatch.setattr(find_routes_router, "get_weather", fake_get_weather)
+    monkeypatch.setattr(find_routes_router, "get_aqi", fake_get_aqi)
+    monkeypatch.setattr(find_routes_router, "shade_for_path", fake_shade_for_path)
+    monkeypatch.setattr(find_routes_router, "crowd_for_path", fake_crowd_for_path)
+
+    response = client.post(
+        "/find-routes/",
+        json={
+            "start": {"lat": 18.9220, "lon": 72.8347},
+            "end": {"lat": 18.9398, "lon": 72.8355},
+            "n_routes": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    for route in response.json()["routes"]:
+        assert len(route["path"]) > 2
+
+
 @pytest.mark.asyncio
 async def test_fetch_candidate_routes_deduplication(httpx_mock):
     # Mock response returning two routes: Route 1 and Route 2.
