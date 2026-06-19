@@ -93,3 +93,23 @@ class ScoredRoutesResponse(BaseModel):
     routes:     List[ScoredRoute]  = Field(..., description="Ranked scored routes")
     conditions: ConditionsSummary  = Field(..., description="Environmental conditions summary")
     model_config = ConfigDict(from_attributes=True)
+
+
+class HeatZonePoint(BaseModel):
+    """A single grid point for the heat map gradient overlay."""
+    lat: float
+    lon: float
+    comfort_score: float
+    shade_pct: float
+    source: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HeatZonesResponse(BaseModel):
+    """Response schema for heat-zone grid data."""
+    grid: list[HeatZonePoint]
+    resolution: int
+    bounds: dict[str, float]
+    conditions: dict
+    generated_at: str
+    model_config = ConfigDict(from_attributes=True)
