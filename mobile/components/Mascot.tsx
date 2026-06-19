@@ -24,8 +24,21 @@ function MascotVideo({ state = 'blink' }: MascotVideoProps) {
   const player = useVideoPlayer(source, (p) => {
     p.loop = true;
     p.muted = true;
-    p.play();
   });
+
+  React.useEffect(() => {
+    player.loop = true;
+    player.muted = true;
+
+    const playTimer = setTimeout(() => {
+      player.play();
+    }, 0);
+
+    return () => {
+      clearTimeout(playTimer);
+      player.pause();
+    };
+  }, [player]);
 
   return (
     <VideoView
@@ -37,7 +50,8 @@ function MascotVideo({ state = 'blink' }: MascotVideoProps) {
       ] as any}
       contentFit="cover"
       nativeControls={false}
-      allowsFullscreen={false}
+      fullscreenOptions={{ enable: false }}
+      playsInline
     />
   );
 }
