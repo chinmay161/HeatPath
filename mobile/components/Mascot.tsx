@@ -14,12 +14,36 @@ const SOURCES: Record<MascotState, any> = {
   alert: require('../assets/mascot/alert.mp4'),
 };
 
+const OBJECT_POSITIONS: Record<MascotState, string> = {
+  blink: '50% 26%',
+  walking: '50% 44%',
+  excited: '50% 24%',
+  disappointed: '50% 26%',
+  mvp: '50% 22%',
+  alert: '50% 24%',
+};
+
+const CONTENT_FITS: Record<MascotState, 'cover' | 'contain'> = {
+  blink: 'contain',
+  walking: 'cover',
+  excited: 'contain',
+  disappointed: 'contain',
+  mvp: 'contain',
+  alert: 'contain',
+};
+
 interface MascotVideoProps {
   state?: MascotState;
+  objectPosition?: string;
+  contentFit?: 'cover' | 'contain';
 }
 
 // Inner component — must be a separate component so useVideoPlayer runs per instance
-function MascotVideo({ state = 'blink' }: MascotVideoProps) {
+function MascotVideo({
+  state = 'blink',
+  objectPosition = OBJECT_POSITIONS[state],
+  contentFit = CONTENT_FITS[state],
+}: MascotVideoProps) {
   const source = SOURCES[state];
   const player = useVideoPlayer(source, (p) => {
     p.loop = true;
@@ -45,10 +69,11 @@ function MascotVideo({ state = 'blink' }: MascotVideoProps) {
       player={player}
       style={[
         StyleSheet.absoluteFill,
+        { width: '100%', height: '100%' },
         // On web the video background is removed via multiply blend mode (matching the reference)
-        Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : null,
+        Platform.OS === 'web' ? { mixBlendMode: 'multiply', objectPosition } : null,
       ] as any}
-      contentFit="cover"
+      contentFit={contentFit}
       nativeControls={false}
       fullscreenOptions={{ enable: false }}
       playsInline
@@ -60,12 +85,14 @@ function MascotVideo({ state = 'blink' }: MascotVideoProps) {
 interface MascotProps {
   state?: MascotState;
   style?: any;
+  objectPosition?: string;
+  contentFit?: 'cover' | 'contain';
 }
 
-export function Mascot({ state = 'blink', style }: MascotProps) {
+export function Mascot({ state = 'blink', style, objectPosition, contentFit }: MascotProps) {
   return (
     <View style={[StyleSheet.absoluteFill, style]}>
-      <MascotVideo state={state} />
+      <MascotVideo state={state} objectPosition={objectPosition} contentFit={contentFit} />
     </View>
   );
 }
@@ -76,9 +103,18 @@ interface MascotBadgeProps {
   size?: number;
   variant?: 'alert' | 'dark' | '';
   alertDot?: boolean;
+  objectPosition?: string;
+  contentFit?: 'cover' | 'contain';
 }
 
-export function MascotBadge({ state = 'blink', size = 44, variant = '', alertDot }: MascotBadgeProps) {
+export function MascotBadge({
+  state = 'blink',
+  size = 44,
+  variant = '',
+  alertDot,
+  objectPosition,
+  contentFit,
+}: MascotBadgeProps) {
   const isAlert = variant === 'alert';
 
   return (
@@ -100,7 +136,7 @@ export function MascotBadge({ state = 'blink', size = 44, variant = '', alertDot
         } as any,
       ]}
     >
-      <Mascot state={state} />
+      <Mascot state={state} objectPosition={objectPosition} contentFit={contentFit} />
       {alertDot && <View style={styles.dot} />}
     </View>
   );
