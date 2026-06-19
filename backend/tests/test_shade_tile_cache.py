@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 import os
 import re
 import sqlite3
@@ -40,6 +41,27 @@ def test_snap_to_tile_precision():
 def test_tile_key_format():
     key = tile_key(18.9347, 72.8353)
     assert re.match(r"^\d+\.\d{4}_\d+\.\d{4}$", key)
+
+@pytest.mark.asyncio
+async def test_fetch_shade_tiles_limited_caps_concurrency(monkeypatch):
+    active = 0
+    max_active = 0
+
+    async def fake_fetch_shade_for_tile(key):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return {"shade_pct": 25.0, "source": "street_type"}
+
+    monkeypatch.setattr(osm_shade, "MAX_CONCURRENT_TILE_FETCHES", 2)
+    monkeypatch.setattr(osm_shade, "fetch_shade_for_tile", fake_fetch_shade_for_tile)
+
+    results = await osm_shade._fetch_shade_tiles_limited([f"18.9000_72.{i:04d}" for i in range(8)])
+
+    assert len(results) == 8
+    assert max_active == 2
 
 @pytest.mark.asyncio
 async def test_bulk_lookup_returns_hits_only():

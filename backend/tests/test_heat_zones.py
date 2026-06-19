@@ -1,3 +1,6 @@
+import asyncio
+
+import pytest
 from fastapi.testclient import TestClient
 
 import app.routers.heat_zones as heat_zones
@@ -109,6 +112,14 @@ def test_heat_zones_grid_point_count(monkeypatch):
     assert len(response.json()["grid"]) == 121
 
 
+def test_heat_zones_without_trailing_slash_does_not_redirect(monkeypatch):
+    _install_heat_zone_mocks(monkeypatch)
+
+    response = client.get("/heat-zones", params=_params(resolution=10), follow_redirects=False)
+
+    assert response.status_code == 200
+
+
 def test_heat_zones_dedupes_tile_lookups(monkeypatch):
     counters = {}
     _install_heat_zone_mocks(monkeypatch, counters)
@@ -142,3 +153,33 @@ def test_heat_zones_response_cache_hit(monkeypatch):
     assert counters["fetch_shade_for_tile"] > 0
     assert counters["get_tiles"] == 1
     assert first.json() == second.json()
+
+
+@pytest.mark.asyncio
+async def test_heat_zones_limits_tile_fetch_concurrency(monkeypatch):
+    active = 0
+    max_active = 0
+
+    async def fake_get_tiles(keys):
+        return {}
+
+    async def fake_store_tiles(tiles):
+        return None
+
+    async def fake_fetch_shade_for_tile(key):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return _tile_fixture(key)
+
+    monkeypatch.setattr(heat_zones, "MAX_CONCURRENT_TILE_FETCHES", 3)
+    monkeypatch.setattr(heat_zones, "get_tiles", fake_get_tiles)
+    monkeypatch.setattr(heat_zones, "store_tiles", fake_store_tiles)
+    monkeypatch.setattr(heat_zones, "fetch_shade_for_tile", fake_fetch_shade_for_tile)
+
+    grid_points = [(18.0, 72.0 + i * 0.01) for i in range(12)]
+    await heat_zones._load_shade_tiles_for_grid(grid_points)
+
+    assert max_active == 3
