@@ -8,8 +8,11 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.models.schemas import HeatZonesResponse
+from app.services.comfort_scorer import score_segment
 from app.services.osm_shade import fetch_shade_for_tile
 from app.services.shade_tile_cache import get_tiles, store_tiles, tile_key
+from app.services.solar import get_solar_position
+from app.services.weather import compute_heat_index, get_aqi, get_weather
 
 router = APIRouter(prefix="/heat-zones", tags=["Heat Zones"])
 logger = logging.getLogger(__name__)
@@ -85,6 +88,28 @@ async def _load_shade_tiles_for_grid(
     return cached, point_keys, initially_cached_keys
 
 
+async def _load_center_conditions(north: float, south: float, east: float, west: float) -> tuple[float, float, dict]:
+    """Fetch weather, AQI, and solar context once at the viewport center."""
+    center_lat = (north + south) / 2
+    center_lon = (east + west) / 2
+    weather, raw_aqi = await asyncio.gather(
+        get_weather(center_lat, center_lon),
+        get_aqi(center_lat, center_lon),
+    )
+    solar = get_solar_position(center_lat, center_lon)
+    heat_index = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
+    return heat_index, float(raw_aqi), solar
+
+
+def _solar_phase(solar: dict) -> str:
+    """Map solar position to the phase string exposed to the frontend."""
+    if solar.get("is_night"):
+        return "night"
+    if solar.get("elevation", 45.0) <= 10.0:
+        return "golden_hour"
+    return "day"
+
+
 @router.get("/", response_model=HeatZonesResponse)
 async def get_heat_zones(
     north: float = Query(..., description="Northern latitude of visible viewport"),
@@ -97,14 +122,23 @@ async def get_heat_zones(
     _validate_bounds(north, south, east, west)
     clamped_resolution = _clamp_resolution(resolution)
     grid_points = _generate_grid_points(north, south, east, west, clamped_resolution)
-    shade_tiles, point_keys, initially_cached_keys = await _load_shade_tiles_for_grid(grid_points)
+    (shade_tiles, point_keys, initially_cached_keys), (heat_index, raw_aqi, solar) = await asyncio.gather(
+        _load_shade_tiles_for_grid(grid_points),
+        _load_center_conditions(north, south, east, west),
+    )
 
     return HeatZonesResponse(
         grid=[
             {
                 "lat": lat,
                 "lon": lon,
-                "comfort_score": 0.0,
+                "comfort_score": score_segment(
+                    shade_tiles[point_keys[(lat, lon)]]["shade_pct"],
+                    heat_index,
+                    raw_aqi,
+                    5,
+                    5,
+                ),
                 "shade_pct": shade_tiles[point_keys[(lat, lon)]]["shade_pct"],
                 "source": (
                     "cached"
@@ -116,6 +150,6 @@ async def get_heat_zones(
         ],
         resolution=clamped_resolution,
         bounds={"north": north, "south": south, "east": east, "west": west},
-        conditions={"heat_index": 0.0, "aqi": 0.0, "solar_phase": "day"},
+        conditions={"heat_index": heat_index, "aqi": raw_aqi, "solar_phase": _solar_phase(solar)},
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
