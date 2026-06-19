@@ -9,6 +9,7 @@ type HeatZoneMapProps = {
   grid: HeatZonePoint[];
   loading?: boolean;
   message?: string | null;
+  onViewportChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
 };
 
 const INITIAL_REGION = {
@@ -22,7 +23,16 @@ function useNativeHeatmap(): boolean {
   return Platform.OS === 'android' && typeof Heatmap !== 'undefined';
 }
 
-export function HeatZoneMap({ grid, loading = false, message = null }: HeatZoneMapProps) {
+function zoomFromLongitudeDelta(longitudeDelta: number): number {
+  return Math.log2(360 / Math.max(longitudeDelta, 0.000001));
+}
+
+export function HeatZoneMap({
+  grid,
+  loading = false,
+  message = null,
+  onViewportChange,
+}: HeatZoneMapProps) {
   const canUseHeatmap = useNativeHeatmap();
 
   return (
@@ -34,6 +44,28 @@ export function HeatZoneMap({ grid, loading = false, message = null }: HeatZoneM
         showsUserLocation
         showsCompass={false}
         toolbarEnabled={false}
+        onMapReady={() => {
+          onViewportChange?.(
+            {
+              north: INITIAL_REGION.latitude + INITIAL_REGION.latitudeDelta / 2,
+              south: INITIAL_REGION.latitude - INITIAL_REGION.latitudeDelta / 2,
+              east: INITIAL_REGION.longitude + INITIAL_REGION.longitudeDelta / 2,
+              west: INITIAL_REGION.longitude - INITIAL_REGION.longitudeDelta / 2,
+            },
+            zoomFromLongitudeDelta(INITIAL_REGION.longitudeDelta),
+          );
+        }}
+        onRegionChangeComplete={region => {
+          onViewportChange?.(
+            {
+              north: region.latitude + region.latitudeDelta / 2,
+              south: region.latitude - region.latitudeDelta / 2,
+              east: region.longitude + region.longitudeDelta / 2,
+              west: region.longitude - region.longitudeDelta / 2,
+            },
+            zoomFromLongitudeDelta(region.longitudeDelta),
+          );
+        }}
       >
         {canUseHeatmap ? (
           <Heatmap

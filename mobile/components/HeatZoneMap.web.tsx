@@ -8,6 +8,7 @@ type HeatZoneMapProps = {
   grid: HeatZonePoint[];
   loading?: boolean;
   message?: string | null;
+  onViewportChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
 };
 
 function useLeafletCSS() {
@@ -27,7 +28,12 @@ function markerRadiusForZoom(zoom: number): number {
   return Math.max(18, Math.min(44, Math.round(zoom * 2.4)));
 }
 
-export function HeatZoneMap({ grid, loading = false, message = null }: HeatZoneMapProps) {
+export function HeatZoneMap({
+  grid,
+  loading = false,
+  message = null,
+  onViewportChange,
+}: HeatZoneMapProps) {
   useLeafletCSS();
 
   if (typeof window === 'undefined') {
@@ -40,6 +46,51 @@ export function HeatZoneMap({ grid, loading = false, message = null }: HeatZoneM
 
   const { MapContainer, TileLayer, CircleMarker, useMap } =
     require('react-leaflet') as typeof import('react-leaflet');
+
+  function ViewportEvents({ onViewportChange: onChange }: Pick<HeatZoneMapProps, 'onViewportChange'>) {
+    const { useMapEvents } = require('react-leaflet') as typeof import('react-leaflet');
+    const map = useMapEvents({
+      moveend: () => {
+        const bounds = map.getBounds();
+        onChange?.(
+          {
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest(),
+          },
+          map.getZoom(),
+        );
+      },
+      zoomend: () => {
+        const bounds = map.getBounds();
+        onChange?.(
+          {
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest(),
+          },
+          map.getZoom(),
+        );
+      },
+    });
+
+    useEffect(() => {
+      const bounds = map.getBounds();
+      onChange?.(
+        {
+          north: bounds.getNorth(),
+          south: bounds.getSouth(),
+          east: bounds.getEast(),
+          west: bounds.getWest(),
+        },
+        map.getZoom(),
+      );
+    }, [map, onChange]);
+
+    return null;
+  }
 
   function HeatZoneLayer() {
     const map = useMap();
@@ -76,6 +127,7 @@ export function HeatZoneMap({ grid, loading = false, message = null }: HeatZoneM
         attributionControl={false}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <ViewportEvents onViewportChange={onViewportChange} />
         <HeatZoneLayer />
       </MapContainer>
 
