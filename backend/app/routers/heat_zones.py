@@ -23,6 +23,7 @@ MAX_RESOLUTION = 25
 MAX_VIEWPORT_DEGREES = 0.5
 MAX_RESPONSE_CACHE_ENTRIES = 50
 RESPONSE_CACHE_BUCKET_SECONDS = 900
+MAX_CONCURRENT_TILE_FETCHES = 8
 _response_cache: dict[str, HeatZonesResponse] = {}
 
 
@@ -97,8 +98,14 @@ async def _load_shade_tiles_for_grid(
     missing_keys = [key for key in unique_keys if key not in cached]
 
     if missing_keys:
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_TILE_FETCHES)
+
+        async def fetch_limited(key: str):
+            async with semaphore:
+                return await fetch_shade_for_tile(key)
+
         results = await asyncio.gather(
-            *[fetch_shade_for_tile(key) for key in missing_keys],
+            *[fetch_limited(key) for key in missing_keys],
             return_exceptions=True,
         )
         fetched = {}
@@ -136,6 +143,7 @@ def _solar_phase(solar: dict) -> str:
     return "day"
 
 
+@router.get("", response_model=HeatZonesResponse, include_in_schema=False)
 @router.get("/", response_model=HeatZonesResponse)
 async def get_heat_zones(
     north: float = Query(..., description="Northern latitude of visible viewport"),

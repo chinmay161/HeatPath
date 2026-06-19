@@ -25,6 +25,7 @@ from typing import List, Dict, Any
 from app.services.shade_tile_cache import tile_key, get_tiles, store_tiles
 
 logger = logging.getLogger(__name__)
+MAX_CONCURRENT_TILE_FETCHES = 8
 
 OVERPASS_HEADERS = {
     "User-Agent": "HeatPath/1.0 (heatpath-app@gmail.com)",
@@ -409,6 +410,20 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
         "solar_multiplier": 1.0
     }
 
+
+async def _fetch_shade_tiles_limited(tile_keys: List[str]) -> list:
+    """Fetch missing tile shade data without opening too many sockets at once."""
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_TILE_FETCHES)
+
+    async def fetch_limited(key: str):
+        async with semaphore:
+            return await fetch_shade_for_tile(key)
+
+    return await asyncio.gather(
+        *[fetch_limited(key) for key in tile_keys],
+        return_exceptions=True,
+    )
+
 async def shade_for_path(path: List[Dict[str, float]]) -> dict:
     """
     Compute shade percentages for each segment of a path using SQLite tile cache batching.
@@ -442,8 +457,7 @@ async def shade_for_path(path: List[Dict[str, float]]) -> dict:
 
     # Step 5 — fetch missing tiles in parallel:
     if missing_keys:
-        tasks = [fetch_shade_for_tile(k) for k in missing_keys]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await _fetch_shade_tiles_limited(missing_keys)
         fetched = {}
         for key, result in zip(missing_keys, results):
             if isinstance(result, Exception):
