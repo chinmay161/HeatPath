@@ -3,6 +3,7 @@ Router for heat map gradient grid data.
 """
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -20,11 +21,36 @@ logger = logging.getLogger(__name__)
 MIN_RESOLUTION = 8
 MAX_RESOLUTION = 25
 MAX_VIEWPORT_DEGREES = 0.5
+MAX_RESPONSE_CACHE_ENTRIES = 50
+RESPONSE_CACHE_BUCKET_SECONDS = 900
+_response_cache: dict[str, HeatZonesResponse] = {}
 
 
 def _clamp_resolution(resolution: int) -> int:
     """Clamp the requested grid resolution to the supported range."""
     return max(MIN_RESOLUTION, min(MAX_RESOLUTION, resolution))
+
+
+def _response_cache_key(
+    north: float,
+    south: float,
+    east: float,
+    west: float,
+    resolution: int,
+) -> str:
+    """Build the 15-minute response cache key for a rounded viewport."""
+    return (
+        f"{round(north, 2)}_{round(south, 2)}_{round(east, 2)}_"
+        f"{round(west, 2)}_{resolution}_{int(time.time() // RESPONSE_CACHE_BUCKET_SECONDS)}"
+    )
+
+
+def _store_response_cache(key: str, response: HeatZonesResponse) -> None:
+    """Store a heat-zones response and evict oldest entries above the size cap."""
+    _response_cache[key] = response
+    while len(_response_cache) > MAX_RESPONSE_CACHE_ENTRIES:
+        oldest_key = next(iter(_response_cache))
+        _response_cache.pop(oldest_key)
 
 
 def _validate_bounds(north: float, south: float, east: float, west: float) -> None:
@@ -121,13 +147,17 @@ async def get_heat_zones(
     """Return a validated heat-zone grid for the visible map viewport."""
     _validate_bounds(north, south, east, west)
     clamped_resolution = _clamp_resolution(resolution)
+    cache_key = _response_cache_key(north, south, east, west, clamped_resolution)
+    if cache_key in _response_cache:
+        return _response_cache[cache_key]
+
     grid_points = _generate_grid_points(north, south, east, west, clamped_resolution)
     (shade_tiles, point_keys, initially_cached_keys), (heat_index, raw_aqi, solar) = await asyncio.gather(
         _load_shade_tiles_for_grid(grid_points),
         _load_center_conditions(north, south, east, west),
     )
 
-    return HeatZonesResponse(
+    response = HeatZonesResponse(
         grid=[
             {
                 "lat": lat,
@@ -153,3 +183,5 @@ async def get_heat_zones(
         conditions={"heat_index": heat_index, "aqi": raw_aqi, "solar_phase": _solar_phase(solar)},
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
+    _store_response_cache(cache_key, response)
+    return response
