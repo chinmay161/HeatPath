@@ -1,13 +1,18 @@
 """
 Router for heat map gradient grid data.
 """
+import asyncio
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.models.schemas import HeatZonesResponse
+from app.services.osm_shade import fetch_shade_for_tile
+from app.services.shade_tile_cache import get_tiles, store_tiles, tile_key
 
 router = APIRouter(prefix="/heat-zones", tags=["Heat Zones"])
+logger = logging.getLogger(__name__)
 
 MIN_RESOLUTION = 8
 MAX_RESOLUTION = 25
@@ -51,6 +56,35 @@ def _generate_grid_points(
     ]
 
 
+async def _load_shade_tiles_for_grid(
+    grid_points: list[tuple[float, float]],
+) -> tuple[dict[str, dict], dict[tuple[float, float], str], set[str]]:
+    """Load tile shade data for grid points with snap, dedupe, and batch fetch."""
+    point_keys = {(lat, lon): tile_key(lat, lon) for lat, lon in grid_points}
+    unique_keys = list(set(point_keys.values()))
+
+    cached = await get_tiles(unique_keys)
+    initially_cached_keys = set(cached.keys())
+    missing_keys = [key for key in unique_keys if key not in cached]
+
+    if missing_keys:
+        results = await asyncio.gather(
+            *[fetch_shade_for_tile(key) for key in missing_keys],
+            return_exceptions=True,
+        )
+        fetched = {}
+        for key, result in zip(missing_keys, results):
+            if isinstance(result, Exception):
+                logger.warning("[heat-zones] tile %s fetch failed: %s", key, result)
+                fetched[key] = {"shade_pct": 25.0, "source": "fallback"}
+            else:
+                fetched[key] = result
+        await store_tiles(fetched)
+        cached.update(fetched)
+
+    return cached, point_keys, initially_cached_keys
+
+
 @router.get("/", response_model=HeatZonesResponse)
 async def get_heat_zones(
     north: float = Query(..., description="Northern latitude of visible viewport"),
@@ -63,6 +97,7 @@ async def get_heat_zones(
     _validate_bounds(north, south, east, west)
     clamped_resolution = _clamp_resolution(resolution)
     grid_points = _generate_grid_points(north, south, east, west, clamped_resolution)
+    shade_tiles, point_keys, initially_cached_keys = await _load_shade_tiles_for_grid(grid_points)
 
     return HeatZonesResponse(
         grid=[
@@ -70,8 +105,12 @@ async def get_heat_zones(
                 "lat": lat,
                 "lon": lon,
                 "comfort_score": 0.0,
-                "shade_pct": 0.0,
-                "source": "pending",
+                "shade_pct": shade_tiles[point_keys[(lat, lon)]]["shade_pct"],
+                "source": (
+                    "cached"
+                    if point_keys[(lat, lon)] in initially_cached_keys
+                    else shade_tiles[point_keys[(lat, lon)]].get("source", "fallback")
+                ),
             }
             for lat, lon in grid_points
         ],
