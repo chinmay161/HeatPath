@@ -599,3 +599,99 @@ To eliminate mathematical discontinuities and step functions, and to model the t
   - `shadow_length = 250` -> 30%
 - **Tree Canopy Scaling:** Rather than a flat +12% per tree node, trees now parse crown/radius tags (e.g. `crown_diameter`, `radius`, `width`, `height`) and scale their contribution proportionally (capped at 25%).
 - **Building Shadow Direction Vector:** Incorporated a solar azimuth factor. If tile coordinates are provided, the building center and bearing from the building to the tile are calculated. The building's shade contribution is scaled by the cosine of the angle difference between this bearing and the shadow direction (direction opposite to the sun's azimuth).
+
+## GET /heat-zones — Gradient Heat Map Backend
+
+### Purpose
+`GET /heat-zones` returns a dense grid of scored points for the map heat overlay. This is designed for a smooth weather-radar-style colour gradient, not discrete named pins.
+
+### Request
+```http
+GET /heat-zones?north={lat}&south={lat}&east={lon}&west={lon}&resolution=15
+```
+
+Query parameters:
+- `north`, `south`, `east`, `west`: visible map viewport bounds.
+- `resolution`: number of grid cells per side. Default is `15`, which produces `(15 + 1) * (15 + 1) = 256` points because the grid includes edges.
+
+### Validation and Abuse Limits
+Resolution is clamped between `8` and `25`. This keeps the frontend dense enough for a gradient while preventing very expensive requests. At the upper bound, the endpoint returns `26 * 26 = 676` grid points.
+
+The viewport is capped to less than `0.5° x 0.5°`. Requests with `north <= south` or `east <= west` return `400 Bad Request`. Oversized viewports return:
+```json
+{"detail": "Viewport too large — zoom in for heat map data"}
+```
+This prevents accidental or abusive calls for enormous regions such as all of India.
+
+### Weather and AQI Strategy
+Weather and AQI are fetched once at the viewport center:
+```python
+center_lat = (north + south) / 2
+center_lon = (east + west) / 2
+```
+The endpoint calls `get_weather(center_lat, center_lon)` and `get_aqi(center_lat, center_lon)` exactly once per uncached response, then computes heat index once with `compute_heat_index(...)`. This avoids 256+ weather/AQI API calls per map view. Over a city-scale viewport, heat and AQI vary slowly compared to shade, so center-point conditions are a practical performance tradeoff.
+
+### Shade Tile Cache Reuse
+Shade varies hyperlocally, so each grid point uses the existing 250m tile cache:
+1. Generate the inclusive-edge grid points.
+2. Snap every point to an existing tile key through `shade_tile_cache.tile_key(...)`.
+3. Deduplicate keys.
+4. Bulk lookup with `get_tiles(unique_keys)`.
+5. Fetch only missing tiles in parallel with `asyncio.gather(fetch_shade_for_tile(...))`.
+6. Store missing results with `store_tiles(...)`.
+7. Map each grid point back to its tile's `shade_pct` and `source`.
+
+No second SQLite table was added. The endpoint reuses the existing `shade_tiles` table and keeps response caching separate.
+
+### Response-Level Cache
+Heat-zone responses are cached in-memory at the router level for the current 15-minute bucket. The key format is:
+```python
+cache_key = f"{round(north,2)}_{round(south,2)}_{round(east,2)}_{round(west,2)}_{resolution}_{int(time.time() // 900)}"
+```
+The cache is a module-level dict in `app/routers/heat_zones.py`, separate from the SQLite tile cache. It is capped at 50 entries and evicts the oldest inserted entry on overflow.
+
+### Response Shape
+```json
+{
+  "grid": [
+    {
+      "lat": 18.922,
+      "lon": 72.8347,
+      "comfort_score": 0.62,
+      "shade_pct": 35.0,
+      "source": "street_type"
+    }
+  ],
+  "resolution": 15,
+  "bounds": {
+    "north": 18.95,
+    "south": 18.92,
+    "east": 72.85,
+    "west": 72.83
+  },
+  "conditions": {
+    "heat_index": 36.7,
+    "aqi": 56.0,
+    "solar_phase": "day"
+  },
+  "generated_at": "2026-06-19T12:00:00+00:00"
+}
+```
+
+`comfort_score` is normalized from `0.0` to `1.0` for gradient colours. `shade_pct` and `source` are included for tooltips/debugging. Possible sources include `"overpass"`, `"street_type"`, `"cached"`, `"night"`, and fallback values from the existing shade pipeline.
+
+### /find-routes Geometry Verification
+Live local integration verification was run against:
+```http
+POST http://127.0.0.1:8000/find-routes/
+```
+with:
+```json
+{
+  "start": {"lat": 18.9220, "lon": 72.8347},
+  "end": {"lat": 18.9398, "lon": 72.8355},
+  "n_routes": 2
+}
+```
+
+Result: path geometry is intact. The live response returned 1 route with `path` containing 76 coordinate points, which is more than start/end only. The route had `segment_count = 7`, confirming scoring still uses the Week 3 simplified path internally while the API response preserves rich route geometry for map drawing. No geometry fix was required, so no `fix: verify and restore find-routes path geometry` commit was created.
