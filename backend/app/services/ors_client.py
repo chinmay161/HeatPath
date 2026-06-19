@@ -49,8 +49,10 @@ async def fetch_candidate_routes(
     body = {
         "coordinates": [[start_lon, start_lat], [end_lon, end_lat]],
         "alternative_routes": {
-            "share_factor":  0.4,
-            "weight_factor": 1.6,
+            # Short walking alternatives commonly share streets near their
+            # endpoints; 0.4 caused ORS to return only the primary route.
+            "share_factor":  0.8,
+            "weight_factor": 2.0,
             "target_count":  n,
         },
         "geometry_simplify": False,
@@ -134,11 +136,18 @@ async def fetch_candidate_routes(
             close = sum(
                 1 for pt1 in sample
                 if any(
-                    haversine_distance(pt1["lat"], pt1["lon"], pt2["lat"], pt2["lon"]) <= 30
+                    haversine_distance(pt1["lat"], pt1["lon"], pt2["lat"], pt2["lon"]) <= 10
                     for pt2 in accepted_sample
                 )
             )
-            if close / len(sample) > 0.8:
+            accepted_close = sum(
+                1 for pt2 in accepted_sample
+                if any(
+                    haversine_distance(pt2["lat"], pt2["lon"], pt1["lat"], pt1["lon"]) <= 10
+                    for pt1 in sample
+                )
+            )
+            if close / len(sample) >= 0.95 and accepted_close / len(accepted_sample) >= 0.95:
                 logger.warning("Deduplication dropped a duplicate route")
                 is_dup = True
                 break
