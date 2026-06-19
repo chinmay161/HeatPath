@@ -695,3 +695,71 @@ with:
 ```
 
 Result: path geometry is intact. The live response returned 1 route with `path` containing 76 coordinate points, which is more than start/end only. The route had `segment_count = 7`, confirming scoring still uses the Week 3 simplified path internally while the API response preserves rich route geometry for map drawing. No geometry fix was required, so no `fix: verify and restore find-routes path geometry` commit was created.
+
+## Heat Map Screen — Gradient Overlay Wiring
+
+### Edited Screen and Supporting Files
+The Heat Map tab screen is `mobile/app/(tabs)/map.tsx`. It now renders a live platform-aware heat-zone map instead of the previous mock severity grid and demo-data banner.
+
+Supporting files added or updated:
+- `mobile/config/api.ts`: added `getHeatZones(bounds, resolution)` and typed Heat Zones response models.
+- `mobile/utils/scoreToColor.ts`: added the shared comfort-score colour interpolation utility.
+- `mobile/components/HeatZoneMap.web.tsx`: web Leaflet heat-zone map.
+- `mobile/components/HeatZoneMap.native.tsx`: native `react-native-maps` heat-zone map.
+- `mobile/components/HeatZoneMap.tsx`: base native export for platform resolution.
+
+### Gradient Approach
+Web uses `react-leaflet` with overlapping semi-transparent `CircleMarker` points. `leaflet.heat` was not installed, and no new web dependency was added. The circle markers avoid bundle growth while still creating a soft blended radar-style overlay from the dense backend grid.
+
+Native uses `react-native-maps`. The Expo-compatible version installed is `react-native-maps@1.27.2`. Android uses the exported `Heatmap` component with `PROVIDER_GOOGLE` when available:
+```tsx
+<Heatmap
+  points={grid.map(p => ({
+    latitude: p.lat,
+    longitude: p.lon,
+    weight: p.comfort_score,
+  }))}
+  radius={50}
+  opacity={0.6}
+/>
+```
+If native `Heatmap` is unavailable or the platform is not Android/Google provider, the component falls back to rendering semi-transparent `Circle` overlays per grid point using the same `scoreToColor(...)` mapping.
+
+### Viewport Refetching
+The Heat Map screen owns fetch state and does not add client-side response caching because the backend already caches viewport+resolution results for 15 minutes.
+
+Viewport changes are emitted by the platform map components:
+- Web: `moveend` and `zoomend` from Leaflet.
+- Native: `onRegionChangeComplete` from `react-native-maps`.
+
+`mobile/app/(tabs)/map.tsx` debounces viewport changes for 500 ms using `useRef`, `setTimeout`, and `clearTimeout`. The fetch call is:
+```ts
+getHeatZones(bounds, resolution)
+```
+
+Zoom level maps to backend grid resolution with:
+```ts
+resolution = clamp(Math.round(zoom * 1.2), 8, 25)
+```
+
+The screen also performs an initial fetch for a Mumbai viewport so first load shows a real loading state immediately while waiting for map bounds events.
+
+### Loading and Error States
+The old demo-data banner was removed completely from `mobile/app/(tabs)/map.tsx`.
+
+First load shows:
+```text
+Reading the city heat...
+```
+
+Expected oversized viewport errors from the backend are shown as:
+```text
+Zoom in to see the heat map
+```
+
+Other fetch failures follow the existing app tone:
+```text
+Could not load heat map. Is the backend running?
+```
+
+The map remains interactive during fetches; loading and error messages are lightweight overlay chips rather than blocking panels.
