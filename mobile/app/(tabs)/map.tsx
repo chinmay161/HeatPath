@@ -1,11 +1,10 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { Mascot, MascotBadge } from '../../components/Mascot';
 import { Button } from '../../components/ui';
-import { BlockedBanner } from '../../components/BlockedBanner';
 import { HeatZoneMap } from '../../components/HeatZoneMap';
 import Icon from '../../components/Icon';
 import {
@@ -61,7 +60,7 @@ export default function MapScreen() {
   const [grid, setGrid] = useState<HeatZonePoint[]>([]);
   const [conditions, setConditions] = useState<HeatZonesResponse['conditions'] | null>(null);
   const [resolution, setResolution] = useState(15);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchZones = useCallback(async (bounds: HeatZonesBounds, nextResolution: number) => {
@@ -92,6 +91,10 @@ export default function MapScreen() {
     debounceRef.current = setTimeout(() => {
       fetchZones(bounds, nextResolution);
     }, 500);
+  }, [fetchZones]);
+
+  useEffect(() => {
+    fetchZones(DEFAULT_BOUNDS, 15);
   }, [fetchZones]);
 
   const statusMessage =
@@ -146,10 +149,6 @@ export default function MapScreen() {
         </Text>
       </View>
     </View>
-  );
-
-  const LiveDataBanner = (
-    <BlockedBanner dark message="Live heat-zone grid connected — refreshing with the map" />
   );
 
   const Stats = (
@@ -269,7 +268,6 @@ export default function MapScreen() {
 
         <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} showsVerticalScrollIndicator={false}>
           {Advisory}
-          {LiveDataBanner}
           {Stats}
           <View style={{ flexDirection: 'row', gap: 16, minHeight: 420 }}>
             {MapCard}
@@ -317,7 +315,6 @@ export default function MapScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 13 }} showsVerticalScrollIndicator={false}>
         {Advisory}
-        {LiveDataBanner}
         {Stats}
         {MapCard}
         <View style={{
