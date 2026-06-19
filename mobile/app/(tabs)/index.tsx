@@ -76,7 +76,11 @@ export default function HomeScreen() {
 
   const { recents } = useRecentSearches();
 
-  const locationText = locationLabel ?? (location ? 'Your location' : 'Locating…');
+  const locationText = locationLabel ?? (location
+    ? 'Your location'
+    : locLoading
+      ? 'Locating…'
+      : 'Location unavailable');
   const dateText = formatDate();
 
   const isLoading = locLoading || condLoading;
