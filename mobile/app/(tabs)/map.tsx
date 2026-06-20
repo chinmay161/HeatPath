@@ -17,29 +17,30 @@ import {
 } from '../../config/api';
 import { colors, fonts } from '../../theme/colors';
 import { scoreToColor } from '../../utils/scoreToColor';
+import { boundsAroundPoint } from '../../utils/geoBounds';
 
 const DEFAULT_CENTER = { lat: 18.922, lon: 72.835 };
-const INITIAL_VIEWPORT_DELTA = 0.02;
-
-function boundsFromCenter(
-  center: { lat: number; lon: number },
-  delta = INITIAL_VIEWPORT_DELTA,
-): HeatZonesBounds {
-  return {
-    north: center.lat + delta / 2,
-    south: center.lat - delta / 2,
-    east: center.lon + delta / 2,
-    west: center.lon - delta / 2,
-  };
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function resolutionFromZoom(zoom: number): number {
-  return clamp(Math.round(zoom * 1.2), 8, 25);
-}
+// const INITIAL_VIEWPORT_DELTA = 0.02;
+// 
+// function boundsFromCenter(
+//   center: { lat: number; lon: number },
+//   delta = INITIAL_VIEWPORT_DELTA,
+// ): HeatZonesBounds {
+//   return {
+//     north: center.lat + delta / 2,
+//     south: center.lat - delta / 2,
+//     east: center.lon + delta / 2,
+//     west: center.lon - delta / 2,
+//   };
+// }
+// 
+// function clamp(value: number, min: number, max: number): number {
+//   return Math.max(min, Math.min(max, value));
+// }
+// 
+// function resolutionFromZoom(zoom: number): number {
+//   return clamp(Math.round(zoom * 1.2), 8, 25);
+// }
 
 function averageComfort(grid: HeatZonePoint[]): number | null {
   if (grid.length === 0) return null;
@@ -124,13 +125,16 @@ export default function MapScreen() {
     }
   }, []);
 
-  const onViewportChange = useCallback((bounds: HeatZonesBounds, zoom: number) => {
-    const nextResolution = resolutionFromZoom(zoom);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchZones(bounds, nextResolution);
-    }, 500);
-  }, [fetchZones]);
+const HEAT_MAP_RESOLUTION = 12;
+
+  // Re-enable when "expand to city view" is built (future v2 feature)
+  // const onViewportChange = useCallback((bounds: HeatZonesBounds, zoom: number) => {
+  //   const nextResolution = resolutionFromZoom(zoom);
+  //   if (debounceRef.current) clearTimeout(debounceRef.current);
+  //   debounceRef.current = setTimeout(() => {
+  //     fetchZones(bounds, nextResolution);
+  //   }, 500);
+  // }, [fetchZones]);
 
   if (locationLoading) {
     return (
@@ -175,10 +179,10 @@ export default function MapScreen() {
   }
 
   const mapCenter = userCoords;
-  const initialBounds = boundsFromCenter(mapCenter);
+  const initialBounds = boundsAroundPoint(mapCenter.lat, mapCenter.lon, 2);
 
   useEffect(() => {
-    fetchZones(boundsFromCenter(mapCenter), 15);
+    fetchZones(boundsAroundPoint(mapCenter.lat, mapCenter.lon, 2), HEAT_MAP_RESOLUTION);
   }, [fetchZones, mapCenter.lat, mapCenter.lon]);
 
   const statusMessage =
@@ -337,7 +341,7 @@ export default function MapScreen() {
           bounds={initialBounds}
           loading={loading}
           message={statusMessage}
-          onViewportChange={onViewportChange}
+          // onViewportChange={onViewportChange}
         />
       )}
     </View>
