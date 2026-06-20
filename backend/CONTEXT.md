@@ -763,3 +763,14 @@ Could not load heat map. Is the backend running?
 ```
 
 The map remains interactive during fetches; loading and error messages are lightweight overlay chips rather than blocking panels.
+
+## Heat Map — Locked 2km Local View
+
+- **City-wide View Replaced**: The original city-wide viewport was replaced because it produced a uniform, low-information gradient over too large an area. Additionally, at night, the night=100% shade decision caused every point on a city-wide map to return identical shade data, making the map a flat uniform color.
+- **2km Bounding Box Helper**: Added a pure, side-effect-free helper function `boundsAroundPoint` using a standard 111 km/degree approximation:
+  - latDelta = radiusKm / 111
+  - lonDelta = radiusKm / (111 * cos(lat * pi / 180))
+- **GPS-Required Gate**: Access to the map is gated behind a required GPS foreground location permission requested via `expo-location`. The screen does not fall back to Mumbai or default coordinates. Instead, if permission is denied or unavailable, it displays an attention screen with a disappointed mascot, heading, and enable location / open settings buttons.
+- **Pan and Zoom Disabled**: Panning, zooming, rotating, and pitching are fully disabled for v1 on both Leaflet (web) and react-native-maps (native). The map view fits exactly to the computed local bounds on mount, locking the viewport. Viewport refetches and region change callbacks are commented out as a future "expand to city view" v2 feature.
+- **Fixed Resolution**: The map uses a single fixed resolution of 12. This yields a dense enough grid of roughly 13x13 (169 points) across the 4km x 4km local bounding box, eliminating zoom-based resolution calculations.
+- **Manual Refresh Button**: Since map movement no longer triggers refetches, a manual refresh button is added near the header. This allows the user to manually trigger a refetch of the heat zones since weather, solar phase, and comfort scores change over time even if their location remains stationary.
