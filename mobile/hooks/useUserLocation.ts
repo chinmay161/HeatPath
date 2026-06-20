@@ -53,7 +53,7 @@ function labelFromAddress(address: Record<string, string | undefined> | null | u
   );
 }
 
-async function reverseGeocodeLabel(lat: number, lon: number): Promise<string | null> {
+export async function reverseGeocodeLabel(lat: number, lon: number): Promise<string | null> {
   if (Platform.OS !== 'web') {
     const [place] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
     return [place.district, place.city].filter(Boolean).join(', ') || place.region || null;

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View, Linking } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View, Linking, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
-import { useUserLocation } from '../../hooks/useUserLocation';
+import { useUserLocation, reverseGeocodeLabel } from '../../hooks/useUserLocation';
 import { Mascot, MascotBadge } from '../../components/Mascot';
 import { Button } from '../../components/ui';
 import { HeatZoneMap } from '../../components/HeatZoneMap';
@@ -20,6 +20,16 @@ import { scoreToColor } from '../../utils/scoreToColor';
 import { boundsAroundPoint } from '../../utils/geoBounds';
 
 const DEFAULT_CENTER = { lat: 18.922, lon: 72.835 };
+const refreshBtnStyle = {
+  width: 38,
+  height: 38,
+  borderRadius: 12,
+  backgroundColor: colors.slateCard,
+  borderWidth: 1,
+  borderColor: colors.slateLine,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+};
 // const INITIAL_VIEWPORT_DELTA = 0.02;
 // 
 // function boundsFromCenter(
@@ -178,21 +188,36 @@ const HEAT_MAP_RESOLUTION = 12;
     );
   }
 
+  const [resolvedLabel, setResolvedLabel] = useState<string | null>(null);
+  const [isGeocoding, setIsGeocoding] = useState(false);
+
+  const geocodeLocation = useCallback(async (lat: number, lon: number) => {
+    setIsGeocoding(true);
+    try {
+      const label = await reverseGeocodeLabel(lat, lon);
+      setResolvedLabel(label);
+    } catch (err) {
+      console.error('Reverse geocode failed:', err);
+      setResolvedLabel('Your location');
+    } finally {
+      setIsGeocoding(false);
+    }
+  }, []);
+
   const mapCenter = userCoords;
   const initialBounds = boundsAroundPoint(mapCenter.lat, mapCenter.lon, 2);
 
   useEffect(() => {
+    geocodeLocation(mapCenter.lat, mapCenter.lon);
     fetchZones(boundsAroundPoint(mapCenter.lat, mapCenter.lon, 2), HEAT_MAP_RESOLUTION);
-  }, [fetchZones, mapCenter.lat, mapCenter.lon]);
+  }, [fetchZones, geocodeLocation, mapCenter.lat, mapCenter.lon]);
 
   const statusMessage =
     errorCopy(error) ??
     (loading && grid.length === 0 ? 'Reading the city heat...' : null);
-  const mapLocationText = locationLoading
-    ? 'Locating...'
-    : userCoords
-      ? 'Your location · live'
-      : 'Mumbai (default)';
+  const mapLocationText = isGeocoding || locationLoading
+    ? 'Locating you...'
+    : `${resolvedLabel ?? 'Your location'} · live`;
   const comfort = averageComfort(grid);
   const comfortPct = comfort == null ? '--' : `${Math.round(comfort * 100)}%`;
   const heatIndex = conditions?.heat_index == null ? '--' : `${Math.round(conditions.heat_index)}°`;
@@ -368,7 +393,16 @@ const HEAT_MAP_RESOLUTION = 12;
               City heat map
             </Text>
           </View>
-          <MascotBadge state="alert" size={42} variant="alert" alertDot />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity
+              onPress={() => fetchZones(initialBounds, HEAT_MAP_RESOLUTION)}
+              style={refreshBtnStyle}
+              activeOpacity={0.8}
+            >
+              <Icon name="refresh" size={18} stroke={colors.slateText} />
+            </TouchableOpacity>
+            <MascotBadge state="alert" size={42} variant="alert" alertDot />
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} showsVerticalScrollIndicator={false}>
@@ -406,6 +440,7 @@ const HEAT_MAP_RESOLUTION = 12;
         paddingHorizontal: 18,
         paddingBottom: 12,
         paddingTop: insets.top + 8,
+        gap: 12,
       }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 12, color: colors.slateMuted }}>
@@ -415,6 +450,13 @@ const HEAT_MAP_RESOLUTION = 12;
             City heat map
           </Text>
         </View>
+        <TouchableOpacity
+          onPress={() => fetchZones(initialBounds, HEAT_MAP_RESOLUTION)}
+          style={refreshBtnStyle}
+          activeOpacity={0.8}
+        >
+          <Icon name="refresh" size={18} stroke={colors.slateText} />
+        </TouchableOpacity>
         <MascotBadge state="alert" size={44} variant="alert" alertDot />
       </View>
 
