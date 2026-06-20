@@ -1,9 +1,16 @@
 import { Platform } from 'react-native';
 
 // Android emulator routes localhost through 10.0.2.2.
-// For a physical device, replace with your machine's LAN IP.
+const apiBaseFromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
+
 export const API_BASE =
-  Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
+  apiBaseFromEnv ||
+  (() => {
+    console.warn('[api] EXPO_PUBLIC_API_URL not set, using emulator default');
+    return Platform.OS === 'android'
+      ? 'http://10.0.2.2:8000'
+      : 'http://localhost:8000';
+  })();
 
 export type HeatZonesBounds = {
   north: number;
