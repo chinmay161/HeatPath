@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
@@ -8,6 +8,7 @@ import { Mascot, MascotBadge } from '../../components/Mascot';
 import { Button } from '../../components/ui';
 import { HeatZoneMap } from '../../components/HeatZoneMap';
 import Icon from '../../components/Icon';
+import * as Location from 'expo-location';
 import {
   getHeatZones,
   type HeatZonePoint,
@@ -65,13 +66,41 @@ export default function MapScreen() {
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSeqRef = useRef(0);
-  const { location, locationLabel, loading: locationLoading } = useUserLocation();
+
+  const [permissionResponse, setPermissionResponse] = useState<Location.LocationPermissionResponse | null>(null);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(true);
 
   const [grid, setGrid] = useState<HeatZonePoint[]>([]);
   const [conditions, setConditions] = useState<HeatZonesResponse['conditions'] | null>(null);
   const [resolution, setResolution] = useState(15);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const requestLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const response = await Location.requestForegroundPermissionsAsync();
+      setPermissionResponse(response);
+      if (response.status === 'granted') {
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setUserCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+      } else {
+        setUserCoords(null);
+      }
+    } catch (err) {
+      console.error('Error fetching location:', err);
+      setUserCoords(null);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    requestLocation();
+  }, []);
 
   const fetchZones = useCallback(async (bounds: HeatZonesBounds, nextResolution: number) => {
     const seq = requestSeqRef.current + 1;
@@ -103,21 +132,62 @@ export default function MapScreen() {
     }, 500);
   }, [fetchZones]);
 
-  const mapCenter = location ?? DEFAULT_CENTER;
+  if (locationLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.slate, justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+        <ActivityIndicator color={colors.lime} size="large" />
+        <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 14, color: colors.slateText }}>
+          Finding your location...
+        </Text>
+      </View>
+    );
+  }
+
+  if (!userCoords || !permissionResponse || permissionResponse.status !== 'granted') {
+    const permanentlyDenied = permissionResponse?.status === 'denied' && !permissionResponse.canAskAgain;
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.slate, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <View style={{ width: 140, height: 140, borderRadius: 70, overflow: 'hidden', backgroundColor: '#e9b48c', position: 'relative', marginBottom: 24 }}>
+          <Mascot state="disappointed" />
+        </View>
+        <Text style={{ fontFamily: fonts.display, fontSize: 24, color: colors.slateText, textAlign: 'center', marginBottom: 12 }}>
+          Location required
+        </Text>
+        <Text style={{ fontFamily: fonts.ui, fontSize: 14, color: colors.slateMuted, textAlign: 'center', lineHeight: 22, marginBottom: 32, maxWidth: 280 }}>
+          HeatPath needs your location to show the heat map around you.
+        </Text>
+        <View style={{ width: '100%', gap: 12, maxWidth: 280 }}>
+          <Button onPress={requestLocation} variant="lime" block>
+            Enable location
+          </Button>
+          {permanentlyDenied && (
+            <Button
+              onPress={() => Linking.openSettings()}
+              style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.slateLine } as any}
+              textStyle={{ color: colors.slateText } as any}
+            >
+              Open settings
+            </Button>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  const mapCenter = userCoords;
   const initialBounds = boundsFromCenter(mapCenter);
 
   useEffect(() => {
-    if (locationLoading) return;
     fetchZones(boundsFromCenter(mapCenter), 15);
-  }, [fetchZones, locationLoading, mapCenter.lat, mapCenter.lon]);
+  }, [fetchZones, mapCenter.lat, mapCenter.lon]);
 
   const statusMessage =
     errorCopy(error) ??
     (loading && grid.length === 0 ? 'Reading the city heat...' : null);
   const mapLocationText = locationLoading
     ? 'Locating...'
-    : location
-      ? `${locationLabel ?? 'Your location'} · live`
+    : userCoords
+      ? 'Your location · live'
       : 'Mumbai (default)';
   const comfort = averageComfort(grid);
   const comfortPct = comfort == null ? '--' : `${Math.round(comfort * 100)}%`;
