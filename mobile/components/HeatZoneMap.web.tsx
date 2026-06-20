@@ -6,8 +6,8 @@ import { scoreToColor } from '../utils/scoreToColor';
 
 type HeatZoneMapProps = {
   grid: HeatZonePoint[];
-  initialCenter: { lat: number; lon: number };
-  initialBounds: HeatZonesBounds;
+  center: { lat: number; lon: number };
+  bounds: HeatZonesBounds;
   loading?: boolean;
   message?: string | null;
   onViewportChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
@@ -32,8 +32,8 @@ function markerRadiusForZoom(zoom: number): number {
 
 export function HeatZoneMap({
   grid,
-  initialCenter,
-  initialBounds,
+  center,
+  bounds,
   loading = false,
   message = null,
   onViewportChange,
@@ -51,6 +51,8 @@ export function HeatZoneMap({
   const { MapContainer, TileLayer, CircleMarker, useMap } =
     require('react-leaflet') as typeof import('react-leaflet');
 
+  // Re-enable when "expand to city view" is built (future v2 feature)
+  /*
   function ViewportEvents({ onViewportChange: onChange }: Pick<HeatZoneMapProps, 'onViewportChange'>) {
     const { useMapEvents } = require('react-leaflet') as typeof import('react-leaflet');
     const map = useMapEvents({
@@ -95,6 +97,18 @@ export function HeatZoneMap({
 
     return null;
   }
+  */
+
+  function FitBounds() {
+    const map = useMap();
+    useEffect(() => {
+      map.fitBounds([
+        [bounds.south, bounds.west],
+        [bounds.north, bounds.east],
+      ]);
+    }, [map, bounds]);
+    return null;
+  }
 
   function HeatZoneLayer() {
     const map = useMap();
@@ -122,20 +136,26 @@ export function HeatZoneMap({
   return (
     <View style={containerStyle}>
       <MapContainer
-        center={[initialCenter.lat, initialCenter.lon]}
+        center={[center.lat, center.lon]}
         bounds={[
-          [initialBounds.south, initialBounds.west],
-          [initialBounds.north, initialBounds.east],
+          [bounds.south, bounds.west],
+          [bounds.north, bounds.east],
         ]}
         zoom={14}
         // @ts-ignore - React Native style object is compatible with Leaflet's CSSProperties here.
         style={mapStyle}
-        zoomControl
-        scrollWheelZoom
+        zoomControl={false}
+        scrollWheelZoom={false}
+        dragging={false}
+        doubleClickZoom={false}
+        touchZoom={false}
         attributionControl={false}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <FitBounds />
+        {/* Re-enable when "expand to city view" is built (future v2 feature)
         <ViewportEvents onViewportChange={onViewportChange} />
+        */}
         <HeatZoneLayer />
       </MapContainer>
 

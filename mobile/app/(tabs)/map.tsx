@@ -333,8 +333,8 @@ export default function MapScreen() {
         <HeatZoneMap
           key={`${mapCenter.lat}-${mapCenter.lon}`}
           grid={grid}
-          initialCenter={mapCenter}
-          initialBounds={initialBounds}
+          center={mapCenter}
+          bounds={initialBounds}
           loading={loading}
           message={statusMessage}
           onViewportChange={onViewportChange}

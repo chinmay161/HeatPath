@@ -7,8 +7,8 @@ import { scoreToColor } from '../utils/scoreToColor';
 
 type HeatZoneMapProps = {
   grid: HeatZonePoint[];
-  initialCenter: { lat: number; lon: number };
-  initialBounds: HeatZonesBounds;
+  center: { lat: number; lon: number };
+  bounds: HeatZonesBounds;
   loading?: boolean;
   message?: string | null;
   onViewportChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
@@ -24,51 +24,56 @@ function zoomFromLongitudeDelta(longitudeDelta: number): number {
 
 export function HeatZoneMap({
   grid,
-  initialCenter,
-  initialBounds,
+  center,
+  bounds,
   loading = false,
   message = null,
   onViewportChange,
 }: HeatZoneMapProps) {
   const canUseHeatmap = useNativeHeatmap();
-  const initialRegion = {
-    latitude: initialCenter.lat,
-    longitude: initialCenter.lon,
-    latitudeDelta: Math.abs(initialBounds.north - initialBounds.south),
-    longitudeDelta: Math.abs(initialBounds.east - initialBounds.west),
+  const region = {
+    latitude: center.lat,
+    longitude: center.lon,
+    latitudeDelta: Math.abs(bounds.north - bounds.south),
+    longitudeDelta: Math.abs(bounds.east - bounds.west),
   };
 
   return (
     <View style={containerStyle}>
       <MapView
         style={mapStyle}
-        initialRegion={initialRegion}
+        region={region}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         showsUserLocation
         showsCompass={false}
         toolbarEnabled={false}
-        onMapReady={() => {
-          onViewportChange?.(
-            {
-              north: initialBounds.north,
-              south: initialBounds.south,
-              east: initialBounds.east,
-              west: initialBounds.west,
-            },
-            zoomFromLongitudeDelta(initialRegion.longitudeDelta),
-          );
-        }}
-        onRegionChangeComplete={region => {
-          onViewportChange?.(
-            {
-              north: region.latitude + region.latitudeDelta / 2,
-              south: region.latitude - region.latitudeDelta / 2,
-              east: region.longitude + region.longitudeDelta / 2,
-              west: region.longitude - region.longitudeDelta / 2,
-            },
-            zoomFromLongitudeDelta(region.longitudeDelta),
-          );
-        }}
+        scrollEnabled={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        // Re-enable when "expand to city view" is built (future v2 feature)
+        // onMapReady={() => {
+        //   onViewportChange?.(
+        //     {
+        //       north: bounds.north,
+        //       south: bounds.south,
+        //       east: bounds.east,
+        //       west: bounds.west,
+        //     },
+        //     zoomFromLongitudeDelta(region.longitudeDelta),
+        //   );
+        // }}
+        // onRegionChangeComplete={region => {
+        //   onViewportChange?.(
+        //     {
+        //       north: region.latitude + region.latitudeDelta / 2,
+        //       south: region.latitude - region.latitudeDelta / 2,
+        //       east: region.longitude + region.longitudeDelta / 2,
+        //       west: region.longitude - region.longitudeDelta / 2,
+        //     },
+        //     zoomFromLongitudeDelta(region.longitudeDelta),
+        //   );
+        // }}
       >
         {canUseHeatmap ? (
           <Heatmap
