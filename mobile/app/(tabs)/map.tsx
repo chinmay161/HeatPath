@@ -146,6 +146,29 @@ const HEAT_MAP_RESOLUTION = 12;
   //   }, 500);
   // }, [fetchZones]);
 
+  const [resolvedLabel, setResolvedLabel] = useState<string | null>(null);
+  const [isGeocoding, setIsGeocoding] = useState(false);
+
+  const geocodeLocation = useCallback(async (lat: number, lon: number) => {
+    setIsGeocoding(true);
+    try {
+      const label = await reverseGeocodeLabel(lat, lon);
+      setResolvedLabel(label);
+    } catch (err) {
+      console.error('Reverse geocode failed:', err);
+      setResolvedLabel('Your location');
+    } finally {
+      setIsGeocoding(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (userCoords) {
+      geocodeLocation(userCoords.lat, userCoords.lon);
+      fetchZones(boundsAroundPoint(userCoords.lat, userCoords.lon, 2), HEAT_MAP_RESOLUTION);
+    }
+  }, [fetchZones, geocodeLocation, userCoords]);
+
   if (locationLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.slate, justifyContent: 'center', alignItems: 'center', gap: 12 }}>
@@ -188,29 +211,8 @@ const HEAT_MAP_RESOLUTION = 12;
     );
   }
 
-  const [resolvedLabel, setResolvedLabel] = useState<string | null>(null);
-  const [isGeocoding, setIsGeocoding] = useState(false);
-
-  const geocodeLocation = useCallback(async (lat: number, lon: number) => {
-    setIsGeocoding(true);
-    try {
-      const label = await reverseGeocodeLabel(lat, lon);
-      setResolvedLabel(label);
-    } catch (err) {
-      console.error('Reverse geocode failed:', err);
-      setResolvedLabel('Your location');
-    } finally {
-      setIsGeocoding(false);
-    }
-  }, []);
-
   const mapCenter = userCoords;
   const initialBounds = boundsAroundPoint(mapCenter.lat, mapCenter.lon, 2);
-
-  useEffect(() => {
-    geocodeLocation(mapCenter.lat, mapCenter.lon);
-    fetchZones(boundsAroundPoint(mapCenter.lat, mapCenter.lon, 2), HEAT_MAP_RESOLUTION);
-  }, [fetchZones, geocodeLocation, mapCenter.lat, mapCenter.lon]);
 
   const statusMessage =
     errorCopy(error) ??
