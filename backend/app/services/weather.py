@@ -25,21 +25,33 @@ async def get_weather(lat: float, lon: float) -> dict:
         f"&forecast_days=1"
     )
     import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+
     for attempt in range(3):
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(url)
-            if r.status_code == 429:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.get(url)
+                if r.status_code == 429:
+                    logger.warning(f"Weather API rate-limited (429), retrying (attempt {attempt + 1}/3)...")
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                r.raise_for_status()
+                data = r.json()
+                current = data["current"]
+                return {
+                    "temperature_c": current["temperature_2m"],
+                    "humidity_pct":  current["relative_humidity_2m"],
+                    "feels_like_c":  current["apparent_temperature"],
+                }
+        except Exception as e:
+            logger.warning(f"Weather API request failed (attempt {attempt + 1}/3): {type(e).__name__}: {e}")
+            if attempt < 2:
                 await asyncio.sleep(2 ** attempt)
                 continue
-            r.raise_for_status()
-            data = r.json()
-            current = data["current"]
-            return {
-                "temperature_c": current["temperature_2m"],
-                "humidity_pct":  current["relative_humidity_2m"],
-                "feels_like_c":  current["apparent_temperature"],
-            }
+
     # All retries failed — realistic Mumbai summer fallback
+    logger.warning("All weather API retries failed, using Mumbai fallback.")
     return {"temperature_c": 34.0, "humidity_pct": 65, "feels_like_c": 36.5}
 
 
@@ -56,8 +68,9 @@ async def get_aqi(lat: float, lon: float) -> int:
             data = r.json()
             if "current" in data and "us_aqi" in data["current"]:
                 return int(data["current"]["us_aqi"])
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"AQI API request failed: {type(e).__name__}: {e}")
     return 50
 
 

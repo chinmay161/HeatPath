@@ -64,7 +64,7 @@ async def estimate_shade_from_street_type(lat: float, lon: float, solar_elevatio
                 logger.warning(f"Overpass street type API failed: status={resp.status_code}")
                 api_failed = True
     except Exception as e:
-        logger.warning(f"Overpass street type API failed: error={e}")
+        logger.warning(f"Overpass street type API failed: error={type(e).__name__}: {e}")
         api_failed = True
 
     if api_failed or not elements:
@@ -149,7 +149,7 @@ async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> t
         if status_code is not None:
             logger.warning(f"Overpass API failed: status={status_code}, using fallback")
         else:
-            logger.warning(f"Overpass API failed: error={e}, using fallback")
+            logger.warning(f"Overpass API failed: error={type(e).__name__}: {e}, using fallback")
         return [], "failed"
 
 
