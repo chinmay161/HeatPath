@@ -18,36 +18,9 @@ import { RouteCard, Button } from '../../components/ui';
 import Icon from '../../components/Icon';
 import { colors, fonts } from '../../theme/colors';
 import type { Route } from '../../data/mockData';
+import { scoreToColor, scoreToLabel } from '../../utils/scoreToColor';
 
 // ─── API → display mapping ────────────────────────────────────────────────────
-
-const SEV_COLOR: Record<string, string> = {
-  SAFE: colors.safe,
-  CAUTION: colors.caution,
-  HIGH: colors.high,
-  EXTREME: colors.extreme,
-};
-
-function scoreToSeverity(score: number): 'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME' {
-  if (score >= 0.70) return 'SAFE';
-  if (score >= 0.50) return 'CAUTION';
-  if (score >= 0.30) return 'HIGH';
-  return 'EXTREME';
-}
-
-function shadePctToTone(pct: number): 'shade' | 'caution' | 'high' | 'extreme' {
-  if (pct >= 60) return 'shade';
-  if (pct >= 40) return 'caution';
-  if (pct >= 20) return 'high';
-  return 'extreme';
-}
-
-function shadePctToSegColor(pct: number): string {
-  if (pct >= 60) return colors.forest;
-  if (pct >= 40) return colors.caution;
-  if (pct >= 20) return colors.high;
-  return colors.extreme;
-}
 
 const ROUTE_META = [
   { title: 'Coolest',   sub: 'most shade · recommended', icon: 'shade',  iconBg: '#E6F4E2', iconColor: colors.forest   },
@@ -55,22 +28,22 @@ const ROUTE_META = [
 ];
 
 function apiRouteToRoute(r: ScoredRoute, idx: number): Route {
-  const sev = scoreToSeverity(r.overall_score);
+  const sev = scoreToLabel(r.overall_score);
   const totalDist = r.segment_distances_m.reduce((a, b) => a + b, 0) || 1;
   const walkMin = Math.max(1, Math.round(totalDist / 83.3));
 
   // Proportional timeline bars (normalize to sum ~10)
   const bar: [number, string][] = r.shade_segments.map((pct, i) => {
     const weight = Math.max(0.4, (r.segment_distances_m[i] / totalDist) * 10);
-    return [weight, shadePctToTone(pct)];
+    return [weight, scoreToColor(pct / 100)];
   });
 
   // 3 representative SVG segment colors spread evenly across the route
   const n = r.shade_segments.length;
   const seg = [
-    shadePctToSegColor(r.shade_segments[0] ?? 50),
-    shadePctToSegColor(r.shade_segments[Math.floor(n / 2)] ?? 50),
-    shadePctToSegColor(r.shade_segments[n - 1] ?? 50),
+    scoreToColor((r.shade_segments[0] ?? 50) / 100),
+    scoreToColor((r.shade_segments[Math.floor(n / 2)] ?? 50) / 100),
+    scoreToColor((r.shade_segments[n - 1] ?? 50) / 100),
   ];
 
   const meta = ROUTE_META[idx] ?? ROUTE_META[1];
@@ -84,8 +57,8 @@ function apiRouteToRoute(r: ScoredRoute, idx: number): Route {
     severity: sev,
     min: `${walkMin} min`,
     feels: `${Math.round(r.feels_like_c)}°`,
-    feelsColor: SEV_COLOR[sev] ?? colors.high,
-    shade: `${Math.round(r.avg_shade_pct)}%`,
+    feelsColor: scoreToColor(r.overall_score),
+    shade: `${Math.round(r.shade_safety_score * 100)}%`,
     bar,
     seg,
   };
@@ -124,10 +97,9 @@ export default function RoutesScreen() {
     if (displayRoutes.length >= 2) {
       const r1 = data!.routes[0];
       const r2 = data!.routes[1];
-      const shadeDiff = Math.round(r1.avg_shade_pct - r2.avg_shade_pct);
       const tempDiff  = Math.round(r2.feels_like_c - r1.feels_like_c);
       if (isDesktop) return 'Tap a route to preview it on the map.';
-      return `The coolest route keeps you in ${Math.round(r1.avg_shade_pct)}% shade${tempDiff > 0 ? ` — ${tempDiff}° cooler than the alternate` : ''}.`;
+      return `The coolest route keeps you in ${Math.round(r1.shade_safety_score * 100)}% shade${tempDiff > 0 ? ` — ${tempDiff}° cooler than the alternate` : ''}.`;
     }
     return isDesktop ? 'Tap a route to preview it on the map.' : 'Your coolest route is ready.';
   })();

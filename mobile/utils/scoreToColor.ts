@@ -5,6 +5,8 @@ const STOPS = [
   { at: 1.0, color: '#22C55E' },
 ] as const;
 
+export type ScoreLabel = 'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME';
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -42,4 +44,15 @@ export function scoreToColor(score: number): string {
     }
   }
   return STOPS[STOPS.length - 1].color;
+}
+
+/**
+ * Convert a comfort score into the shared route severity label.
+ */
+export function scoreToLabel(score: number): ScoreLabel {
+  const s = clamp(score, 0, 1);
+  if (s >= 0.70) return 'SAFE';
+  if (s >= 0.50) return 'CAUTION';
+  if (s >= 0.30) return 'HIGH';
+  return 'EXTREME';
 }
