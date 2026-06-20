@@ -40,6 +40,38 @@ function locationErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Location unavailable';
 }
 
+function labelFromAddress(address: Record<string, string | undefined> | null | undefined): string | null {
+  if (!address) return null;
+  return (
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.county ||
+    address.state ||
+    null
+  );
+}
+
+async function reverseGeocodeLabel(lat: number, lon: number): Promise<string | null> {
+  if (Platform.OS !== 'web') {
+    const [place] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+    return [place.district, place.city].filter(Boolean).join(', ') || place.region || null;
+  }
+
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    lat: String(lat),
+    lon: String(lon),
+    zoom: '10',
+    addressdetails: '1',
+  });
+  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`);
+  if (!res.ok) throw new Error(`Reverse geocode failed: ${res.status}`);
+  const data = await res.json() as { address?: Record<string, string | undefined> };
+  return labelFromAddress(data.address);
+}
+
 export function useUserLocation(): UserLocationState {
   const [state, setState] = useState<UserLocationState>({
     location: null,
@@ -67,12 +99,7 @@ export function useUserLocation(): UserLocationState {
 
         let locationLabel: string | null = null;
         try {
-          if (Platform.OS === 'web') throw new Error('Reverse geocoding is unavailable on web');
-          const [place] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-          locationLabel =
-            [place.district, place.city].filter(Boolean).join(', ') ||
-            place.region ||
-            null;
+          locationLabel = await reverseGeocodeLabel(lat, lon);
         } catch {
           // reverse-geocode failure is non-fatal; coordinates are still usable
         }

@@ -2,21 +2,16 @@ import React from 'react';
 import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import MapView, { Circle, Heatmap, PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors, fonts } from '../theme/colors';
-import type { HeatZonePoint } from '../config/api';
+import type { HeatZonePoint, HeatZonesBounds } from '../config/api';
 import { scoreToColor } from '../utils/scoreToColor';
 
 type HeatZoneMapProps = {
   grid: HeatZonePoint[];
+  initialCenter: { lat: number; lon: number };
+  initialBounds: HeatZonesBounds;
   loading?: boolean;
   message?: string | null;
   onViewportChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
-};
-
-const INITIAL_REGION = {
-  latitude: 18.922,
-  longitude: 72.835,
-  latitudeDelta: 0.02,
-  longitudeDelta: 0.02,
 };
 
 function useNativeHeatmap(): boolean {
@@ -29,17 +24,25 @@ function zoomFromLongitudeDelta(longitudeDelta: number): number {
 
 export function HeatZoneMap({
   grid,
+  initialCenter,
+  initialBounds,
   loading = false,
   message = null,
   onViewportChange,
 }: HeatZoneMapProps) {
   const canUseHeatmap = useNativeHeatmap();
+  const initialRegion = {
+    latitude: initialCenter.lat,
+    longitude: initialCenter.lon,
+    latitudeDelta: Math.abs(initialBounds.north - initialBounds.south),
+    longitudeDelta: Math.abs(initialBounds.east - initialBounds.west),
+  };
 
   return (
     <View style={containerStyle}>
       <MapView
         style={mapStyle}
-        initialRegion={INITIAL_REGION}
+        initialRegion={initialRegion}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         showsUserLocation
         showsCompass={false}
@@ -47,12 +50,12 @@ export function HeatZoneMap({
         onMapReady={() => {
           onViewportChange?.(
             {
-              north: INITIAL_REGION.latitude + INITIAL_REGION.latitudeDelta / 2,
-              south: INITIAL_REGION.latitude - INITIAL_REGION.latitudeDelta / 2,
-              east: INITIAL_REGION.longitude + INITIAL_REGION.longitudeDelta / 2,
-              west: INITIAL_REGION.longitude - INITIAL_REGION.longitudeDelta / 2,
+              north: initialBounds.north,
+              south: initialBounds.south,
+              east: initialBounds.east,
+              west: initialBounds.west,
             },
-            zoomFromLongitudeDelta(INITIAL_REGION.longitudeDelta),
+            zoomFromLongitudeDelta(initialRegion.longitudeDelta),
           );
         }}
         onRegionChangeComplete={region => {

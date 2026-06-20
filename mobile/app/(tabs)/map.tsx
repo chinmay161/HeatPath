@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
+import { useUserLocation } from '../../hooks/useUserLocation';
 import { Mascot, MascotBadge } from '../../components/Mascot';
 import { Button } from '../../components/ui';
 import { HeatZoneMap } from '../../components/HeatZoneMap';
@@ -16,12 +17,20 @@ import {
 import { colors, fonts } from '../../theme/colors';
 import { scoreToColor } from '../../utils/scoreToColor';
 
-const DEFAULT_BOUNDS: HeatZonesBounds = {
-  north: 18.95,
-  south: 18.91,
-  east: 72.86,
-  west: 72.82,
-};
+const DEFAULT_CENTER = { lat: 18.922, lon: 72.835 };
+const INITIAL_VIEWPORT_DELTA = 0.02;
+
+function boundsFromCenter(
+  center: { lat: number; lon: number },
+  delta = INITIAL_VIEWPORT_DELTA,
+): HeatZonesBounds {
+  return {
+    north: center.lat + delta / 2,
+    south: center.lat - delta / 2,
+    east: center.lon + delta / 2,
+    west: center.lon - delta / 2,
+  };
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -56,6 +65,7 @@ export default function MapScreen() {
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSeqRef = useRef(0);
+  const { location, locationLabel, loading: locationLoading } = useUserLocation();
 
   const [grid, setGrid] = useState<HeatZonePoint[]>([]);
   const [conditions, setConditions] = useState<HeatZonesResponse['conditions'] | null>(null);
@@ -93,13 +103,22 @@ export default function MapScreen() {
     }, 500);
   }, [fetchZones]);
 
+  const mapCenter = location ?? DEFAULT_CENTER;
+  const initialBounds = boundsFromCenter(mapCenter);
+
   useEffect(() => {
-    fetchZones(DEFAULT_BOUNDS, 15);
-  }, [fetchZones]);
+    if (locationLoading) return;
+    fetchZones(boundsFromCenter(mapCenter), 15);
+  }, [fetchZones, locationLoading, mapCenter.lat, mapCenter.lon]);
 
   const statusMessage =
     errorCopy(error) ??
     (loading && grid.length === 0 ? 'Reading the city heat...' : null);
+  const mapLocationText = locationLoading
+    ? 'Locating...'
+    : location
+      ? `${locationLabel ?? 'Your location'} · live`
+      : 'Mumbai (default)';
   const comfort = averageComfort(grid);
   const comfortPct = comfort == null ? '--' : `${Math.round(comfort * 100)}%`;
   const heatIndex = conditions?.heat_index == null ? '--' : `${Math.round(conditions.heat_index)}°`;
@@ -233,12 +252,24 @@ export default function MapScreen() {
       borderColor: colors.slateLine,
       backgroundColor: '#0b1512',
     }}>
-      <HeatZoneMap
-        grid={grid}
-        loading={loading}
-        message={statusMessage}
-        onViewportChange={onViewportChange}
-      />
+      {locationLoading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <ActivityIndicator color={colors.lime} />
+          <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 12, color: colors.slateText }}>
+            Finding your location...
+          </Text>
+        </View>
+      ) : (
+        <HeatZoneMap
+          key={`${mapCenter.lat}-${mapCenter.lon}`}
+          grid={grid}
+          initialCenter={mapCenter}
+          initialBounds={initialBounds}
+          loading={loading}
+          message={statusMessage}
+          onViewportChange={onViewportChange}
+        />
+      )}
     </View>
   );
 
@@ -257,7 +288,7 @@ export default function MapScreen() {
         }}>
           <View>
             <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 12, color: colors.slateMuted }}>
-              Mumbai · live
+              {mapLocationText}
             </Text>
             <Text style={{ fontFamily: fonts.display, fontSize: 18, color: colors.slateText }}>
               City heat map
@@ -304,7 +335,7 @@ export default function MapScreen() {
       }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 12, color: colors.slateMuted }}>
-            Mumbai · live
+            {mapLocationText}
           </Text>
           <Text style={{ fontFamily: fonts.display, fontSize: 19, color: colors.slateText }}>
             City heat map

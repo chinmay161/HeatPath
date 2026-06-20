@@ -1,11 +1,13 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { colors, fonts } from '../theme/colors';
-import type { HeatZonePoint } from '../config/api';
+import type { HeatZonePoint, HeatZonesBounds } from '../config/api';
 import { scoreToColor } from '../utils/scoreToColor';
 
 type HeatZoneMapProps = {
   grid: HeatZonePoint[];
+  initialCenter: { lat: number; lon: number };
+  initialBounds: HeatZonesBounds;
   loading?: boolean;
   message?: string | null;
   onViewportChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
@@ -30,6 +32,8 @@ function markerRadiusForZoom(zoom: number): number {
 
 export function HeatZoneMap({
   grid,
+  initialCenter,
+  initialBounds,
   loading = false,
   message = null,
   onViewportChange,
@@ -118,7 +122,11 @@ export function HeatZoneMap({
   return (
     <View style={containerStyle}>
       <MapContainer
-        center={[18.922, 72.835]}
+        center={[initialCenter.lat, initialCenter.lon]}
+        bounds={[
+          [initialBounds.south, initialBounds.west],
+          [initialBounds.north, initialBounds.east],
+        ]}
         zoom={14}
         // @ts-ignore - React Native style object is compatible with Leaflet's CSSProperties here.
         style={mapStyle}
