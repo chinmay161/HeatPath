@@ -11,7 +11,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
-import { useFindRoutes, type ScoredRoute } from '../../hooks/useFindRoutes';
+import { getCachedRoutesResult, useFindRoutes, type ScoredRoute } from '../../hooks/useFindRoutes';
 import { RouteMap } from '../../components/RouteMap';
 import { MascotBadge, Mascot } from '../../components/Mascot';
 import { RouteCard, Button } from '../../components/ui';
@@ -72,7 +72,7 @@ export default function RoutesScreen() {
   const router = useRouter();
 
   const params = useLocalSearchParams<{
-    startLat: string; startLon: string; endLat: string; endLon: string; destName: string;
+    startLat: string; startLon: string; endLat: string; endLon: string; destName: string; routeResultId?: string;
   }>();
 
   const startLat = params.startLat ? parseFloat(params.startLat) : null;
@@ -80,8 +80,12 @@ export default function RoutesScreen() {
   const endLat   = params.endLat   ? parseFloat(params.endLat)   : null;
   const endLon   = params.endLon   ? parseFloat(params.endLon)   : null;
   const destName = params.destName || 'Destination';
+  const preloadedData = getCachedRoutesResult(params.routeResultId);
 
-  const { data, loading, error } = useFindRoutes(startLat, startLon, endLat, endLon);
+  const fallback = useFindRoutes(startLat, startLon, endLat, endLon, !preloadedData);
+  const data = preloadedData ?? fallback.data;
+  const loading = preloadedData ? false : fallback.loading;
+  const error = preloadedData ? null : fallback.error;
 
   // Map API routes to display format; fall back to empty while loading/error
   const displayRoutes: Route[] = data?.routes.map(apiRouteToRoute) ?? [];
