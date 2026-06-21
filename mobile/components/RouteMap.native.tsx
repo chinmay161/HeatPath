@@ -3,7 +3,7 @@ import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Circle, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import type { ScoredRoute } from '../hooks/useFindRoutes';
 import { colors, fonts } from '../theme/colors';
-import { scoreToColor } from '../utils/scoreToColor';
+import { buildShadedSegments } from '../utils/scoreToColor';
 
 type Props = {
   routes: ScoredRoute[];
@@ -92,21 +92,37 @@ export function RouteMap({
         showsCompass={false}
         toolbarEnabled={false}
       >
-        {routes.map((route, index) => {
-          const selected = index === selectedIdx;
-          return (
+        {/* Ghost lines for non-selected routes */}
+        {routes.map((route, index) =>
+          index !== selectedIdx ? (
             <Polyline
-              key={`route-${route.rank}-${index}`}
+              key={`ghost-${route.rank}-${index}`}
               coordinates={route.path.map(toCoordinate)}
-              strokeColor={scoreToColor(route.overall_score)}
-              strokeWidth={selected ? 7 : 4}
+              strokeColor="rgba(138, 152, 142, 0.4)"
+              strokeWidth={4}
               lineCap="round"
-              lineJoin="round"
               geodesic
-              zIndex={selected ? 3 : 1}
+              zIndex={1}
             />
-          );
-        })}
+          ) : null,
+        )}
+
+        {/* Active route — per-segment shade coloring via shared scoreToColor */}
+        {buildShadedSegments(
+          routes[selectedIdx]?.path ?? [],
+          routes[selectedIdx]?.shade_segments ?? [],
+        ).map((seg, i) => (
+          <Polyline
+            key={`seg-${selectedIdx}-${i}`}
+            coordinates={seg.path.map(toCoordinate)}
+            strokeColor={seg.color}
+            strokeWidth={7}
+            lineCap="round"
+            lineJoin="round"
+            geodesic
+            zIndex={3}
+          />
+        ))}
 
         {startLat != null && startLon != null && (
           <Circle

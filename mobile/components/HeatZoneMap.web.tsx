@@ -4,14 +4,7 @@ import { colors, fonts } from '../theme/colors';
 import type { HeatZonePoint, HeatZonesBounds } from '../config/api';
 import { scoreToColor } from '../utils/scoreToColor';
 
-type HeatZoneMapProps = {
-  grid: HeatZonePoint[];
-  center: { lat: number; lon: number };
-  bounds: HeatZonesBounds;
-  loading?: boolean;
-  message?: string | null;
-  onViewportChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
-};
+// ─── Leaflet CSS ──────────────────────────────────────────────────────────────
 
 function useLeafletCSS() {
   useEffect(() => {
@@ -26,9 +19,34 @@ function useLeafletCSS() {
   }, []);
 }
 
-function markerRadiusForZoom(zoom: number): number {
-  return Math.max(18, Math.min(44, Math.round(zoom * 2.4)));
+// ─── FitBounds ────────────────────────────────────────────────────────────────
+
+// Defined at module scope (not inside HeatZoneMap) so React never remounts it
+// between HeatZoneMap re-renders — an inline definition creates a new function
+// reference each render, triggering unnecessary unmount/remount cycles.
+// invalidateSize() is called first so Leaflet re-reads the container's actual
+// CSS dimensions before computing the zoom; flex layout may not have resolved
+// when the map first initialised, causing fitBounds to pick an incorrect zoom.
+function FitBounds({ north, south, east, west }: HeatZonesBounds) {
+  const { useMap } = require('react-leaflet') as typeof import('react-leaflet');
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+    map.fitBounds([[south, west], [north, east]]);
+  }, [map, north, south, east, west]);
+  return null;
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+type HeatZoneMapProps = {
+  grid: HeatZonePoint[];
+  center: { lat: number; lon: number };
+  bounds: HeatZonesBounds;
+  loading?: boolean;
+  message?: string | null;
+  onViewportChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
+};
 
 export function HeatZoneMap({
   grid,
@@ -48,101 +66,22 @@ export function HeatZoneMap({
     );
   }
 
-  const { MapContainer, TileLayer, CircleMarker, useMap } =
+  const { MapContainer, TileLayer, Circle } =
     require('react-leaflet') as typeof import('react-leaflet');
 
-  // Re-enable when "expand to city view" is built (future v2 feature)
-  /*
-  function ViewportEvents({ onViewportChange: onChange }: Pick<HeatZoneMapProps, 'onViewportChange'>) {
-    const { useMapEvents } = require('react-leaflet') as typeof import('react-leaflet');
-    const map = useMapEvents({
-      moveend: () => {
-        const bounds = map.getBounds();
-        onChange?.(
-          {
-            north: bounds.getNorth(),
-            south: bounds.getSouth(),
-            east: bounds.getEast(),
-            west: bounds.getWest(),
-          },
-          map.getZoom(),
-        );
-      },
-      zoomend: () => {
-        const bounds = map.getBounds();
-        onChange?.(
-          {
-            north: bounds.getNorth(),
-            south: bounds.getSouth(),
-            east: bounds.getEast(),
-            west: bounds.getWest(),
-          },
-          map.getZoom(),
-        );
-      },
-    });
-
-    useEffect(() => {
-      const bounds = map.getBounds();
-      onChange?.(
-        {
-          north: bounds.getNorth(),
-          south: bounds.getSouth(),
-          east: bounds.getEast(),
-          west: bounds.getWest(),
-        },
-        map.getZoom(),
-      );
-    }, [map, onChange]);
-
-    return null;
-  }
-  */
-
-  function FitBounds() {
-    const map = useMap();
-    useEffect(() => {
-      map.fitBounds([
-        [bounds.south, bounds.west],
-        [bounds.north, bounds.east],
-      ]);
-    }, [map, bounds]);
-    return null;
-  }
-
-  function HeatZoneLayer() {
-    const map = useMap();
-    const radius = markerRadiusForZoom(map.getZoom());
-    return (
-      <>
-        {grid.map((point, index) => (
-          <CircleMarker
-            key={`${point.lat}-${point.lon}-${index}`}
-            center={[point.lat, point.lon]}
-            radius={radius}
-            pathOptions={{
-              color: scoreToColor(point.comfort_score),
-              fillColor: scoreToColor(point.comfort_score),
-              fillOpacity: 0.34,
-              opacity: 0,
-              weight: 0,
-            }}
-          />
-        ))}
-      </>
-    );
-  }
+  // Circle radius in metres derived from actual grid spacing so points blend
+  // into a smooth gradient rather than overlapping into a solid filled block.
+  // resolution = number of cells per side; grid has (resolution+1)^2 points.
+  const resolution = Math.max(1, Math.round(Math.sqrt(grid.length)) - 1);
+  const spacingM = (Math.abs(bounds.north - bounds.south) / resolution) * 111_000;
+  const radiusM = Math.max(50, Math.round(spacingM * 0.6));
 
   return (
     <View style={containerStyle}>
       <MapContainer
         center={[center.lat, center.lon]}
-        bounds={[
-          [bounds.south, bounds.west],
-          [bounds.north, bounds.east],
-        ]}
         zoom={14}
-        // @ts-ignore - React Native style object is compatible with Leaflet's CSSProperties here.
+        // @ts-ignore — React Native style object is compatible with Leaflet's CSSProperties here.
         style={mapStyle}
         zoomControl={false}
         scrollWheelZoom={false}
@@ -152,11 +91,25 @@ export function HeatZoneMap({
         attributionControl={false}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        <FitBounds />
+        {/* FitBounds fires invalidateSize() + fitBounds() after layout resolves */}
+        <FitBounds {...bounds} />
         {/* Re-enable when "expand to city view" is built (future v2 feature)
         <ViewportEvents onViewportChange={onViewportChange} />
         */}
-        <HeatZoneLayer />
+        {grid.map((point, index) => (
+          <Circle
+            key={`${point.lat}-${point.lon}-${index}`}
+            center={[point.lat, point.lon]}
+            radius={radiusM}
+            pathOptions={{
+              color: scoreToColor(point.comfort_score),
+              fillColor: scoreToColor(point.comfort_score),
+              fillOpacity: 0.34,
+              opacity: 0,
+              weight: 0,
+            }}
+          />
+        ))}
       </MapContainer>
 
       {(loading || message) && (
@@ -168,6 +121,8 @@ export function HeatZoneMap({
     </View>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const containerStyle = {
   flex: 1,

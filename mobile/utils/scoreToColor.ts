@@ -56,3 +56,35 @@ export function scoreToLabel(score: number): ScoreLabel {
   if (s >= 0.30) return 'HIGH';
   return 'EXTREME';
 }
+
+export type RouteSegment = {
+  path: { lat: number; lon: number }[];
+  color: string;
+};
+
+/**
+ * Split a full ORS route path into colour-coded chunks aligned to shade_segments.
+ * shade_segments are percentages (0–100); normalised to 0–1 for scoreToColor
+ * so web and native share the same gradient without separate colour functions.
+ */
+export function buildShadedSegments(
+  path: { lat: number; lon: number }[],
+  shadeSegments: number[],
+): RouteSegment[] {
+  if (path.length === 0) return [];
+  const n = shadeSegments.length;
+  if (n === 0) {
+    return [{ path, color: scoreToColor(0.5) }];
+  }
+  const chunkSize = Math.ceil(path.length / n);
+  return shadeSegments
+    .map((pct, i) => {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize + 1, path.length); // +1 for line continuity
+      return {
+        path: path.slice(start, end),
+        color: scoreToColor(pct / 100),
+      };
+    })
+    .filter(s => s.path.length >= 2);
+}

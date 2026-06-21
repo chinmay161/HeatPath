@@ -5,6 +5,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { fonts } from '../theme/colors';
 import type { ScoredRoute } from '../hooks/useFindRoutes';
+import { buildShadedSegments } from '../utils/scoreToColor';
 
 // ─── Leaflet CSS ──────────────────────────────────────────────────────────────
 
@@ -33,43 +34,10 @@ function FitBounds({ routes, selectedIdx }: { routes: ScoredRoute[]; selectedIdx
     const r = routes[selectedIdx];
     if (!r || r.path.length === 0) return;
     const bounds: [number, number][] = r.path.map(p => [p.lat, p.lon]);
+    map.invalidateSize();
     map.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
   }, [routes, selectedIdx]);
   return null;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function shadePctToColor(pct: number): string {
-  if (pct >= 60) return '#1C7C4A';
-  if (pct >= 40) return '#E5B23C';
-  if (pct >= 20) return '#E8843A';
-  return '#C8322A';
-}
-
-// Split the full ORS path into N equal-point chunks and assign shade colours.
-// shade_segments (≤7 values) come from a simplified 8-point path, not the full
-// path, so we approximate by dividing evenly — visually reasonable.
-function buildSegments(
-  path: { lat: number; lon: number }[],
-  shadeSegs: number[],
-): { positions: [number, number][]; color: string }[] {
-  if (path.length === 0) return [];
-  const n = shadeSegs.length;
-  if (n === 0) {
-    return [{ positions: path.map(p => [p.lat, p.lon] as [number, number]), color: '#1C7C4A' }];
-  }
-  const chunkSize = Math.ceil(path.length / n);
-  return shadeSegs
-    .map((pct, i) => {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize + 1, path.length); // +1 for line continuity
-      return {
-        positions: path.slice(start, end).map(p => [p.lat, p.lon] as [number, number]),
-        color: shadePctToColor(pct),
-      };
-    })
-    .filter(s => s.positions.length >= 2);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -106,13 +74,11 @@ export function RouteMap({
     );
   }
 
-  // Client-only from here. require() is cached by Node/Metro so this is
-  // effectively free on subsequent renders.
   const { MapContainer, TileLayer, Polyline, CircleMarker } =
     require('react-leaflet') as typeof import('react-leaflet');
 
   const selected = routes[selectedIdx];
-  const segments = selected ? buildSegments(selected.path, selected.shade_segments) : [];
+  const segments = selected ? buildShadedSegments(selected.path, selected.shade_segments) : [];
   const center: [number, number] = [
     startLat ?? selected?.path[0]?.lat ?? 12.97,
     startLon ?? selected?.path[0]?.lon ?? 77.59,
@@ -144,11 +110,11 @@ export function RouteMap({
           ) : null,
         )}
 
-        {/* Active route — colour-coded by shade segment */}
+        {/* Active route — per-segment shade coloring via shared scoreToColor */}
         {segments.map((seg, i) => (
           <Polyline
             key={`seg-${selectedIdx}-${i}`}
-            positions={seg.positions}
+            positions={seg.path.map(p => [p.lat, p.lon] as [number, number])}
             pathOptions={{ color: seg.color, weight: 7, lineCap: 'round', lineJoin: 'round', opacity: 0.92 }}
           />
         ))}
@@ -177,15 +143,15 @@ export function RouteMap({
         <Text style={styles.chipText}>{routeTitle} route · live</Text>
       </View>
 
-      {/* Shade / sun legend */}
+      {/* Shade / sun legend — colours match scoreToColor gradient endpoints */}
       <View style={styles.legend} pointerEvents="none">
         <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: '#1C7C4A' }]} />
+          <View style={[styles.legendSwatch, { backgroundColor: '#22C55E' }]} />
           <Text style={styles.legendLabel}>Shade</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: '#E8843A' }]} />
-          <Text style={[styles.legendLabel, { color: '#b5560f' }]}>Sun</Text>
+          <View style={[styles.legendSwatch, { backgroundColor: '#FF4444' }]} />
+          <Text style={[styles.legendLabel, { color: '#b02020' }]}>Sun</Text>
         </View>
       </View>
     </View>

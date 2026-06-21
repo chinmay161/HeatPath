@@ -220,6 +220,18 @@ export default function RoutesScreen() {
         <MascotBadge state="blink" size={44} />
       </View>
 
+      <View style={styles.mobileMap}>
+        <RouteMap
+          routes={data!.routes}
+          selectedIdx={selectedIdx}
+          startLat={startLat}
+          startLon={startLon}
+          endLat={endLat}
+          endLon={endLon}
+          routeTitle={cur.title}
+        />
+      </View>
+
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 12 } as any}
         showsVerticalScrollIndicator={false}
@@ -295,6 +307,12 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 18,
     paddingBottom: 12,
+  },
+  mobileMap: {
+    height: 220,
+    overflow: 'hidden',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
   },
   mobileCTA: {
     paddingHorizontal: 16,

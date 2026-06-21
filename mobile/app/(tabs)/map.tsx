@@ -19,7 +19,6 @@ import { colors, fonts } from '../../theme/colors';
 import { scoreToColor } from '../../utils/scoreToColor';
 import { boundsAroundPoint } from '../../utils/geoBounds';
 
-const DEFAULT_CENTER = { lat: 18.922, lon: 72.835 };
 const refreshBtnStyle = {
   width: 38,
   height: 38,
@@ -230,9 +229,9 @@ const HEAT_MAP_RESOLUTION = 12;
       flexDirection: 'row',
       alignItems: 'center',
       gap: 14,
-      backgroundColor: '#2a120e',
+      backgroundColor: colors.slateCard,
       borderWidth: 1,
-      borderColor: '#6e2a20',
+      borderColor: colors.slateLine,
       borderRadius: 18,
       padding: 14,
     }}>
@@ -241,31 +240,31 @@ const HEAT_MAP_RESOLUTION = 12;
         height: isDesktop ? 54 : 50,
         borderRadius: 14,
         overflow: 'hidden',
-        backgroundColor: '#e9b48c',
+        backgroundColor: '#1a3028',
         position: 'relative',
         flexShrink: 0,
       }}>
-        <Mascot state="alert" />
+        <Mascot state="blink" />
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Icon name="warn" size={isDesktop ? 16 : 15} stroke="#ff8d6b" width={2.2} />
+          <Icon name="gps" size={isDesktop ? 16 : 15} stroke={colors.lime} width={2.2} />
           <Text style={{
             fontFamily: fonts.display,
-            color: '#ff8d6b',
+            color: colors.lime,
             fontSize: isDesktop ? 15 : 13,
           }}>
-            Heat map updates as you move
+            Locked to 2 km around you
           </Text>
         </View>
         <Text style={{
           fontFamily: fonts.ui,
-          color: '#d9b3a8',
+          color: colors.slateMuted,
           fontSize: isDesktop ? 13 : 12,
           lineHeight: 18,
           marginTop: 2,
         }}>
-          Pan or zoom to refresh shade, heat, and AQI comfort across the visible streets.
+          Tap ↺ to refresh shade, heat index and AQI with current conditions.
         </Text>
       </View>
     </View>

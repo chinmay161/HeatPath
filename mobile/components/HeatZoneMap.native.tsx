@@ -31,6 +31,11 @@ export function HeatZoneMap({
   onViewportChange,
 }: HeatZoneMapProps) {
   const canUseHeatmap = useNativeHeatmap();
+  // Radius in metres from actual grid spacing — prevents circles being too
+  // sparse (original fixed 95m left ~143m gaps at the default resolution).
+  const resolution = Math.max(1, Math.round(Math.sqrt(grid.length)) - 1);
+  const spacingM = (Math.abs(bounds.north - bounds.south) / resolution) * 111_000;
+  const circleRadius = Math.max(50, Math.round(spacingM * 0.55));
   const region = {
     latitude: center.lat,
     longitude: center.lon,
@@ -95,7 +100,7 @@ export function HeatZoneMap({
             <Circle
               key={`${point.lat}-${point.lon}-${index}`}
               center={{ latitude: point.lat, longitude: point.lon }}
-              radius={95}
+              radius={circleRadius}
               fillColor={`${scoreToColor(point.comfort_score)}66`}
               strokeColor="transparent"
               zIndex={2}
