@@ -55,8 +55,9 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         simplified = simplify_path(path, max_points=8)
 
         # shade_for_path returns a dict with shade_values and solar metadata
-        shade_res  = await shade_for_path(simplified)
-        shade_pcts = shade_res["shade_values"]
+        shade_res    = await shade_for_path(simplified)
+        shade_pcts   = shade_res["shade_values"]
+        shade_sources = shade_res.get("shade_sources", [])
         crowd_pcts = await crowd_for_path(simplified)
 
         # Per-segment distances for the simplified path — aligned with
@@ -94,6 +95,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             "avg_shade_pct":       round(avg_shade_pct, 1),
             "feels_like_c":        feels_like_c,
             "shade_segments":      shade_pcts,
+            "shade_sources":       shade_sources,
             "segment_distances_m": [round(d, 1) for d in segment_distances],
             "path":                [Location(lat=pt["lat"], lon=pt["lon"]) for pt in path],
             "segment_count":       len(segments),
@@ -112,6 +114,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             avg_shade_pct=r["avg_shade_pct"],
             feels_like_c=r["feels_like_c"],
             shade_segments=r["shade_segments"],
+            shade_sources=r["shade_sources"],
             segment_distances_m=r["segment_distances_m"],
             path=r["path"],
             segment_count=r["segment_count"],

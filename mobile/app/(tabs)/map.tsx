@@ -7,6 +7,7 @@ import { useUserLocation, reverseGeocodeLabel } from '../../hooks/useUserLocatio
 import { Mascot, MascotBadge } from '../../components/Mascot';
 import { Button } from '../../components/ui';
 import { HeatZoneMap } from '../../components/HeatZoneMap';
+import { DataQualityNote } from '../../components/DataQualityNote';
 import Icon from '../../components/Icon';
 import * as Location from 'expo-location';
 import {
@@ -219,6 +220,9 @@ const HEAT_MAP_RESOLUTION = 12;
   const mapLocationText = isGeocoding || locationLoading
     ? 'Locating you...'
     : `${resolvedLabel ?? 'Your location'} · live`;
+  const shadeDegraded =
+    grid.length > 0 &&
+    grid.filter(p => p.source !== 'overpass').length > grid.length / 2;
   const comfort = averageComfort(grid);
   const comfortPct = comfort == null ? '--' : `${Math.round(comfort * 100)}%`;
   const heatIndex = conditions?.heat_index == null ? '--' : `${Math.round(conditions.heat_index)}°`;
@@ -409,6 +413,7 @@ const HEAT_MAP_RESOLUTION = 12;
         <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} showsVerticalScrollIndicator={false}>
           {Advisory}
           {Stats}
+          {shadeDegraded && <DataQualityNote dark />}
           <View style={{ flexDirection: 'row', gap: 16, minHeight: 420 }}>
             {MapCard}
             <View style={{ width: 260, gap: 12 }}>
@@ -464,6 +469,7 @@ const HEAT_MAP_RESOLUTION = 12;
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 13 }} showsVerticalScrollIndicator={false}>
         {Advisory}
         {Stats}
+        {shadeDegraded && <DataQualityNote dark />}
         {MapCard}
         <View style={{
           backgroundColor: colors.slateCard,

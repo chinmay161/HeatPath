@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { getCachedRoutesResult, useFindRoutes, type ScoredRoute } from '../../hooks/useFindRoutes';
 import { RouteMap } from '../../components/RouteMap';
+import { DataQualityNote } from '../../components/DataQualityNote';
 import { MascotBadge, Mascot } from '../../components/Mascot';
 import { RouteCard, Button } from '../../components/ui';
 import Icon from '../../components/Icon';
@@ -92,8 +93,29 @@ export default function RoutesScreen() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const cur = displayRoutes[selectedIdx] ?? displayRoutes[0];
 
-  const onBack  = () => router.back();
-  const onStart = () => router.navigate('/(tabs)/impact');
+  const onBack = () => router.back();
+  const onStart = () => {
+    const sel = data!.routes[selectedIdx];
+    const distanceM = Math.round(sel.segment_distances_m.reduce((a, b) => a + b, 0));
+    const walkMin = Math.max(1, Math.round(distanceM / 83.3));
+    const maxFeelsLike = Math.max(...data!.routes.map(r => r.feels_like_c));
+    const heatHoursAvoided = parseFloat(
+      Math.max(0, (maxFeelsLike - sel.feels_like_c) * walkMin / 60).toFixed(2),
+    );
+    router.navigate({
+      pathname: '/(tabs)/impact' as any,
+      params: {
+        walkToken: String(Date.now()),
+        routeTitle: cur.title,
+        destName,
+        distanceM: String(distanceM),
+        feelLikeC: String(parseFloat(sel.feels_like_c.toFixed(1))),
+        shadePct: String(Math.round(sel.shade_safety_score * 100)),
+        overallScore: String(parseFloat(sel.overall_score.toFixed(2))),
+        heatHoursAvoided: String(heatHoursAvoided),
+      },
+    });
+  };
 
   // ─── Coach banner ─────────────────────────────────────────────────────────────
 
@@ -155,6 +177,11 @@ export default function RoutesScreen() {
     <RouteCard key={route.id} route={route} active={selectedIdx === i} onPress={() => setSelectedIdx(i)} />
   ));
 
+  const allSources = data?.routes.flatMap(r => r.shade_sources ?? []) ?? [];
+  const shadeDegraded =
+    allSources.length > 0 &&
+    allSources.filter(s => s !== 'overpass').length > allSources.length / 2;
+
   // ─── Desktop layout ───────────────────────────────────────────────────────────
 
   if (isDesktop) {
@@ -191,6 +218,7 @@ export default function RoutesScreen() {
             showsVerticalScrollIndicator={false}
           >
             {CoachBanner}
+            {shadeDegraded && <DataQualityNote />}
             {RouteCards}
             <Button onPress={onStart} block style={{ marginTop: 4 }}>
               Start the {cur.title} route →
@@ -237,6 +265,7 @@ export default function RoutesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {CoachBanner}
+        {shadeDegraded && <DataQualityNote />}
         {RouteCards}
       </ScrollView>
 

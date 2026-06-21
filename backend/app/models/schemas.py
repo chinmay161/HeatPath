@@ -73,6 +73,7 @@ class ScoredRoute(BaseModel):
     avg_shade_pct:       float          = Field(..., description="Average shade coverage across the route (0-100)")
     feels_like_c:        float          = Field(..., description="Estimated perceived temperature accounting for shade")
     shade_segments:      List[float]    = Field(..., description="Shade percentage per route segment")
+    shade_sources:       List[str]      = Field(default_factory=list, description="Shade data source per segment ('overpass' | 'street_type' | 'cached' | 'night')")
     segment_distances_m: List[float]    = Field(..., description="Distance in meters per segment, aligned with shade_segments")
     path:                List[Location] = Field(..., description="Route coordinates")
     segment_count:       int            = Field(..., description="Number of path segments")

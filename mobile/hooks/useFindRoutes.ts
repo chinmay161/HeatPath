@@ -10,6 +10,7 @@ export type ScoredRoute = {
   avg_shade_pct: number;
   feels_like_c: number;
   shade_segments: number[];
+  shade_sources: string[];
   segment_distances_m: number[];
   path: { lat: number; lon: number }[];
   segment_count: number;
