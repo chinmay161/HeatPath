@@ -774,3 +774,38 @@ The map remains interactive during fetches; loading and error messages are light
 - **Pan and Zoom Disabled**: Panning, zooming, rotating, and pitching are fully disabled for v1 on both Leaflet (web) and react-native-maps (native). The map view fits exactly to the computed local bounds on mount, locking the viewport. Viewport refetches and region change callbacks are commented out as a future "expand to city view" v2 feature.
 - **Fixed Resolution**: The map uses a single fixed resolution of 12. This yields a dense enough grid of roughly 13x13 (169 points) across the 4km x 4km local bounding box, eliminating zoom-based resolution calculations.
 - **Manual Refresh Button**: Since map movement no longer triggers refetches, a manual refresh button is added near the header. This allows the user to manually trigger a refetch of the heat zones since weather, solar phase, and comfort scores change over time even if their location remains stationary.
+
+## PostGIS Shade Data Migration (Western Zone)
+
+### Reasons for Self-Hosting
+- **Overpass API Rate Limits**: Avoid hitting public Overpass API rate limits (HTTP 429) during peak traffic.
+- **Improved Performance**: Query response time is reduced from seconds (HTTP network request) to sub-milliseconds (local PostgreSQL/PostGIS spatial queries).
+- **Offline/Local Reliability**: Routing backend does not require active external internet connections for primary shade calculations.
+
+### Ocean-Clipped OSM Extract
+- **File Bounding-Box**: Clipped using `osmium` to `west=72.6, south=15.0, east=76.5, north=24.0` (covering Gujarat + Maharashtra + Goa).
+- **Clipping Impact**: Removed the non-walkable Arabian Sea area to reduce file size while keeping all inland forest, wood, building, and road data fully intact.
+- **File Size Reduction**: Original PBF (`western-zone-latest.osm.pbf`) size of ~205MB (215,145,675 bytes) was reduced to ~140MB (147,139,360 bytes) as `western-zone-clipped.osm.pbf`.
+
+### Database Configuration & Schema
+- **Service**: Runs inside WSL Ubuntu on custom port `5433` to prevent conflicts with the host Windows PostgreSQL service (port `5432`).
+- **Extensions**: Enabled `postgis` and `hstore` extensions.
+- **Import Method**: Executed using `osm2pgsql -E 4326 --hstore --slim` to import directly in WGS-84 coordinates and preserve all raw OSM tags.
+- **Imported Row Counts**:
+  - `planet_osm_point`: 1,489,634
+  - `planet_osm_line`: 335,627
+  - `planet_osm_polygon`: 308,015 (including exactly 6,753 forest/wood polygons, keeping green space data fully intact).
+  - `planet_osm_roads`: 77,523
+- **Spatial Indexes**: Standard GIST indexes on `way` and functional GIST indexes on `(way::geography)` for point, line, and polygon tables to optimize ST_DWithin geography query scans.
+
+### Pipeline Fallback Logic & DSN Variables
+- **DSN Variable**: Configured in `.env` and `config.py` as `POSTGIS_DSN=postgresql://heatpath_app:heatpath_secure_pass_2026@127.0.0.1:5433/heatpath_osm`.
+- **Async Execution**: `asyncpg` is used to maintain a connection pool with loopback SSL disabled (`ssl='disable'`) to avoid timeout issues.
+- **Fallback Flow**:
+  1. The API queries local PostGIS using `ST_DWithin` on `way::geography` within a 60m radius of the tile coordinate.
+  2. If PostGIS contains no data (`"postgis_empty"`) or fails (`"postgis_error"`), the query falls back to querying the live Overpass API.
+  3. If Overpass also fails, it falls back to the local SQLite 250m tile cache or the deterministic street-type fallback estimate.
+
+### Replication & Setup Script
+- **Script**: `backend/scripts/setup_postgis.sh` automates the entire migration: verifying files, clipping, creating database & role, running `osm2pgsql` import, and creating indexes.
+- **Re-import Frequency**: Recommended every month to update shade feature geometry with updated Geofabrik Western Zone extracts.
