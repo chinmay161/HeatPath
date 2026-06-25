@@ -2,7 +2,10 @@ import os
 import logging
 import asyncio
 import asyncpg
+from dotenv import load_dotenv
 from typing import List, Dict, Any
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -13,13 +16,14 @@ async def get_pool() -> asyncpg.Pool:
     if _pool is None:
         dsn = os.environ.get(
             "POSTGIS_DSN", 
-            "postgresql://heatpath_app:heatpath_secure_pass_2026@localhost:5432/heatpath_osm"
+            "postgresql://heatpath_app:heatpath_secure_pass_2026@127.0.0.1:5433/heatpath_osm"
         )
         logger.info(f"Initializing PostGIS connection pool with DSN: {dsn}")
         _pool = await asyncpg.create_pool(
             dsn=dsn,
             min_size=2,
-            max_size=10
+            max_size=10,
+            ssl='disable'
         )
     return _pool
 
@@ -178,7 +182,8 @@ async def fetch_shade_features_postgis(lat: float, lon: float, radius_m: int = 6
                     features.append({
                         "lat": lat_val,
                         "lon": lon_val,
-                        "tags": tags
+                        "tags": tags,
+                        "feature_type": f_type
                     })
         
         if not features:

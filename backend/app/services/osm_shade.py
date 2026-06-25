@@ -24,6 +24,7 @@ import httpx
 from typing import List, Dict, Any
 from app.services.shade_tile_cache import tile_key, get_tiles, store_tiles
 from app.services.postgis_shade import fetch_shade_features_postgis
+import app.services.solar as solar_service
 
 logger = logging.getLogger(__name__)
 MAX_CONCURRENT_TILE_FETCHES = 8
@@ -376,9 +377,7 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
     parts = tile_key_str.split("_")
     tile_lat, tile_lon = float(parts[0]), float(parts[1])
 
-    from app.services.solar import get_solar_position
-
-    solar = get_solar_position(tile_lat, tile_lon)
+    solar = solar_service.get_solar_position(tile_lat, tile_lon)
 
     if solar["is_night"]:
         return {
@@ -446,9 +445,8 @@ async def shade_for_path(path: List[Dict[str, float]]) -> dict:
         }
 
     # Calculate solar context for the path using starting point
-    from app.services.solar import get_current_elevation
     start_pt = path[0]
-    solar_elevation = get_current_elevation(start_pt["lat"], start_pt["lon"])
+    solar_elevation = solar_service.get_current_elevation(start_pt["lat"], start_pt["lon"])
     solar_multiplier = 1.0
 
     # Step 2 — compute segment midpoints:

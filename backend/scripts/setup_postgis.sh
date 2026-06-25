@@ -47,7 +47,7 @@ sudo -u postgres psql -d heatpath_osm -c "GRANT ALL ON SCHEMA public TO heatpath
 # -E 4326 imports in WGS84 coordinates.
 # --hstore captures all additional tags.
 echo "[setup] Importing OSM data into PostGIS using osm2pgsql..."
-PGPASSWORD='heatpath_secure_pass_2026' osm2pgsql -d heatpath_osm -U heatpath_app -H localhost \
+PGPASSWORD='heatpath_secure_pass_2026' osm2pgsql -d heatpath_osm -U heatpath_app -H 127.0.0.1 -P 5433 \
   --create --slim \
   -E 4326 \
   --hstore \
