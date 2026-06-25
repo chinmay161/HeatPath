@@ -36,14 +36,23 @@ Navigate to the `backend/` folder:
    Provide valid values for:
    - `ORS_API_KEY` (from OpenRouteService)
    - `WAQI_TOKEN` (from World Air Quality Index)
+   - `POSTGIS_DSN` (e.g., `postgresql://heatpath_app:heatpath_secure_pass_2026@127.0.0.1:5433/heatpath_osm`)
 
-4. **Run the development server:**
+4. **Set up PostGIS database (WSL Ubuntu):**
+   Ensure you have a Western Zone OSM PBF file at the repository root (`./western-zone-latest.osm.pbf`).
+   Run the setup script inside your WSL command line:
+   ```bash
+   ./backend/scripts/setup_postgis.sh
+   ```
+   This will clip the coastline, spin up the local PostgreSQL service on port `5433`, import data using `osm2pgsql`, and build spatial GIST indexes.
+
+5. **Run the development server:**
    ```bash
    uvicorn app.main:app --reload
    ```
    The API will run at `http://localhost:8000`. You can view the docs at `http://localhost:8000/docs`.
 
-5. **Run tests:**
+6. **Run tests:**
    ```bash
    pytest
    ```
