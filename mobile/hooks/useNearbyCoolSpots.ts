@@ -131,7 +131,7 @@ export function useNearbyCoolSpots(
             lat: elLat,
             lon: elLon,
             distanceM: dist,
-            walkMin: Math.max(1, Math.round(dist / 83.3)),
+            walkMin: Math.max(1, Math.round(dist / 100)),
             ...cls,
           });
         }

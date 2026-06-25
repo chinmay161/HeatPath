@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Image } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 
 export type MascotState = 'blink' | 'walking' | 'excited' | 'disappointed' | 'mvp' | 'alert';
@@ -51,6 +51,8 @@ function MascotVideo({
   });
 
   React.useEffect(() => {
+    if (Platform.OS === 'web') return;
+
     player.loop = true;
     player.muted = true;
 
@@ -60,9 +62,37 @@ function MascotVideo({
 
     return () => {
       clearTimeout(playTimer);
-      player.pause();
+      // We do not call player.pause() here because the player is released
+      // automatically by expo-video when the component unmounts. Calling pause()
+      // on a released native object throws a 'shared object already released' error.
     };
   }, [player]);
+
+  if (Platform.OS === 'web') {
+    const resolvedSource = typeof source === 'number'
+      ? Image.resolveAssetSource(source)?.uri
+      : (source && typeof source === 'object' ? (source as any).uri : source);
+
+    return (
+      <video
+        src={resolvedSource}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: contentFit,
+          objectPosition,
+          mixBlendMode: 'multiply',
+        }}
+        loop
+        muted
+        autoPlay
+        playsInline
+      />
+    );
+  }
 
   return (
     <VideoView

@@ -80,7 +80,7 @@ export function HeatZoneMap({
         //   );
         // }}
       >
-        {canUseHeatmap ? (
+        {canUseHeatmap && grid.length > 0 ? (
           <Heatmap
             points={grid.map(point => ({
               latitude: point.lat,
@@ -95,7 +95,7 @@ export function HeatZoneMap({
               colorMapSize: 256,
             }}
           />
-        ) : (
+        ) : !canUseHeatmap ? (
           grid.map((point, index) => (
             <Circle
               key={`${point.lat}-${point.lon}-${index}`}
@@ -106,7 +106,7 @@ export function HeatZoneMap({
               zIndex={2}
             />
           ))
-        )}
+        ) : null}
       </MapView>
 
       {(loading || message) && (

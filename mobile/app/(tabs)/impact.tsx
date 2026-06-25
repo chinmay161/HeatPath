@@ -29,7 +29,7 @@ function fmtDistance(m: number): string {
 }
 
 function fmtDuration(m: number): string {
-  return `~${Math.max(1, Math.round(m / 83.3))} min`;
+  return `~${Math.max(1, Math.round(m / 100))} min`;
 }
 
 function barColor(idx: number, height: number): string {

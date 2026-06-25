@@ -31,7 +31,7 @@ const ROUTE_META = [
 function apiRouteToRoute(r: ScoredRoute, idx: number): Route {
   const sev = scoreToLabel(r.overall_score);
   const totalDist = r.segment_distances_m.reduce((a, b) => a + b, 0) || 1;
-  const walkMin = Math.max(1, Math.round(totalDist / 83.3));
+  const walkMin = Math.max(1, Math.round(totalDist / 100));
 
   // Proportional timeline bars (normalize to sum ~10)
   const bar: [number, string][] = r.shade_segments.map((pct, i) => {
@@ -97,7 +97,7 @@ export default function RoutesScreen() {
   const onStart = () => {
     const sel = data!.routes[selectedIdx];
     const distanceM = Math.round(sel.segment_distances_m.reduce((a, b) => a + b, 0));
-    const walkMin = Math.max(1, Math.round(distanceM / 83.3));
+    const walkMin = Math.max(1, Math.round(distanceM / 100));
     const maxFeelsLike = Math.max(...data!.routes.map(r => r.feels_like_c));
     const heatHoursAvoided = parseFloat(
       Math.max(0, (maxFeelsLike - sel.feels_like_c) * walkMin / 60).toFixed(2),
