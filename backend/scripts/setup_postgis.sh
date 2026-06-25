@@ -63,6 +63,9 @@ echo "[setup] Creating spatial indexes..."
 sudo -u postgres psql -d heatpath_osm -c "CREATE INDEX IF NOT EXISTS idx_osm_point_way ON planet_osm_point USING GIST(way);"
 sudo -u postgres psql -d heatpath_osm -c "CREATE INDEX IF NOT EXISTS idx_osm_polygon_way ON planet_osm_polygon USING GIST(way);"
 sudo -u postgres psql -d heatpath_osm -c "CREATE INDEX IF NOT EXISTS idx_osm_line_way ON planet_osm_line USING GIST(way);"
+sudo -u postgres psql -d heatpath_osm -c "CREATE INDEX IF NOT EXISTS idx_osm_point_way_geog ON planet_osm_point USING GIST((way::geography));"
+sudo -u postgres psql -d heatpath_osm -c "CREATE INDEX IF NOT EXISTS idx_osm_polygon_way_geog ON planet_osm_polygon USING GIST((way::geography));"
+sudo -u postgres psql -d heatpath_osm -c "CREATE INDEX IF NOT EXISTS idx_osm_line_way_geog ON planet_osm_line USING GIST((way::geography));"
 
 # Verify indices and log row counts
 echo "[setup] Post-import Verification:"

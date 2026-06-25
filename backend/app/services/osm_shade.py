@@ -23,6 +23,7 @@ import asyncio
 import httpx
 from typing import List, Dict, Any
 from app.services.shade_tile_cache import tile_key, get_tiles, store_tiles
+from app.services.postgis_shade import fetch_shade_features_postgis
 
 logger = logging.getLogger(__name__)
 MAX_CONCURRENT_TILE_FETCHES = 8
@@ -387,8 +388,6 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
             "solar_multiplier": 1.0
         }
 
-    from app.services.postgis_shade import fetch_shade_features_postgis
-
     features, source = await fetch_shade_features_postgis(tile_lat, tile_lon, radius_m=60)
 
     if source == "postgis_empty":
@@ -410,7 +409,7 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
         data_source = source
     else:
         shade, src = await estimate_shade_from_street_type(tile_lat, tile_lon, solar["elevation"])
-        data_source = "failed" if source == "failed" else src
+        data_source = "fallback" if source == "failed" else src
 
     return {
         "shade_pct": round(shade, 2),
