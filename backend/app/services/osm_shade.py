@@ -387,9 +387,18 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
             "solar_multiplier": 1.0
         }
 
-    features, source = await fetch_shade_features(tile_lat, tile_lon, radius_m=60)
+    from app.services.postgis_shade import fetch_shade_features_postgis
 
-    if source == "overpass" and features:
+    features, source = await fetch_shade_features_postgis(tile_lat, tile_lon, radius_m=60)
+
+    if source == "postgis_empty":
+        logger.info(f"[shade] no PostGIS data at {tile_lat},{tile_lon}, falling back to Overpass")
+        features, source = await fetch_shade_features(tile_lat, tile_lon, radius_m=60)
+    elif source == "postgis_error":
+        logger.warning(f"[shade] PostGIS query failed at {tile_lat},{tile_lon}, falling back to Overpass")
+        features, source = await fetch_shade_features(tile_lat, tile_lon, radius_m=60)
+
+    if source in ("postgis", "overpass") and features:
         shade = estimate_shade_percent(
             features,
             solar_elevation=solar["elevation"],
@@ -398,10 +407,10 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
             tile_lat=tile_lat,
             tile_lon=tile_lon,
         )
-        data_source = "overpass"
+        data_source = source
     else:
         shade, src = await estimate_shade_from_street_type(tile_lat, tile_lon, solar["elevation"])
-        data_source = "fallback" if source == "failed" else src
+        data_source = "failed" if source == "failed" else src
 
     return {
         "shade_pct": round(shade, 2),
