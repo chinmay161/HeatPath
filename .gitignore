@@ -31,3 +31,8 @@ backend/data/shade_tiles.db
 mobile/node_modules/
 mobile/.expo/
 mobile/dist/
+
+# OSM PBF data extracts
+*.osm.pbf
+*.pbf
+
