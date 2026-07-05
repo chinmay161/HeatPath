@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './Icon';
 import { colors, fonts, radius } from '../theme/colors';
@@ -24,9 +24,11 @@ export function AppSidebar({ active, onNav }: AppSidebarProps) {
     <View style={[styles.sidebar, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
       {/* Brand */}
       <View style={styles.brand}>
-        <View style={styles.logoBox}>
-          <Icon name="shade" size={18} stroke={colors.lime} width={2.2} />
-        </View>
+        <Image
+          source={require('../public/logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.brandName}>HeatPath</Text>
       </View>
 
@@ -95,6 +97,10 @@ const styles = StyleSheet.create({
     // gradient approximated with solid color
     backgroundImage: `linear-gradient(150deg, ${colors.forest}, ${colors.forestDeep})`,
   } as any,
+  logo: {
+    width: 32,
+    height: 32,
+  },
   brandName: {
     fontFamily: fonts.display,
     fontSize: 19,

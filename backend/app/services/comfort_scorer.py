@@ -100,7 +100,7 @@ def score_route(segments: List[Dict[str, Union[float, int, bool]]]) -> Dict[str,
 
     return {
         "segment_scores": segment_scores,
-        "shade_safety_score": total_shade_score / num_segments,
+        "shade_safety_score": min(1.0, total_shade_score / num_segments),
         "heat_safety_score": 1.0 - (total_heat_penalty / num_segments),
         "crowd_safety_score": 1.0 - (total_crowd_pct / num_segments / 100.0),
         "overall_score": sum(segment_scores) / num_segments,

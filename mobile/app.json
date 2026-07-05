@@ -6,19 +6,23 @@
     "scheme": "heatpath",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./public/favicon.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "in.heatpath.app"
+      "bundleIdentifier": "in.heatpath.app",
+      "icon": "./public/favicon.png"
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./public/favicon.png",
         "backgroundColor": "#1C7C4A"
       },
       "package": "in.heatpath.app"
     },
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "favicon": "./public/favicon.png"
     },
     "plugins": [
       "expo-router",

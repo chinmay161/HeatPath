@@ -1,4 +1,4 @@
-# HeatPath Monorepo
+# HeatPath
 
 HeatPath is a heat-aware and air-quality-aware outdoor routing application designed to help pedestrians navigate through cooler and shadier paths. This monorepo contains both the FastAPI Python backend and the cross-platform Expo React Native app.
 

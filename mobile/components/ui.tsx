@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ViewStyle,
   TextStyle,
+  Image,
 } from 'react-native';
 import Icon from './Icon';
 import { colors, fonts, radius, severity } from '../theme/colors';
@@ -220,19 +221,12 @@ import Svg, { Path } from 'react-native-svg';
 
 export function Logo({ size = 32 }: { size?: number }) {
   const s = size;
-  const inner = Math.round(s * 0.56);
   return (
-    <View
-      style={{
-        width: s, height: s, borderRadius: 9,
-        backgroundColor: colors.forestDeep,
-        alignItems: 'center', justifyContent: 'center',
-      }}
-    >
-      <Svg width={inner} height={inner} viewBox="0 0 24 24" fill="none" stroke={colors.lime} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M12 2v8M12 22v-4M5 10c0 4 3 6 7 6s7-2 7-6c0-3-2-5-2-5s-2 2-5 2-5-2-7 3z" />
-      </Svg>
-    </View>
+    <Image
+      source={require('../public/favicon.png')}
+      style={{ width: s, height: s, borderRadius: 9 }}
+      resizeMode="contain"
+    />
   );
 }
 

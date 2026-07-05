@@ -51,7 +51,7 @@ function MascotVideo({
   });
 
   React.useEffect(() => {
-    if (Platform.OS === 'web') return;
+    if ((Platform.OS as string) === 'web') return;
 
     player.loop = true;
     player.muted = true;
@@ -68,7 +68,7 @@ function MascotVideo({
     };
   }, [player]);
 
-  if (Platform.OS === 'web') {
+  if ((Platform.OS as string) === 'web') {
     const resolvedSource = typeof source === 'number'
       ? Image.resolveAssetSource(source)?.uri
       : (source && typeof source === 'object' ? (source as any).uri : source);
@@ -101,7 +101,7 @@ function MascotVideo({
         StyleSheet.absoluteFill,
         { width: '100%', height: '100%' },
         // On web the video background is removed via multiply blend mode (matching the reference)
-        Platform.OS === 'web' ? { mixBlendMode: 'multiply', objectPosition } : null,
+        (Platform.OS as string) === 'web' ? { mixBlendMode: 'multiply', objectPosition } : null,
       ] as any}
       contentFit={contentFit}
       nativeControls={false}
@@ -160,7 +160,7 @@ export function MascotBadge({
           // On web: use boxShadow; on native: use shadow props (limited support)
           borderWidth: 2,
           borderColor: '#fff',
-          ...(Platform.OS === 'web'
+          ...((Platform.OS as string) === 'web'
             ? { boxShadow: `0 0 0 2px ${isAlert ? '#C8322A' : '#A6DD3A'}, 0 6px 12px -5px rgba(0,0,0,0.3)` }
             : {}),
         } as any,

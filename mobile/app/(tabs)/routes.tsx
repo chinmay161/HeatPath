@@ -59,7 +59,7 @@ function apiRouteToRoute(r: ScoredRoute, idx: number): Route {
     min: `${walkMin} min`,
     feels: `${Math.round(r.feels_like_c)}°`,
     feelsColor: scoreToColor(r.overall_score),
-    shade: `${Math.round(r.shade_safety_score * 100)}%`,
+    shade: `${Math.round(r.avg_shade_pct)}%`,
     bar,
     seg,
   };
@@ -110,7 +110,7 @@ export default function RoutesScreen() {
         destName,
         distanceM: String(distanceM),
         feelLikeC: String(parseFloat(sel.feels_like_c.toFixed(1))),
-        shadePct: String(Math.round(sel.shade_safety_score * 100)),
+        shadePct: String(Math.round(sel.avg_shade_pct)),
         overallScore: String(parseFloat(sel.overall_score.toFixed(2))),
         heatHoursAvoided: String(heatHoursAvoided),
       },
@@ -125,7 +125,7 @@ export default function RoutesScreen() {
       const r2 = data!.routes[1];
       const tempDiff  = Math.round(r2.feels_like_c - r1.feels_like_c);
       if (isDesktop) return 'Tap a route to preview it on the map.';
-      return `The coolest route keeps you in ${Math.round(r1.shade_safety_score * 100)}% shade${tempDiff > 0 ? ` — ${tempDiff}° cooler than the alternate` : ''}.`;
+      return `The coolest route keeps you in ${Math.round(r1.avg_shade_pct)}% shade${tempDiff > 0 ? ` — ${tempDiff}° cooler than the alternate` : ''}.`;
     }
     return isDesktop ? 'Tap a route to preview it on the map.' : 'Your coolest route is ready.';
   })();
