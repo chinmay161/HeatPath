@@ -1,7 +1,9 @@
 from typing import List, Dict, Union
+from app.config import config
 
 # Max perceived temperature reduction in full shade vs full sun exposure (°C)
-COOLING_FACTOR_C = 7.0
+# Based on Steadman (1984) / Oke (1987) urban microclimate radiation models
+COOLING_FACTOR_C = config.SHADE_COOLING_FACTOR_C
 
 
 def score_segment(
@@ -32,15 +34,19 @@ def score_segment(
     effective_shade = shade_pct if shade_pct is not None else 0.0
     shade_score = effective_shade / 95.0
 
-    heat_penalty = min(heat_index / 50.0, 1.0) * (heat_sensitivity / 10.0)
+    heat_penalty = min(heat_index / config.SCORING_MAX_HEAT_INDEX, 1.0) * (heat_sensitivity / 10.0)
 
     # AQI penalty: only applied when real AQI data is available
     if aqi is not None:
-        aqi_penalty = min(aqi / 300.0, 1.0) * (aqi_sensitivity / 10.0)
+        aqi_penalty = min(aqi / config.SCORING_MAX_AQI, 1.0) * (aqi_sensitivity / 10.0)
     else:
         aqi_penalty = 0.0
 
-    comfort = shade_score * 0.5 - heat_penalty * 0.3 - aqi_penalty * 0.2
+    comfort = (
+        shade_score * config.SCORING_WEIGHT_SHADE
+        - heat_penalty * config.SCORING_WEIGHT_HEAT
+        - aqi_penalty * config.SCORING_WEIGHT_AQI
+    )
 
     # Crowd penalty removed: crowd density feature is disabled until a real source is integrated
 
@@ -98,7 +104,7 @@ def score_route(segments: List[Dict[str, Union[float, int, bool, None]]]) -> Dic
             total_shade_score += shade_pct / 95.0
             valid_shade_count += 1
 
-        heat_penalty = min(heat_idx / 50.0, 1.0) * (int(segment["heat_sensitivity"]) / 10.0)
+        heat_penalty = min(heat_idx / config.SCORING_MAX_HEAT_INDEX, 1.0) * (int(segment["heat_sensitivity"]) / 10.0)
         total_heat_penalty += heat_penalty
 
     num_segments = len(segments)

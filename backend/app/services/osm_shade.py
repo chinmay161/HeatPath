@@ -25,6 +25,7 @@ from typing import List, Dict, Any
 from app.services.shade_tile_cache import tile_key, get_tiles, store_tiles
 from app.services.postgis_shade import fetch_shade_features_postgis
 import app.services.solar as solar_service
+from app.config import config
 
 logger = logging.getLogger(__name__)
 MAX_CONCURRENT_TILE_FETCHES = 8
@@ -164,11 +165,11 @@ def extract_building_height(element: dict) -> float:
     1. height
     2. building:levels
     3. levels
-    Default is 12.0m. Handle non-numeric / malformed values gracefully.
+    Default is config.DEFAULT_BUILDING_HEIGHT_M (12.0m). Handle non-numeric / malformed values gracefully.
     """
     tags = element.get("tags", {}) if element else {}
     if not tags:
-        return 12.0
+        return config.DEFAULT_BUILDING_HEIGHT_M
 
     # Priority 1: height
     if "height" in tags:
@@ -188,7 +189,7 @@ def extract_building_height(element: dict) -> float:
     if "building:levels" in tags:
         val = tags["building:levels"]
         try:
-            return float(int(float(val)) * 3.5)
+            return float(int(float(val)) * config.LEVEL_HEIGHT_M)
         except (ValueError, TypeError):
             pass
 
@@ -196,11 +197,11 @@ def extract_building_height(element: dict) -> float:
     if "levels" in tags:
         val = tags["levels"]
         try:
-            return float(int(float(val)) * 3.5)
+            return float(int(float(val)) * config.LEVEL_HEIGHT_M)
         except (ValueError, TypeError):
             pass
 
-    return 12.0
+    return config.DEFAULT_BUILDING_HEIGHT_M
 
 
 def get_element_center(element: dict) -> tuple[float, float]:
