@@ -129,9 +129,16 @@ async def _load_center_conditions(north: float, south: float, east: float, west:
         get_weather(center_lat, center_lon),
         get_aqi(center_lat, center_lon),
     )
+    if weather.get("status") == "unavailable" or weather.get("temperature_c") is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Weather data temporarily unavailable from provider (Open-Meteo).",
+        )
     solar = get_solar_position(center_lat, center_lon)
     heat_index = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
-    return heat_index, float(raw_aqi), solar
+    aqi_val = raw_aqi.get("value") if isinstance(raw_aqi, dict) else raw_aqi
+    aqi_float = float(aqi_val) if aqi_val is not None else 0.0
+    return heat_index, aqi_float, solar
 
 
 def _solar_phase(solar: dict) -> str:

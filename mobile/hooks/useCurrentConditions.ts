@@ -4,13 +4,21 @@ import { API_BASE } from '../config/api';
 export type Severity = 'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME';
 
 export type Conditions = {
-  heat_index: number;
-  shade_index: number;
-  aqi_index: number;
-  temperature_c: number;
-  humidity_pct: number;
-  feels_like_c: number;
-  severity: Severity;
+  status?: string;
+  provider?: string;
+  heat_index: number | null;
+  shade_index: number | null;
+  aqi_index: number | null;
+  temperature_c: number | null;
+  humidity_pct: number | null;
+  feels_like_c: number | null;
+  severity: Severity | null;
+  weather?: any;
+  aqi?: {
+    value: number | null;
+    status: string;
+    provider: string;
+  };
 };
 
 type State = {

@@ -1,22 +1,24 @@
 """
-Dev B owns this file.
-Fetches real-time temperature, humidity, heat index from Open-Meteo (free, no key).
-Fetches AQI from WAQI API (free token).
-Called by GET /conditions endpoint.
+Weather & Air Quality Services.
+
+Fetches real-time temperature, humidity, and heat index from Open-Meteo.
+Fetches AQI from Open-Meteo Air Quality API.
+Never fabricates synthetic temperatures or assumes clean air on provider failure.
 """
-import httpx
+import asyncio
+import logging
 import os
-from dotenv import load_dotenv
+from datetime import datetime, timezone
+import httpx
 
-load_dotenv()
-
+logger = logging.getLogger(__name__)
 WAQI_TOKEN = os.getenv("WAQI_TOKEN", "")
 
 
 async def get_weather(lat: float, lon: float) -> dict:
     """
-    Returns temperature_c, humidity_pct, feels_like_c from Open-Meteo.
-    Retries once on 429 rate limit.
+    Returns real-time temperature_c, humidity_pct, feels_like_c from Open-Meteo.
+    On failure: logs provider failure and returns structured unavailable state.
     """
     url = (
         f"https://api.open-meteo.com/v1/forecast"
@@ -24,54 +26,89 @@ async def get_weather(lat: float, lon: float) -> dict:
         f"&current=temperature_2m,relative_humidity_2m,apparent_temperature"
         f"&forecast_days=1"
     )
-    import asyncio
-    import logging
-    logger = logging.getLogger(__name__)
 
+    last_error = None
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 r = await client.get(url)
                 if r.status_code == 429:
-                    logger.warning(f"Weather API rate-limited (429), retrying (attempt {attempt + 1}/3)...")
+                    logger.warning(
+                        "[provider_rate_limited] provider=open-meteo service=weather attempt=%d/3 coord=(%.4f,%.4f)",
+                        attempt + 1, lat, lon
+                    )
                     await asyncio.sleep(2 ** attempt)
                     continue
                 r.raise_for_status()
                 data = r.json()
-                current = data["current"]
+                current = data.get("current", {})
                 return {
-                    "temperature_c": current["temperature_2m"],
-                    "humidity_pct":  current["relative_humidity_2m"],
-                    "feels_like_c":  current["apparent_temperature"],
+                    "status": "available",
+                    "provider": "open-meteo",
+                    "temperature_c": float(current["temperature_2m"]),
+                    "humidity_pct":  float(current["relative_humidity_2m"]),
+                    "feels_like_c":  float(current["apparent_temperature"]),
                 }
         except Exception as e:
-            logger.warning(f"Weather API request failed (attempt {attempt + 1}/3): {type(e).__name__}: {e}")
+            last_error = e
+            logger.warning(
+                "[provider_error] provider=open-meteo service=weather attempt=%d/3 reason=%s: %s coord=(%.4f,%.4f)",
+                attempt + 1, type(e).__name__, e, lat, lon
+            )
             if attempt < 2:
                 await asyncio.sleep(2 ** attempt)
                 continue
 
-    # All retries failed — realistic Mumbai summer fallback
-    logger.warning("All weather API retries failed, using Mumbai fallback.")
-    return {"temperature_c": 34.0, "humidity_pct": 65, "feels_like_c": 36.5}
+    # Provider unavailable — do not fabricate synthetic temperatures
+    logger.warning(
+        "[provider_failure] provider=open-meteo service=weather reason=%s timestamp=%s coord=(%.4f,%.4f)",
+        str(last_error),
+        datetime.now(timezone.utc).isoformat(),
+        lat,
+        lon,
+    )
+    return {
+        "status": "unavailable",
+        "provider": "open-meteo",
+        "temperature_c": None,
+        "humidity_pct": None,
+        "feels_like_c": None,
+    }
 
 
-async def get_aqi(lat: float, lon: float) -> int:
+async def get_aqi(lat: float, lon: float) -> dict:
     """
     Returns AQI (0–500 scale) from Open-Meteo Air Quality API.
-    Falls back to 50 (Good) if the API fails.
+    On failure: returns structured unavailable state (never assumes clean air).
     """
     url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi"
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(url)
             r.raise_for_status()
             data = r.json()
-            if "current" in data and "us_aqi" in data["current"]:
-                return int(data["current"]["us_aqi"])
+            current = data.get("current", {})
+            if "us_aqi" in current and current["us_aqi"] is not None:
+                return {
+                    "value": int(current["us_aqi"]),
+                    "status": "available",
+                    "provider": "open-meteo",
+                }
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"AQI API request failed: {type(e).__name__}: {e}")
-    return 50
+        logger.warning(
+            "[provider_failure] provider=open-meteo service=aqi reason=%s: %s timestamp=%s coord=(%.4f,%.4f)",
+            type(e).__name__,
+            e,
+            datetime.now(timezone.utc).isoformat(),
+            lat,
+            lon,
+        )
+
+    return {
+        "value": None,
+        "status": "unavailable",
+        "provider": "open-meteo",
+    }
 
 
 def compute_heat_index(temp_c: float, humidity_pct: float) -> float:
@@ -79,6 +116,9 @@ def compute_heat_index(temp_c: float, humidity_pct: float) -> float:
     Steadman heat index formula (°C).
     Accurate above 27°C and 40% humidity — the Indian summer range.
     """
+    if temp_c is None or humidity_pct is None:
+        return None
+
     T = temp_c
     R = humidity_pct
 

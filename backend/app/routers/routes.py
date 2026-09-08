@@ -30,17 +30,17 @@ async def score_route(
         
     # Auto-fetch live conditions if defaults are used
     if heat_index == 0.0 and aqi == 0.0:
-        try:
-            start_point = request.path[0]
-            weather = await get_weather(start_point.lat, start_point.lon)
-            raw_aqi = await get_aqi(start_point.lat, start_point.lon)
-            heat_index = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
-            aqi = float(raw_aqi)
-        except Exception as e:
+        start_point = request.path[0]
+        weather = await get_weather(start_point.lat, start_point.lon)
+        if weather.get("status") == "unavailable" or weather.get("temperature_c") is None:
             raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Failed to auto-fetch environmental conditions: {e}"
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to auto-fetch environmental conditions: Weather provider unavailable",
             )
+        raw_aqi = await get_aqi(start_point.lat, start_point.lon)
+        heat_index = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
+        aqi_val = raw_aqi.get("value") if isinstance(raw_aqi, dict) else raw_aqi
+        aqi = float(aqi_val) if aqi_val is not None else 0.0
         
     path_dicts = [{"lat": loc.lat, "lon": loc.lon} for loc in request.path]
     shade_res = await shade_for_path(path_dicts)

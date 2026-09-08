@@ -109,3 +109,37 @@ def test_get_preferences():
     assert "aqi_sensitivity" in data
     assert 1 <= data["heat_sensitivity"] <= 10
     assert 1 <= data["aqi_sensitivity"] <= 10
+
+
+def test_conditions_weather_unavailable_returns_200_structured(monkeypatch):
+    """Verify that weather outage returns 200 with structured unavailable state, not fake weather."""
+    import app.routers.conditions as conditions_module
+
+    async def mock_unavailable_weather(lat, lon):
+        return {
+            "status": "unavailable",
+            "provider": "open-meteo",
+            "temperature_c": None,
+            "humidity_pct": None,
+            "feels_like_c": None,
+        }
+
+    async def mock_unavailable_aqi(lat, lon):
+        return {
+            "value": None,
+            "status": "unavailable",
+            "provider": "open-meteo",
+        }
+
+    monkeypatch.setattr(conditions_module, "get_weather", mock_unavailable_weather)
+    monkeypatch.setattr(conditions_module, "get_aqi", mock_unavailable_aqi)
+
+    response = client.get("/conditions/?lat=18.9220&lon=72.8347")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "unavailable"
+    assert data["weather"] is None
+    assert data["heat_index"] is None
+    assert data["temperature_c"] is None
+    assert data["aqi"]["status"] == "unavailable"
+    assert data["aqi"]["value"] is None

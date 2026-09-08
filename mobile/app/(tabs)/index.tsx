@@ -86,10 +86,10 @@ export default function HomeScreen() {
   const isLoading = locLoading || condLoading;
   const hasError  = !isLoading && (locError != null || condError != null);
 
-  // Display values: real from API where available, static fallback otherwise
-  const feelsLike  = cond ? Math.round(cond.heat_index)    : null;
-  const realTemp   = cond ? Math.round(cond.temperature_c) : null;
-  const humidity   = cond ? Math.round(cond.humidity_pct)  : null;
+  // Display values: real from API where available, null otherwise
+  const feelsLike  = cond && cond.heat_index != null ? Math.round(cond.heat_index)    : null;
+  const realTemp   = cond && cond.temperature_c != null ? Math.round(cond.temperature_c) : null;
+  const humidity   = cond && cond.humidity_pct != null ? Math.round(cond.humidity_pct)  : null;
   const sevLabel   = cond?.severity ?? null;
   const aqiIndex   = cond?.aqi_index ?? null;
 

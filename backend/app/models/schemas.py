@@ -14,15 +14,17 @@ class Location(BaseModel):
 
 class ConditionsResponse(BaseModel):
     """Response schema for environmental conditions."""
-    # Existing fields — unchanged (Dev A may reference these)
-    heat_index:  float
-    shade_index: float
-    aqi_index:   float
-    # Added fields — raw weather values + derived display helpers
-    temperature_c: float  # real air temperature from Open-Meteo
-    humidity_pct:  float  # relative humidity from Open-Meteo
-    feels_like_c:  float  # Open-Meteo apparent temperature (accounts for wind/humidity)
-    severity:      str    # SAFE / CAUTION / HIGH / EXTREME, derived from heat_index
+    status: str = "available"  # "available" | "unavailable"
+    provider: Optional[str] = "open-meteo"
+    heat_index: Optional[float] = None
+    shade_index: Optional[float] = None
+    aqi_index: Optional[float] = None
+    temperature_c: Optional[float] = None
+    humidity_pct: Optional[float] = None
+    feels_like_c: Optional[float] = None
+    severity: Optional[str] = None
+    weather: Optional[dict] = None
+    aqi: Optional[dict] = None
     model_config = ConfigDict(from_attributes=True)
 
 

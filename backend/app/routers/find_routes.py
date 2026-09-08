@@ -46,8 +46,15 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             detail=f"External API error: {e}",
         )
 
+    if weather.get("status") == "unavailable" or weather.get("temperature_c") is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Weather service temporarily unavailable from provider (Open-Meteo). Route comfort scoring requires live environmental data.",
+        )
+
     heat_index     = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
-    aqi_normalised = min(raw_aqi / 300.0, 1.0)
+    aqi_val        = raw_aqi.get("value") if isinstance(raw_aqi, dict) else raw_aqi
+    aqi_normalised = min(float(aqi_val) / 300.0, 1.0) if aqi_val is not None else 0.0
     avoid_crowds   = _user_preferences.get("avoid_crowds", False)
 
     async def score_one(path):
@@ -71,7 +78,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             {
                 "shade_pct":        shade_pcts[i],
                 "heat_index":       heat_index,
-                "aqi":              raw_aqi,
+                "aqi":              aqi_val,
                 "crowd_pct":        None,
                 "heat_sensitivity": _user_preferences["heat_sensitivity"],
                 "aqi_sensitivity":  _user_preferences["aqi_sensitivity"],
