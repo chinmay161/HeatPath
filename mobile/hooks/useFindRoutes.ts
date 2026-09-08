@@ -24,6 +24,20 @@ export type ScoredRoute = {
   segment_distances_m: number[];
   path: { lat: number; lon: number }[];
   segment_count: number;
+  distance_m?: number;
+  duration_min?: number;
+  heat_hours_avoided?: number;
+  energy_savings_kcal?: number;
+  warnings?: string[];
+  provider_freshness?: {
+    weather_provider?: string;
+    weather_observed_at?: string | null;
+    aqi_provider?: string;
+    aqi_observed_at?: string | null;
+  };
+  aqi_val?: number | null;
+  aqi_category?: string;
+  selection_reason?: string;
 };
 
 export type RoutesResult = {

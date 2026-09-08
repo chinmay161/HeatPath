@@ -2,7 +2,7 @@
 Pydantic schemas for request and response validation.
 """
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Any, Union, Dict
 
 
 class Location(BaseModel):
@@ -116,6 +116,15 @@ class ScoredRoute(BaseModel):
     segment_distances_m: List[float]            = Field(..., description="Distance in meters per segment, aligned with shade_segments")
     path:                List[Location]         = Field(..., description="Route coordinates")
     segment_count:       int                    = Field(..., description="Number of path segments")
+    distance_m:          float                  = Field(default=0.0, description="Total route distance in meters")
+    duration_min:        int                    = Field(default=1, description="Estimated walking time in minutes based on user speed preference")
+    heat_hours_avoided:  float                  = Field(default=0.0, description="Estimated heat exposure hours avoided")
+    energy_savings_kcal: float                  = Field(default=0.0, description="Estimated metabolic cooling energy saved in kcal")
+    warnings:            List[str]              = Field(default_factory=list, description="Active environmental warnings/cautions")
+    provider_freshness:  Dict[str, Optional[str]] = Field(default_factory=dict, description="Observed timestamps and data sources")
+    aqi_val:             Optional[float]        = Field(default=None, description="Raw AQI value")
+    aqi_category:        str                    = Field(default="Good", description="AQI category label")
+    selection_reason:    str                    = Field(default="", description="Human-readable reason why this route was selected")
     model_config = ConfigDict(from_attributes=True)
 
 

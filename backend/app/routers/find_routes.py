@@ -58,6 +58,37 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
     aqi_normalised = min(float(aqi_val) / 300.0, 1.0) if aqi_val is not None else 0.0
     avoid_crowds   = _user_preferences.get("avoid_crowds", False)
 
+    walking_speed_pref = _user_preferences.get("walking_speed", "normal")
+    speed_m_per_min = 60.0 if walking_speed_pref == "slow" else (96.6 if walking_speed_pref == "brisk" else 80.0)
+
+    def get_aqi_category(val) -> str:
+        if val is None:
+            return "Unknown"
+        try:
+            v = float(val)
+        except (ValueError, TypeError):
+            return "Unknown"
+        if v <= 50:
+            return "Good"
+        if v <= 100:
+            return "Moderate"
+        if v <= 150:
+            return "Unhealthy for Sensitive Groups"
+        if v <= 200:
+            return "Unhealthy"
+        if v <= 300:
+            return "Very Unhealthy"
+        return "Hazardous"
+
+    aqi_cat = get_aqi_category(aqi_val)
+
+    provider_freshness = {
+        "weather_provider": weather.get("provider", "Open-Meteo"),
+        "weather_observed_at": weather.get("observed_at"),
+        "aqi_provider": raw_aqi.get("provider", "Open-Meteo") if isinstance(raw_aqi, dict) else "Open-Meteo",
+        "aqi_observed_at": raw_aqi.get("observed_at") if isinstance(raw_aqi, dict) else None,
+    }
+
     async def score_one(path):
         simplified = simplify_path(path, max_points=8)
 
@@ -74,6 +105,13 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             )
             for i in range(len(simplified) - 1)
         ]
+
+        total_dist_m = sum(segment_distances)
+        if total_dist_m == 0 and len(path) > 1:
+            for i in range(len(path) - 1):
+                total_dist_m += haversine_distance(path[i]["lat"], path[i]["lon"], path[i + 1]["lat"], path[i + 1]["lon"])
+
+        duration_min = max(1, round(total_dist_m / speed_m_per_min))
 
         segments = [
             {
@@ -94,6 +132,39 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         avg_shade_pct = sum(valid_shades) / len(valid_shades) if valid_shades else 0.0
         feels_like_c  = estimate_feels_like(heat_index, avg_shade_pct)
 
+        heat_hours_avoided = round((avg_shade_pct / 100.0) * (duration_min / 60.0), 2)
+        energy_savings_kcal = round((avg_shade_pct / 100.0) * duration_min * 0.85, 1)
+
+        warnings = []
+        if heat_index >= 40.0:
+            warnings.append("Extreme heat hazard: Heat index exceeds 40°C. Seek shade and hydrate.")
+        elif heat_index >= 35.0:
+            warnings.append("High heat index: Pace yourself and take frequent shaded breaks.")
+
+        if aqi_val is not None:
+            try:
+                aqi_f = float(aqi_val)
+                if aqi_f > 150:
+                    warnings.append(f"Air quality alert: AQI is {int(aqi_f)} ({aqi_cat}). Mask recommended.")
+                elif aqi_f > 100:
+                    warnings.append(f"Elevated AQI: {int(aqi_f)} ({aqi_cat}). Sensitive groups should take care.")
+            except (ValueError, TypeError):
+                pass
+
+        if avg_shade_pct < 20.0:
+            warnings.append("Low shade alert: Path has minimal tree cover; high direct sun exposure.")
+
+        uv_idx = weather.get("uv_index")
+        if uv_idx is not None and uv_idx >= 8:
+            warnings.append(f"Very high UV index ({uv_idx}): Wear sun protection.")
+
+        if avg_shade_pct >= 50.0:
+            selection_reason = f"Maximized tree canopy and shadow cover ({round(avg_shade_pct)}% shaded), lowering perceived temperature to {round(feels_like_c, 1)}°C."
+        elif avg_shade_pct >= 25.0:
+            selection_reason = f"Balanced path offering {round(avg_shade_pct)}% shade coverage along pedestrian walkways."
+        else:
+            selection_reason = f"Direct walking route with {round(avg_shade_pct)}% shade coverage."
+
         return {
             "score_version":       scores.get("score_version", config.SCORE_VERSION),
             "overall_score":       scores["overall_score"],
@@ -109,6 +180,15 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             "segment_distances_m": [round(d, 1) for d in segment_distances],
             "path":                [Location(lat=pt["lat"], lon=pt["lon"]) for pt in path],
             "segment_count":       len(segments),
+            "distance_m":          round(total_dist_m, 1),
+            "duration_min":        duration_min,
+            "heat_hours_avoided":  heat_hours_avoided,
+            "energy_savings_kcal": energy_savings_kcal,
+            "warnings":            warnings,
+            "provider_freshness":  provider_freshness,
+            "aqi_val":             aqi_val,
+            "aqi_category":        aqi_cat,
+            "selection_reason":    selection_reason,
         }
 
     scored_list = await asyncio.gather(*[score_one(p) for p in candidate_paths])
@@ -135,9 +215,19 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             segment_distances_m=r["segment_distances_m"],
             path=r["path"],
             segment_count=r["segment_count"],
+            distance_m=r["distance_m"],
+            duration_min=r["duration_min"],
+            heat_hours_avoided=r["heat_hours_avoided"],
+            energy_savings_kcal=r["energy_savings_kcal"],
+            warnings=r["warnings"],
+            provider_freshness=r["provider_freshness"],
+            aqi_val=r["aqi_val"],
+            aqi_category=r["aqi_category"],
+            selection_reason=r["selection_reason"],
         )
         for rank, r in enumerate(scored_list)
     ]
+
 
     return ScoredRoutesResponse(
         score_version=config.SCORE_VERSION,
