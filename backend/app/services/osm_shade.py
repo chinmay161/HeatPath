@@ -14,7 +14,7 @@
 #    Element types: 27 ways
 #    No relation-type buildings returned; all building features are ways.
 
-# Tile caching is handled by shade_tile_cache.py (SQLite, 250m tiles, 30d TTL)
+# Tile caching is handled by shade_tile_cache.py (250m tiles)
 # Do NOT add module-level caching here — it has no TTL and leaks memory.
 
 import logging
@@ -433,7 +433,7 @@ async def _fetch_shade_tiles_limited(tile_keys: List[str]) -> list:
 
 async def shade_for_path(path: List[Dict[str, float]]) -> dict:
     """
-    Compute shade percentages for each segment of a path using SQLite tile cache batching.
+    Compute shade percentages for each segment of a path using tile cache batching.
     """
     # Step 1 — guard:
     if len(path) < 2:
@@ -456,7 +456,7 @@ async def shade_for_path(path: List[Dict[str, float]]) -> dict:
     keys = [tile_key(m["lat"], m["lon"]) for m in midpoints]
     unique_keys = list(set(keys))
 
-    # Step 4 — bulk SQLite lookup:
+    # Step 4 — bulk tile cache lookup:
     cached = await get_tiles(unique_keys)
     initially_cached_keys = set(cached.keys())
     missing_keys = [k for k in unique_keys if k not in cached]

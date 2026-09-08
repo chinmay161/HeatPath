@@ -3,7 +3,6 @@ import os
 import argparse
 import asyncio
 import logging
-import sqlite3
 
 # Ensure backend directory is in sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -12,7 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("warmup_shade_cache")
 
-from app.services.shade_tile_cache import tile_key, TILE_SIZE, DB_PATH, store_tiles
+from app.services.shade_tile_cache import tile_key, TILE_SIZE, get_tiles, store_tiles
 from app.services.osm_shade import fetch_shade_for_tile
 
 async def main():
@@ -34,19 +33,10 @@ async def main():
     unique_all_keys = list(dict.fromkeys(all_keys))
     total_count = len(unique_all_keys)
 
-    # Read currently stored keys
-    existing_db_keys = set()
-    if os.path.exists(DB_PATH):
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("SELECT tile_key FROM shade_tiles")
-            existing_db_keys = {row[0] for row in cursor.fetchall()}
-            conn.close()
-        except Exception as e:
-            logger.warning(f"Could not read existing tiles from database: {e}")
-
-    missing_keys = [k for k in unique_all_keys if k not in existing_db_keys]
+    # Read currently stored keys from cache
+    cached_tiles = await get_tiles(unique_all_keys)
+    existing_keys = set(cached_tiles.keys())
+    missing_keys = [k for k in unique_all_keys if k not in existing_keys]
 
     if args.dry_run:
         print(f"Total tiles: {total_count}")

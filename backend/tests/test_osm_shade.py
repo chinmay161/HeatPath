@@ -1,9 +1,8 @@
 import pytest
 import logging
-import sqlite3
 import httpx
 from unittest.mock import AsyncMock
-from app.services.shade_tile_cache import DB_PATH
+from app.services.shade_tile_cache import clear_cache as clear_db
 from app.services.osm_shade import (
     estimate_shade_percent,
     shade_for_path,
@@ -21,14 +20,6 @@ def mock_solar_noon(monkeypatch):
     import app.services.solar as solar
     monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 60.0)
     monkeypatch.setattr(solar, "get_solar_position", lambda lat, lon: {"elevation": 60.0, "azimuth": 180.0, "is_night": False})
-
-def clear_db():
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        with conn:
-            conn.execute("DELETE FROM shade_tiles")
-    finally:
-        conn.close()
 
 def test_estimate_shade_percent():
     features = [
