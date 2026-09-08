@@ -81,8 +81,12 @@ export function HeatZoneMap({
       <MapContainer
         center={[center.lat, center.lon]}
         zoom={14}
-        // @ts-ignore — React Native style object is compatible with Leaflet's CSSProperties here.
-        style={mapStyle}
+        // Gestures are intentionally disabled: backend /heat-zones/ computes full grid
+        // matrices with external tile shade and weather/AQI calls for the entire viewport.
+        // Allowing unconstrained pan/zoom triggers upstream rate limits and HTTP 400s
+        // (exceeding MAX_VIEWPORT_DEGREES) until backend vector tile streaming is implemented.
+        // TODO(v2-viewport-streaming): Re-enable pan, zoom, and dynamic viewport updates
+        // once backend supports quantized vector tile streaming and debounced viewport caching.
         zoomControl={false}
         scrollWheelZoom={false}
         dragging={false}
@@ -93,7 +97,7 @@ export function HeatZoneMap({
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         {/* FitBounds fires invalidateSize() + fitBounds() after layout resolves */}
         <FitBounds {...bounds} />
-        {/* Re-enable when "expand to city view" is built (future v2 feature)
+        {/* Future v2 viewport listener (see TODO above):
         <ViewportEvents onViewportChange={onViewportChange} />
         */}
         {grid.map((point, index) => (

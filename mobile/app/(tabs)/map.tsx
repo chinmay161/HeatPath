@@ -137,7 +137,11 @@ export default function MapScreen() {
 
 const HEAT_MAP_RESOLUTION = 12;
 
-  // Re-enable when "expand to city view" is built (future v2 feature)
+  // Map gestures and continuous viewport fetching are intentionally disabled.
+  // The backend /heat-zones/ calculates full matrix grids and makes external weather/tile queries.
+  // Panning/zooming triggers excessive backend requests and HTTP 400s when exceeding degree limits.
+  // TODO(v2-viewport-streaming): Re-enable once backend supports quantized vector tile streaming
+  // and debounced viewport caching.
   // const onViewportChange = useCallback((bounds: HeatZonesBounds, zoom: number) => {
   //   const nextResolution = resolutionFromZoom(zoom);
   //   if (debounceRef.current) clearTimeout(debounceRef.current);

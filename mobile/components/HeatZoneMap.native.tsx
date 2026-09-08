@@ -52,11 +52,17 @@ export function HeatZoneMap({
         showsUserLocation
         showsCompass={false}
         toolbarEnabled={false}
+        // Gestures are intentionally disabled: backend /heat-zones/ computes full grid
+        // matrices with external tile shade and weather/AQI calls for the entire viewport.
+        // Allowing unconstrained pan/zoom triggers upstream rate limits and HTTP 400s
+        // (exceeding MAX_VIEWPORT_DEGREES) until backend vector tile streaming is implemented.
+        // TODO(v2-viewport-streaming): Re-enable pan, zoom, and dynamic viewport updates
+        // once backend supports quantized vector tile streaming and debounced viewport caching.
         scrollEnabled={false}
         zoomEnabled={false}
         rotateEnabled={false}
         pitchEnabled={false}
-        // Re-enable when "expand to city view" is built (future v2 feature)
+        // Future v2 viewport listener (see TODO above):
         // onMapReady={() => {
         //   onViewportChange?.(
         //     {
