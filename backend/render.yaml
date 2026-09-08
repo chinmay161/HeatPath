@@ -11,6 +11,8 @@ services:
         sync: false
       - key: WAQI_TOKEN
         sync: false
+      - key: REDIS_URL
+        sync: false
       - key: ENV
         value: production
 
