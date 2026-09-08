@@ -1,16 +1,17 @@
 """
 Shade tile cache service.
-Snaps coordinates to ~250m grid tiles and provides tile cache access.
+Snaps coordinates to ~250m grid tiles and provides Redis/NoOp tile cache access.
 """
 import logging
 from typing import Dict, List, Tuple
+
+from app.config import config
+from app.services.cache import get_cache, get_cache_sync
 
 logger = logging.getLogger(__name__)
 
 # Tile snapping constant (≈ 250m at Mumbai's latitude 18.9°N)
 TILE_SIZE = 0.00225
-
-_cache: Dict[str, dict] = {}
 
 
 def snap_to_tile(lat: float, lon: float) -> Tuple[float, float]:
@@ -27,27 +28,58 @@ def tile_key(lat: float, lon: float) -> str:
 
 
 async def get_tiles(keys: List[str]) -> Dict[str, dict]:
-    """Asynchronous lookup for tiles."""
+    """Asynchronous bulk lookup for tiles from the cache abstraction."""
     if not keys:
         return {}
-    return {k: _cache[k] for k in keys if k in _cache}
+    cache = await get_cache()
+    cached = await cache.get_many(keys)
+    return {
+        k: v
+        for k, v in cached.items()
+        if isinstance(v, dict) and "shade_pct" in v
+    }
 
 
 async def store_tiles(tiles: Dict[str, dict]) -> None:
-    """Asynchronous store for tiles."""
+    """
+    Asynchronous store for computed tiles.
+    Never caches incomplete results — only caches successful computations.
+    """
     if not tiles:
         return
-    _cache.update(tiles)
+    valid_tiles = {
+        k: v
+        for k, v in tiles.items()
+        if isinstance(v, dict)
+        and "shade_pct" in v
+        and v.get("source") != "fallback"
+        and v.get("source") != "failed"
+    }
+    if not valid_tiles:
+        return
+
+    cache = await get_cache()
+    await cache.set_many(valid_tiles, ttl=config.CACHE_TTL_SECONDS)
 
 
 def clear_cache() -> None:
-    """Clear memory tile cache."""
-    _cache.clear()
+    """Clear cached tiles synchronously."""
+    cache = get_cache_sync()
+    if hasattr(cache, "_store"):
+        cache._store.clear()
 
 
-def cache_stats() -> dict:
+async def clear_cache_async() -> None:
+    """Clear cached tiles asynchronously."""
+    cache = await get_cache()
+    await cache.clear()
+
+
+async def cache_stats() -> dict:
     """Retrieve cache stats for health checking."""
+    cache = await get_cache()
+    healthy = await cache.health_check()
     return {
-        "total_tiles": len(_cache),
-        "backend": "memory",
+        "backend": cache.name,
+        "status": "healthy" if healthy else "degraded",
     }

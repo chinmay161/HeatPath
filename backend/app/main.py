@@ -26,12 +26,32 @@ app.include_router(heat_zones.router)
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint.
+    Health check endpoint exposing database, cache, and postgis status.
     """
-    from app.services.shade_tile_cache import cache_stats
-    stats = cache_stats()
+    from app.services.cache import get_cache
+    from app.services.postgis_shade import get_pool
+
+    cache = await get_cache()
+    cache_healthy = await cache.health_check()
+    cache_backend_name = cache.name
+
+    postgis_status = "healthy"
+    try:
+        pool = await get_pool()
+        if pool is None:
+            postgis_status = "unavailable"
+    except Exception:
+        postgis_status = "unhealthy"
+
     return {
         "status": "ok",
         "env": config.ENV,
-        "shade_cache": stats
+        "database": "healthy" if postgis_status == "healthy" else "degraded",
+        "cache": "healthy" if cache_healthy else "degraded",
+        "cache_backend": cache_backend_name,
+        "postgis": postgis_status,
+        "shade_cache": {
+            "backend": cache_backend_name,
+            "status": "healthy" if cache_healthy else "degraded",
+        },
     }
