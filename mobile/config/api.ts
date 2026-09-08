@@ -92,3 +92,47 @@ export async function updateProfile(data: Partial<UserProfile> & { name: string 
   return res.json() as Promise<UserProfile>;
 }
 
+export type FavoriteRoute = {
+  id: string;
+  name: string;
+  start_lat: number;
+  start_lon: number;
+  end_lat: number;
+  end_lon: number;
+  created_at?: string;
+};
+
+export type UserPreferences = {
+  heat_sensitivity: number;
+  aqi_sensitivity: number;
+  avoid_crowds: boolean;
+  walking_speed: 'slow' | 'normal' | 'brisk';
+  accessibility: 'none' | 'wheelchair' | 'flat_ground';
+  units: 'celsius' | 'fahrenheit';
+  theme: 'system' | 'light' | 'dark';
+  favorite_routes: FavoriteRoute[];
+};
+
+export async function getPreferences(): Promise<UserPreferences> {
+  const res = await fetch(`${API_BASE}/preferences/`);
+  if (!res.ok) {
+    throw new Error(`Preferences fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<UserPreferences>;
+}
+
+export async function updatePreferences(data: Partial<UserPreferences>): Promise<UserPreferences> {
+  const res = await fetch(`${API_BASE}/preferences/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
+    throw new Error(err.detail || 'Failed to update preferences');
+  }
+  const body = await res.json();
+  return (body.preferences || data) as UserPreferences;
+}
+
+

@@ -10,9 +10,11 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { usePreferences } from '../../hooks/usePreferences';
 import { useWalkHistory } from '../../hooks/useWalkHistory';
 import { Mascot } from '../../components/Mascot';
 import { Button } from '../../components/ui';
@@ -347,10 +349,260 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        {/* User Routing Preferences Card */}
+        <PreferencesSection />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
+// ─── Preferences Section Component ────────────────────────────────────────────
+
+function heatSensitivityDetails(val: number): { label: string; desc: string; color: string } {
+  if (val <= 3) return { label: 'Sun Resilient', desc: 'Accepts sunny shortcuts', color: '#16633B' };
+  if (val <= 6) return { label: 'Balanced', desc: 'Prefers shade, tolerates mild sun', color: '#b5560f' };
+  if (val <= 8) return { label: 'Heat Sensitive', desc: 'Actively avoids direct sunlight', color: '#c2410c' };
+  return { label: 'Extreme Caution', desc: 'Strictly maximizes shade canopy', color: '#991b1b' };
+}
+
+function PreferencesSection() {
+  const router = useRouter();
+  const { preferences, savePreferences, removeFavoriteRoute, saving } = usePreferences();
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const onUpdate = async (updates: Partial<typeof preferences>) => {
+    try {
+      await savePreferences(updates);
+      setFeedback('Saved');
+      setTimeout(() => setFeedback(null), 2000);
+    } catch {
+      setFeedback('Error saving');
+    }
+  };
+
+  const currentHeat = heatSensitivityDetails(preferences.heat_sensitivity);
+
+  return (
+    <View style={styles.card}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={styles.cardSectionTitle}>Routing preferences</Text>
+        {feedback && (
+          <View style={styles.prefSavedBadge}>
+            <Text style={styles.prefSavedText}>{feedback}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* 1. Heat Sensitivity */}
+      <View style={{ marginTop: 16 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={styles.prefLabel}>HEAT SENSITIVITY</Text>
+          <View style={[styles.sensitivityBadge, { backgroundColor: currentHeat.color + '18' }]}>
+            <Text style={[styles.sensitivityBadgeText, { color: currentHeat.color }]}>
+              {preferences.heat_sensitivity}/10 · {currentHeat.label}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.prefHint}>{currentHeat.desc}</Text>
+        <View style={styles.stepperTrack}>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+            const isSelected = preferences.heat_sensitivity === num;
+            return (
+              <TouchableOpacity
+                key={num}
+                onPress={() => onUpdate({ heat_sensitivity: num })}
+                style={[
+                  styles.stepperItem,
+                  isSelected && styles.stepperItemSelected,
+                ]}
+                activeOpacity={0.7}
+                accessibilityLabel={`Heat sensitivity ${num}`}
+              >
+                <Text
+                  style={[
+                    styles.stepperText,
+                    isSelected && styles.stepperTextSelected,
+                  ]}
+                >
+                  {num}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* 2. Walking Speed */}
+      <View style={{ marginTop: 20 }}>
+        <Text style={styles.prefLabel}>WALKING PACE</Text>
+        <View style={styles.toggleRow}>
+          {[
+            { id: 'slow', label: 'Relaxed', sub: '~3 km/h' },
+            { id: 'normal', label: 'Moderate', sub: '~4.5 km/h' },
+            { id: 'brisk', label: 'Brisk', sub: '~6 km/h' },
+          ].map((item) => {
+            const isSelected = preferences.walking_speed === item.id;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                onPress={() => onUpdate({ walking_speed: item.id as any })}
+                style={[styles.toggleBtn, isSelected && styles.toggleBtnSelected]}
+                activeOpacity={0.7}
+                accessibilityLabel={`Walking pace ${item.label}`}
+              >
+                <Text style={[styles.toggleBtnLabel, isSelected && styles.toggleBtnLabelSelected]}>
+                  {item.label}
+                </Text>
+                <Text style={styles.toggleBtnSub}>{item.sub}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* 3. Accessibility */}
+      <View style={{ marginTop: 20 }}>
+        <Text style={styles.prefLabel}>ACCESSIBILITY PREFERENCE</Text>
+        <View style={styles.toggleRow}>
+          {[
+            { id: 'none', label: 'Standard' },
+            { id: 'flat_ground', label: 'Flat ground' },
+            { id: 'wheelchair', label: 'Wheelchair' },
+          ].map((item) => {
+            const isSelected = preferences.accessibility === item.id;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                onPress={() => onUpdate({ accessibility: item.id as any })}
+                style={[styles.toggleBtn, isSelected && styles.toggleBtnSelected]}
+                activeOpacity={0.7}
+                accessibilityLabel={`Accessibility ${item.label}`}
+              >
+                <Text style={[styles.toggleBtnLabel, isSelected && styles.toggleBtnLabelSelected]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* 4. Units & Theme */}
+      <View style={{ flexDirection: 'row', gap: 14, marginTop: 20 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.prefLabel}>TEMPERATURE UNITS</Text>
+          <View style={styles.toggleRow}>
+            {[
+              { id: 'celsius', label: '°C' },
+              { id: 'fahrenheit', label: '°F' },
+            ].map((item) => {
+              const isSelected = preferences.units === item.id;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  onPress={() => onUpdate({ units: item.id as any })}
+                  style={[styles.toggleBtn, isSelected && styles.toggleBtnSelected]}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Units ${item.label}`}
+                >
+                  <Text style={[styles.toggleBtnLabel, isSelected && styles.toggleBtnLabelSelected]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text style={styles.prefLabel}>THEME</Text>
+          <View style={styles.toggleRow}>
+            {[
+              { id: 'system', label: 'Auto' },
+              { id: 'light', label: 'Light' },
+              { id: 'dark', label: 'Dark' },
+            ].map((item) => {
+              const isSelected = preferences.theme === item.id;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  onPress={() => onUpdate({ theme: item.id as any })}
+                  style={[styles.toggleBtn, isSelected && styles.toggleBtnSelected]}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Theme ${item.label}`}
+                >
+                  <Text style={[styles.toggleBtnLabel, isSelected && styles.toggleBtnLabelSelected]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      {/* 5. Favorite Routes */}
+      <View style={{ marginTop: 24, paddingTop: 18, borderTopWidth: 1, borderTopColor: '#EEF2EA' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <Text style={styles.cardSectionTitle}>Favorite routes</Text>
+          <Text style={{ fontFamily: fonts.ui, fontSize: 12, color: colors.muted2 }}>
+            {preferences.favorite_routes.length} saved
+          </Text>
+        </View>
+
+        {preferences.favorite_routes.length === 0 ? (
+          <View style={styles.emptyFavorites}>
+            <Icon name="routes" size={24} stroke={colors.muted2} />
+            <Text style={styles.emptyFavoritesText}>
+              No favorite routes saved yet. Tap "Save to favorites" after finding cool routes.
+            </Text>
+          </View>
+        ) : (
+          preferences.favorite_routes.map((fav) => (
+            <View key={fav.id} style={styles.favoriteRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.favoriteName} numberOfLines={1}>{fav.name}</Text>
+                <Text style={styles.favoriteCoords}>
+                  {fav.start_lat.toFixed(3)}, {fav.start_lon.toFixed(3)} → {fav.end_lat.toFixed(3)}, {fav.end_lon.toFixed(3)}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    router.push({
+                      pathname: '/(tabs)/searching' as any,
+                      params: {
+                        startLat: String(fav.start_lat),
+                        startLon: String(fav.start_lon),
+                        endLat: String(fav.end_lat),
+                        endLon: String(fav.end_lon),
+                        destName: fav.name,
+                      },
+                    });
+                  }}
+                  style={styles.favNavBtn}
+                  accessibilityLabel={`Walk to ${fav.name}`}
+                >
+                  <Text style={styles.favNavBtnText}>Walk</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => removeFavoriteRoute(fav.id)}
+                  style={styles.favRemoveBtn}
+                  accessibilityLabel={`Remove ${fav.name} from favorites`}
+                >
+                  <Icon name="close" size={14} stroke={colors.muted} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   scrollContainer: {
@@ -623,5 +875,147 @@ const styles = StyleSheet.create({
     width: 1,
     height: 36,
     backgroundColor: '#EAEFE5',
+  },
+  // Preferences styles
+  prefSavedBadge: {
+    backgroundColor: '#E6F4E2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  prefSavedText: {
+    fontFamily: fonts.uiBold,
+    fontSize: 11,
+    color: colors.forest,
+  },
+  prefLabel: {
+    fontFamily: fonts.uiBold,
+    fontSize: 11,
+    color: colors.muted,
+    letterSpacing: 0.8,
+  },
+  prefHint: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: colors.muted2,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  sensitivityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  sensitivityBadgeText: {
+    fontFamily: fonts.uiBold,
+    fontSize: 11,
+  },
+  stepperTrack: {
+    flexDirection: 'row',
+    gap: 4,
+    backgroundColor: '#F5F7F3',
+    padding: 4,
+    borderRadius: radius.md,
+  },
+  stepperItem: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: radius.sm,
+  },
+  stepperItemSelected: {
+    backgroundColor: colors.forest,
+  },
+  stepperText: {
+    fontFamily: fonts.uiSemiBold,
+    fontSize: 12,
+    color: colors.inkSoft,
+  },
+  stepperTextSelected: {
+    color: '#fff',
+    fontFamily: fonts.uiBold,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 6,
+  },
+  toggleBtn: {
+    flex: 1,
+    backgroundColor: '#F5F7F3',
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  toggleBtnSelected: {
+    backgroundColor: '#E6F4E2',
+    borderColor: colors.forest,
+  },
+  toggleBtnLabel: {
+    fontFamily: fonts.uiSemiBold,
+    fontSize: 12.5,
+    color: colors.inkSoft,
+  },
+  toggleBtnLabelSelected: {
+    color: colors.forest,
+    fontFamily: fonts.uiBold,
+  },
+  toggleBtnSub: {
+    fontFamily: fonts.ui,
+    fontSize: 10,
+    color: colors.muted2,
+    marginTop: 1,
+  },
+  emptyFavorites: {
+    alignItems: 'center',
+    paddingVertical: 18,
+    gap: 6,
+  },
+  emptyFavoritesText: {
+    fontFamily: fonts.ui,
+    fontSize: 12.5,
+    color: colors.muted2,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  favoriteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F4EC',
+  },
+  favoriteName: {
+    fontFamily: fonts.uiBold,
+    fontSize: 13.5,
+    color: colors.ink,
+  },
+  favoriteCoords: {
+    fontFamily: fonts.ui,
+    fontSize: 11,
+    color: colors.muted2,
+    marginTop: 2,
+  },
+  favNavBtn: {
+    backgroundColor: '#E6F4E2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  favNavBtnText: {
+    fontFamily: fonts.uiBold,
+    fontSize: 11.5,
+    color: colors.forest,
+  },
+  favRemoveBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

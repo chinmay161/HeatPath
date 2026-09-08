@@ -58,18 +58,37 @@ class RouteScoreResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class FavoriteRouteItem(BaseModel):
+    """Schema for a bookmarked favorite route."""
+    id: str = Field(..., description="Unique route identifier")
+    name: str = Field(..., description="Route name or label")
+    start_lat: float = Field(..., description="Starting latitude")
+    start_lon: float = Field(..., description="Starting longitude")
+    end_lat: float = Field(..., description="Ending latitude")
+    end_lon: float = Field(..., description="Ending longitude")
+    created_at: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PreferencesRequest(BaseModel):
     """Request schema for user preferences."""
-    heat_sensitivity: int  = Field(default=5, ge=1, le=10, description="1 to 10")
-    aqi_sensitivity:  int  = Field(default=5, ge=1, le=10, description="1 to 10")
+    heat_sensitivity: int = Field(default=5, ge=1, le=10, description="1 to 10 scale")
+    aqi_sensitivity:  int = Field(default=5, ge=1, le=10, description="1 to 10 scale")
     avoid_crowds:     bool = Field(default=False, description="Factor crowd density into route scoring")
+    walking_speed:    str = Field(default="normal", description="'slow' | 'normal' | 'brisk'")
+    accessibility:    str = Field(default="none", description="'none' | 'wheelchair' | 'flat_ground'")
+    units:            str = Field(default="celsius", description="'celsius' | 'fahrenheit'")
+    theme:            str = Field(default="system", description="'system' | 'light' | 'dark'")
+    favorite_routes:  List[FavoriteRouteItem] = Field(default_factory=list, description="Saved favorite routes")
     model_config = ConfigDict(from_attributes=True)
 
 
 class PreferencesResponse(BaseModel):
     """Response schema for preference update."""
     status: str
+    preferences: Optional[PreferencesRequest] = None
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class RouteRequest(BaseModel):

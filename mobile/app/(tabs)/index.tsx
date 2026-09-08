@@ -20,6 +20,8 @@ import Icon from '../../components/Icon';
 import { colors, fonts, radius } from '../../theme/colors';
 import { useNearbyCoolSpots, type CoolSpot } from '../../hooks/useNearbyCoolSpots';
 import { useRecentSearches, type RecentSearch } from '../../hooks/useRecentSearches';
+import { usePreferences } from '../../hooks/usePreferences';
+
 
 function aqiLabel(index: number): string {
   if (index < 0.10) return 'Good';
@@ -74,6 +76,13 @@ export default function HomeScreen() {
     useNearbyCoolSpots(location?.lat ?? null, location?.lon ?? null);
 
   const { recents } = useRecentSearches();
+  const { preferences } = usePreferences();
+
+  const isFahrenheit = preferences.units === 'fahrenheit';
+  const toDisplayTemp = (c: number | null) => {
+    if (c == null) return null;
+    return isFahrenheit ? Math.round((c * 9) / 5 + 32) : Math.round(c);
+  };
 
   const locationText = locationLabel ?? (location
     ? 'Your location'
@@ -86,11 +95,12 @@ export default function HomeScreen() {
   const hasError  = !isLoading && (locError != null || condError != null);
 
   // Display values: real from API where available, null otherwise
-  const feelsLike  = cond && cond.heat_index != null ? Math.round(cond.heat_index)    : null;
-  const realTemp   = cond && cond.temperature_c != null ? Math.round(cond.temperature_c) : null;
+  const feelsLike  = cond && cond.heat_index != null ? toDisplayTemp(cond.heat_index)    : null;
+  const realTemp   = cond && cond.temperature_c != null ? toDisplayTemp(cond.temperature_c) : null;
   const humidity   = cond && cond.humidity_pct != null ? Math.round(cond.humidity_pct)  : null;
   const sevLabel   = cond?.severity ?? null;
   const aqiIndex   = cond?.aqi_index ?? null;
+
 
   const onSearch = () => {
     router.push({
@@ -207,6 +217,30 @@ export default function HomeScreen() {
             <View style={[styles.card, { flex: 1.3, padding: 20 }]}>
               <Text style={styles.cardTitle}>Plan a cool walk</Text>
               <View style={{ marginTop: 14 }}>{SearchPanel}</View>
+              {preferences.favorite_routes.length > 0 && (
+                <>
+                  <Text style={styles.recentLabel}>FAVORITE ROUTES</Text>
+                  {preferences.favorite_routes.slice(0, 3).map(fav => (
+                    <RecentRow
+                      key={fav.id}
+                      title={fav.name}
+                      meta="Saved route"
+                      onPress={() => {
+                        router.push({
+                          pathname: '/(tabs)/searching' as any,
+                          params: {
+                            startLat: String(fav.start_lat),
+                            startLon: String(fav.start_lon),
+                            endLat: String(fav.end_lat),
+                            endLon: String(fav.end_lon),
+                            destName: fav.name,
+                          },
+                        });
+                      }}
+                    />
+                  ))}
+                </>
+              )}
               {recents.length > 0 && (
                 <>
                   <Text style={styles.recentLabel}>RECENT</Text>
@@ -226,6 +260,7 @@ export default function HomeScreen() {
                   ))}
                 </>
               )}
+
             </View>
             <View style={{ flex: 1 }}>{BestTime}</View>
           </View>

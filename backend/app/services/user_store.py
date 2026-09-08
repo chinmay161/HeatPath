@@ -3,6 +3,7 @@ SQLite persistence service for user profile and preferences.
 Database is stored in backend/data/user_store.db.
 """
 import sqlite3
+import json
 import os
 import logging
 from datetime import datetime, timezone
@@ -128,3 +129,86 @@ def update_profile(data: Dict[str, Any]) -> Dict[str, Any]:
         conn.commit()
         row = conn.execute("SELECT * FROM user_profile WHERE id = 1").fetchone()
         return dict(row)
+
+
+def get_preferences() -> Dict[str, Any]:
+    """Retrieve user preferences, initializing defaults if not found."""
+    init_db()
+    with _get_connection() as conn:
+        row = conn.execute("SELECT * FROM user_preferences WHERE id = 1").fetchone()
+        if row:
+            pref = dict(row)
+            try:
+                pref["favorite_routes"] = json.loads(pref.get("favorite_routes_json", "[]"))
+            except Exception:
+                pref["favorite_routes"] = []
+            pref["avoid_crowds"] = bool(pref.get("avoid_crowds", 0))
+            return pref
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        conn.execute("""
+            INSERT INTO user_preferences (
+                id, heat_sensitivity, aqi_sensitivity, avoid_crowds,
+                walking_speed, accessibility, units, theme, favorite_routes_json, updated_at
+            ) VALUES (
+                1, :heat_sensitivity, :aqi_sensitivity, :avoid_crowds,
+                :walking_speed, :accessibility, :units, :theme, :favorite_routes_json, :now
+            )
+        """, {
+            "heat_sensitivity": DEFAULT_PREFERENCES["heat_sensitivity"],
+            "aqi_sensitivity": DEFAULT_PREFERENCES["aqi_sensitivity"],
+            "avoid_crowds": 1 if DEFAULT_PREFERENCES["avoid_crowds"] else 0,
+            "walking_speed": DEFAULT_PREFERENCES["walking_speed"],
+            "accessibility": DEFAULT_PREFERENCES["accessibility"],
+            "units": DEFAULT_PREFERENCES["units"],
+            "theme": DEFAULT_PREFERENCES["theme"],
+            "favorite_routes_json": json.dumps(DEFAULT_PREFERENCES["favorite_routes"]),
+            "now": now_iso,
+        })
+        conn.commit()
+        return {
+            **DEFAULT_PREFERENCES,
+            "updated_at": now_iso,
+        }
+
+
+def update_preferences(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Update user preferences and persist to SQLite."""
+    init_db()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    current = get_preferences()
+
+    fav_routes = data.get("favorite_routes", current.get("favorite_routes", []))
+    if not isinstance(fav_routes, list):
+        fav_routes = []
+
+    updated = {
+        "heat_sensitivity": int(data.get("heat_sensitivity", current["heat_sensitivity"])),
+        "aqi_sensitivity": int(data.get("aqi_sensitivity", current["aqi_sensitivity"])),
+        "avoid_crowds": 1 if data.get("avoid_crowds", current["avoid_crowds"]) else 0,
+        "walking_speed": data.get("walking_speed", current["walking_speed"]),
+        "accessibility": data.get("accessibility", current["accessibility"]),
+        "units": data.get("units", current["units"]),
+        "theme": data.get("theme", current["theme"]),
+        "favorite_routes_json": json.dumps(fav_routes),
+        "updated_at": now_iso,
+    }
+
+    with _get_connection() as conn:
+        conn.execute("""
+            UPDATE user_preferences
+            SET heat_sensitivity = :heat_sensitivity,
+                aqi_sensitivity = :aqi_sensitivity,
+                avoid_crowds = :avoid_crowds,
+                walking_speed = :walking_speed,
+                accessibility = :accessibility,
+                units = :units,
+                theme = :theme,
+                favorite_routes_json = :favorite_routes_json,
+                updated_at = :updated_at
+            WHERE id = 1
+        """, updated)
+        conn.commit()
+
+    return get_preferences()
+
