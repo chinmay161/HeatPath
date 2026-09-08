@@ -15,10 +15,9 @@ import { useUserLocation } from '../../hooks/useUserLocation';
 import { useCurrentConditions } from '../../hooks/useCurrentConditions';
 import { MascotBadge, Mascot } from '../../components/Mascot';
 import { BlockedBanner } from '../../components/BlockedBanner';
-import { BestTimeChart, IconChip, Button } from '../../components/ui';
+import { IconChip, Button } from '../../components/ui';
 import Icon from '../../components/Icon';
 import { colors, fonts, radius } from '../../theme/colors';
-import { bestTime } from '../../data/mockData';
 import { useNearbyCoolSpots, type CoolSpot } from '../../hooks/useNearbyCoolSpots';
 import { useRecentSearches, type RecentSearch } from '../../hooks/useRecentSearches';
 
@@ -155,17 +154,18 @@ export default function HomeScreen() {
   const BestTime = (
     <View style={styles.bestTimeCard}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={[styles.cardTitle, { color: '#E8F0EA' }]}>Best time to walk</Text>
-        <Text style={{ fontSize: 12, color: '#9fb7a6' }}>today</Text>
+        <Text style={[styles.cardTitle, { color: '#E8F0EA' }]}>Hourly comfort forecast</Text>
+        <View style={{ backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+          <Text style={{ fontSize: 11, color: '#9fb7a6', fontFamily: fonts.uiBold }}>COMING SOON</Text>
+        </View>
       </View>
-      <BlockedBanner dark message="Hourly forecast not yet available — showing demo data" />
-      <View style={{ marginTop: 12, flex: 1 }}>
-        <BestTimeChart bars={bestTime} />
-      </View>
-      <View style={styles.bestTimeLabel}>
-        <Icon name="check" size={14} stroke={colors.lime} width={2.4} />
-        <Text style={{ color: colors.lime, fontSize: 13, fontFamily: fonts.uiBold }}>
-          Best window — 7:00 AM
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 24, gap: 8 }}>
+        <Icon name="clock" size={32} stroke="#9fb7a6" />
+        <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 14, color: '#E8F0EA', textAlign: 'center' }}>
+          Best-time-to-walk forecasts are in active development.
+        </Text>
+        <Text style={{ fontFamily: fonts.ui, fontSize: 12, color: '#9fb7a6', textAlign: 'center', maxWidth: 280 }}>
+          Requires live hourly weather and solar forecast integration.
         </Text>
       </View>
     </View>

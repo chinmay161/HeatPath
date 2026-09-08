@@ -11,7 +11,21 @@ import {
 } from 'react-native';
 import Icon from './Icon';
 import { colors, fonts, radius, severity } from '../theme/colors';
-import type { Route } from '../data/mockData';
+export type Route = {
+  id: string;
+  title: string;
+  sub: string;
+  icon: string;
+  iconBg: string;
+  iconColor: string;
+  severity: 'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME';
+  min: string;
+  feels: string;
+  feelsColor: string;
+  shade: string;
+  bar: [number, string][];
+  seg: string[];
+};
 
 // ─── SeverityTag ──────────────────────────────────────────────────────────────
 const SEV_BG: Record<string, string> = {

@@ -15,10 +15,9 @@ import { getCachedRoutesResult, useFindRoutes, type ScoredRoute } from '../../ho
 import { RouteMap } from '../../components/RouteMap';
 import { DataQualityNote } from '../../components/DataQualityNote';
 import { MascotBadge, Mascot } from '../../components/Mascot';
-import { RouteCard, Button } from '../../components/ui';
+import { RouteCard, Button, type Route } from '../../components/ui';
 import Icon from '../../components/Icon';
 import { colors, fonts } from '../../theme/colors';
-import type { Route } from '../../data/mockData';
 import { scoreToColor, scoreToLabel } from '../../utils/scoreToColor';
 
 // ─── API → display mapping ────────────────────────────────────────────────────
