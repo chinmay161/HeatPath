@@ -142,6 +142,33 @@ export default function RoutesScreen() {
     </View>
   );
 
+  // ─── Route query check ────────────────────────────────────────────────────────
+  const hasRouteQuery = Boolean(
+    preloadedData || (startLat != null && startLon != null && endLat != null && endLon != null)
+  );
+
+  // ─── Empty state (no destination searched yet) ───────────────────────────────
+  if (!hasRouteQuery) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.canvas, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
+        <View style={{ width: 120, height: 120, borderRadius: 60, overflow: 'hidden', backgroundColor: '#CFEBD3', position: 'relative' }}>
+          <Mascot state="blink" />
+        </View>
+        <Text style={{ fontFamily: fonts.display, fontSize: isDesktop ? 26 : 22, color: colors.ink, textAlign: 'center' }}>
+          No route selected
+        </Text>
+        <Text style={{ fontFamily: fonts.ui, fontSize: isDesktop ? 15 : 14, color: colors.muted, textAlign: 'center', maxWidth: 360, lineHeight: 22 }}>
+          Search a destination to find and compare the coolest, shadiest walking paths.
+        </Text>
+        <View style={{ marginTop: 8 }}>
+          <Button onPress={() => router.push('/(tabs)/destination' as any)} style={{ minWidth: 200, paddingVertical: 14 }}>
+            Search destination
+          </Button>
+        </View>
+      </View>
+    );
+  }
+
   // ─── Loading / error states ───────────────────────────────────────────────────
 
   if (loading) {
@@ -156,19 +183,36 @@ export default function RoutesScreen() {
     );
   }
 
-  if (error || displayRoutes.length === 0) {
+  if (error) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.canvas, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
         <View style={{ width: 110, height: 110, borderRadius: 55, overflow: 'hidden', backgroundColor: '#CFEBD3', position: 'relative' }}>
           <Mascot state="disappointed" />
         </View>
         <Text style={{ fontFamily: fonts.display, fontSize: 20, color: colors.ink, textAlign: 'center' }}>
-          {error ?? 'No routes found'}
+          {error}
         </Text>
         <Text style={{ fontFamily: fonts.ui, fontSize: 14, color: colors.muted, textAlign: 'center' }}>
           Make sure the backend is running and the location permissions are granted.
         </Text>
         <Button onPress={onBack}>Go back</Button>
+      </View>
+    );
+  }
+
+  if (displayRoutes.length === 0) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.canvas, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
+        <View style={{ width: 110, height: 110, borderRadius: 55, overflow: 'hidden', backgroundColor: '#CFEBD3', position: 'relative' }}>
+          <Mascot state="disappointed" />
+        </View>
+        <Text style={{ fontFamily: fonts.display, fontSize: 20, color: colors.ink, textAlign: 'center' }}>
+          No routes found
+        </Text>
+        <Text style={{ fontFamily: fonts.ui, fontSize: 14, color: colors.muted, textAlign: 'center' }}>
+          No walkable paths could be found between these points. Try searching another destination nearby.
+        </Text>
+        <Button onPress={() => router.push('/(tabs)/destination' as any)}>Search destination</Button>
       </View>
     );
   }
