@@ -2,7 +2,7 @@
 Pydantic schemas for request and response validation.
 """
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List
+from typing import List, Optional, Any
 
 
 class Location(BaseModel):
@@ -65,18 +65,20 @@ class RouteRequest(BaseModel):
 
 class ScoredRoute(BaseModel):
     """Schema for a scored route with details."""
-    rank:                int            = Field(..., description="Score rank (1 = best)")
-    overall_score:       float          = Field(..., description="Overall comfort score 0–1")
-    shade_safety_score:  float          = Field(..., description="Shade safety score 0–1")
-    heat_safety_score:   float          = Field(..., description="Heat safety score 0–1")
-    crowd_safety_score:  float          = Field(..., description="Crowd safety score 0–1 (1 = uncrowded)")
-    avg_shade_pct:       float          = Field(..., description="Average shade coverage across the route (0-100)")
-    feels_like_c:        float          = Field(..., description="Estimated perceived temperature accounting for shade")
-    shade_segments:      List[float]    = Field(..., description="Shade percentage per route segment")
-    shade_sources:       List[str]      = Field(default_factory=list, description="Shade data source per segment ('overpass' | 'street_type' | 'cached' | 'night')")
-    segment_distances_m: List[float]    = Field(..., description="Distance in meters per segment, aligned with shade_segments")
-    path:                List[Location] = Field(..., description="Route coordinates")
-    segment_count:       int            = Field(..., description="Number of path segments")
+    rank:                int                    = Field(..., description="Score rank (1 = best)")
+    overall_score:       float                  = Field(..., description="Overall comfort score 0–1")
+    confidence:          float                  = Field(default=1.0, description="Confidence score 0.0–1.0 based on data completeness")
+    missing_inputs:      List[str]              = Field(default_factory=list, description="List of unavailable environmental inputs")
+    shade_safety_score:  float                  = Field(..., description="Shade safety score 0–1")
+    heat_safety_score:   float                  = Field(..., description="Heat safety score 0–1")
+    crowd_safety_score:  Optional[float]        = Field(default=None, description="Crowd safety score (None: feature disabled)")
+    avg_shade_pct:       float                  = Field(..., description="Average shade coverage across the route (0-100)")
+    feels_like_c:        float                  = Field(..., description="Estimated perceived temperature accounting for shade")
+    shade_segments:      List[Optional[float]]  = Field(..., description="Shade percentage per route segment")
+    shade_sources:       List[str]              = Field(default_factory=list, description="Shade data source per segment ('overpass' | 'street_type' | 'cached' | 'night')")
+    segment_distances_m: List[float]            = Field(..., description="Distance in meters per segment, aligned with shade_segments")
+    path:                List[Location]         = Field(..., description="Route coordinates")
+    segment_count:       int                    = Field(..., description="Number of path segments")
     model_config = ConfigDict(from_attributes=True)
 
 

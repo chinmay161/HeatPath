@@ -4,12 +4,14 @@ import { API_BASE } from '../config/api';
 export type ScoredRoute = {
   rank: number;
   overall_score: number;
+  confidence?: number;
+  missing_inputs?: string[];
   shade_safety_score: number;
   heat_safety_score: number;
-  crowd_safety_score: number;
+  crowd_safety_score: number | null;
   avg_shade_pct: number;
   feels_like_c: number;
-  shade_segments: number[];
+  shade_segments: (number | null)[];
   shade_sources: string[];
   segment_distances_m: number[];
   path: { lat: number; lon: number }[];

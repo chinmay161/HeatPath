@@ -69,7 +69,7 @@ export type RouteSegment = {
  */
 export function buildShadedSegments(
   path: { lat: number; lon: number }[],
-  shadeSegments: number[],
+  shadeSegments: (number | null)[],
 ): RouteSegment[] {
   if (path.length === 0) return [];
   const n = shadeSegments.length;
@@ -83,7 +83,7 @@ export function buildShadedSegments(
       const end = Math.min(start + chunkSize + 1, path.length); // +1 for line continuity
       return {
         path: path.slice(start, end),
-        color: scoreToColor(pct / 100),
+        color: scoreToColor(pct != null ? pct / 100 : 0.5),
       };
     })
     .filter(s => s.path.length >= 2);

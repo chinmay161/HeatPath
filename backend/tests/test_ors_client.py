@@ -231,14 +231,10 @@ def test_find_routes_path_has_multiple_points(monkeypatch):
             "shade_sources": ["street_type" for _ in range(len(route_path) - 1)],
         }
 
-    async def fake_crowd_for_path(route_path):
-        return [0.0 for _ in range(len(route_path) - 1)]
-
     monkeypatch.setattr(find_routes_router, "fetch_candidate_routes", fake_fetch_candidate_routes)
     monkeypatch.setattr(find_routes_router, "get_weather", fake_get_weather)
     monkeypatch.setattr(find_routes_router, "get_aqi", fake_get_aqi)
     monkeypatch.setattr(find_routes_router, "shade_for_path", fake_shade_for_path)
-    monkeypatch.setattr(find_routes_router, "crowd_for_path", fake_crowd_for_path)
 
     response = client.post(
         "/find-routes/",

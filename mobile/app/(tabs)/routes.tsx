@@ -36,7 +36,7 @@ function apiRouteToRoute(r: ScoredRoute, idx: number): Route {
   // Proportional timeline bars (normalize to sum ~10)
   const bar: [number, string][] = r.shade_segments.map((pct, i) => {
     const weight = Math.max(0.4, (r.segment_distances_m[i] / totalDist) * 10);
-    return [weight, scoreToColor(pct / 100)];
+    return [weight, scoreToColor(pct != null ? pct / 100 : 0.5)];
   });
 
   // 3 representative SVG segment colors spread evenly across the route

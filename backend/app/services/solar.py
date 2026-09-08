@@ -10,7 +10,12 @@ Python standard library math and datetime modules.
 """
 
 import math
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+class SolarCalculationError(Exception):
+    """Raised when solar position calculation fails."""
+    pass
 
 
 def compute_solar_elevation(lat: float, lon: float, utc_dt: datetime) -> float:
@@ -27,6 +32,10 @@ def compute_solar_elevation(lat: float, lon: float, utc_dt: datetime) -> float:
     Returns:
         float: Solar elevation angle in degrees.
     """
+    # Ensure utc_dt is timezone-aware or treated as UTC
+    if utc_dt.tzinfo is not None:
+        utc_dt = utc_dt.astimezone(timezone.utc)
+
     # Step 1 — Julian date relative to J2000.0:
     n = (
         (utc_dt.toordinal() - datetime(2000, 1, 1).toordinal() + 1)
@@ -73,6 +82,9 @@ def compute_solar_azimuth(lat: float, lon: float, utc_dt: datetime) -> float:
 
     Uses the same intermediate values from compute_solar_elevation.
     """
+    if utc_dt.tzinfo is not None:
+        utc_dt = utc_dt.astimezone(timezone.utc)
+
     # Step 1 — Julian date relative to J2000.0:
     n = (
         (utc_dt.toordinal() - datetime(2000, 1, 1).toordinal() + 1)
@@ -108,50 +120,35 @@ def compute_solar_azimuth(lat: float, lon: float, utc_dt: datetime) -> float:
     cos_az = (math.sin(dec) * math.cos(lat_r) -
               math.cos(dec) * math.cos(HA) * math.sin(lat_r))
     azimuth = math.degrees(math.atan2(sin_az, cos_az)) % 360
-    if lat == 18.9220 and lon == 72.8347 and utc_dt == datetime(2026, 6, 14, 6, 30, 0):
-        return 180.0
     return azimuth
 
 
-def get_solar_position(lat: float, lon: float) -> dict:
+def get_solar_position(lat: float, lon: float, dt: datetime = None) -> dict:
     """
-    Convenience wrapper returning both elevation and azimuth at once (single utcnow() call).
-    On any exception: return {"elevation": 45.0, "azimuth": 180.0, "is_night": False}
+    Convenience wrapper returning both elevation and azimuth at once.
+    Propagates SolarCalculationError if computation fails.
     """
+    if dt is None:
+        dt = datetime.now(timezone.utc)
     try:
-        now = datetime.utcnow()
-        elevation = compute_solar_elevation(lat, lon, now)
-        azimuth = compute_solar_azimuth(lat, lon, now)
+        elevation = compute_solar_elevation(lat, lon, dt)
+        azimuth = compute_solar_azimuth(lat, lon, dt)
         return {
             "elevation": elevation,
             "azimuth": azimuth,
             "is_night": elevation < 0
         }
-    except Exception:
-        return {"elevation": 45.0, "azimuth": 180.0, "is_night": False}
+    except Exception as e:
+        raise SolarCalculationError(
+            f"Failed to calculate solar position for coordinate ({lat}, {lon}) at {dt}: {e}"
+        ) from e
 
 
-# elevation_to_shade_multiplier was removed in Shade v3.
-# Sun position is now used inside estimate_shade_percent() geometry
-# for building shadow length calculation only.
-# Trees, structural shade, and forest are sun-independent.
-
-
-
-def get_current_elevation(lat: float, lon: float) -> float:
+def get_current_elevation(lat: float, lon: float, dt: datetime = None) -> float:
     """
-    Convenience wrapper that calls compute_solar_elevation with datetime.utcnow().
-
-    On any exception, returns 45.0 as a safe default (assuming significant sun).
-
-    Args:
-        lat: Latitude of the coordinate.
-        lon: Longitude of the coordinate.
-
-    Returns:
-        float: Solar elevation angle in degrees.
+    Convenience wrapper that returns compute_solar_elevation for the given coordinate.
     """
-    try:
-        return compute_solar_elevation(lat, lon, datetime.utcnow())
-    except Exception:
-        return 45.0
+    if dt is None:
+        dt = datetime.now(timezone.utc)
+    return compute_solar_elevation(lat, lon, dt)
+

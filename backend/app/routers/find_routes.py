@@ -12,7 +12,6 @@ from app.models.schemas import (
 from app.services.ors_client import fetch_candidate_routes, simplify_path, haversine_distance
 from app.services.weather import get_weather, get_aqi, compute_heat_index
 from app.services.osm_shade import shade_for_path
-from app.services.crowd_density import crowd_for_path
 from app.services.comfort_scorer import score_route as calculate_route_scores, estimate_feels_like
 from app.routers.preferences import _user_preferences
 
@@ -58,9 +57,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         shade_res    = await shade_for_path(simplified)
         shade_pcts   = shade_res["shade_values"]
         shade_sources = shade_res.get("shade_sources", [])
-        crowd_pcts = await crowd_for_path(simplified)
-
-        # Per-segment distances for the simplified path — aligned with
+        # Segment distances for the simplified path — aligned with
         # shade_pcts, used to build the exposure timeline on the frontend
         segment_distances = [
             haversine_distance(
@@ -75,7 +72,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
                 "shade_pct":        shade_pcts[i],
                 "heat_index":       heat_index,
                 "aqi":              raw_aqi,
-                "crowd_pct":        crowd_pcts[i] if i < len(crowd_pcts) else 0.0,
+                "crowd_pct":        None,
                 "heat_sensitivity": _user_preferences["heat_sensitivity"],
                 "aqi_sensitivity":  _user_preferences["aqi_sensitivity"],
                 "avoid_crowds":     avoid_crowds,
@@ -84,14 +81,17 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         ]
         scores = calculate_route_scores(segments)
 
-        avg_shade_pct = sum(shade_pcts) / len(shade_pcts) if shade_pcts else 0.0
+        valid_shades = [s for s in shade_pcts if s is not None]
+        avg_shade_pct = sum(valid_shades) / len(valid_shades) if valid_shades else 0.0
         feels_like_c  = estimate_feels_like(heat_index, avg_shade_pct)
 
         return {
             "overall_score":       scores["overall_score"],
+            "confidence":          scores.get("confidence", 1.0),
+            "missing_inputs":      scores.get("missing_inputs", []),
             "shade_safety_score":  scores["shade_safety_score"],
             "heat_safety_score":   scores["heat_safety_score"],
-            "crowd_safety_score":  scores["crowd_safety_score"],
+            "crowd_safety_score":  None,  # Feature disabled
             "avg_shade_pct":       round(avg_shade_pct, 1),
             "feels_like_c":        feels_like_c,
             "shade_segments":      shade_pcts,
@@ -108,6 +108,8 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         ScoredRoute(
             rank=rank + 1,
             overall_score=r["overall_score"],
+            confidence=r["confidence"],
+            missing_inputs=r["missing_inputs"],
             shade_safety_score=r["shade_safety_score"],
             heat_safety_score=r["heat_safety_score"],
             crowd_safety_score=r["crowd_safety_score"],

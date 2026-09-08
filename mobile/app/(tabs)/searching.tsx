@@ -134,7 +134,7 @@ export default function SearchingScreen() {
         Finding your coolest path…
       </Text>
       <Text style={[styles.body, { fontSize: isDesktop ? 16 : 15, maxWidth: isDesktop ? 340 : 260 }]}>
-        Patho's checking shade cover, surface heat and crowd levels along every route.
+        Patho's checking shade cover and surface heat along every route.
       </Text>
 
       {/* Progress bar */}
