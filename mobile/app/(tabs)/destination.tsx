@@ -16,6 +16,7 @@ import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { usePhotonSearch } from '../../hooks/usePhotonSearch';
 import type { PlaceSuggestion } from '../../hooks/usePhotonSearch';
 import { useRecentSearches } from '../../hooks/useRecentSearches';
+import { usePreferences } from '../../hooks/usePreferences';
 import Icon from '../../components/Icon';
 import { colors, fonts } from '../../theme/colors';
 
@@ -28,7 +29,8 @@ export default function DestinationScreen() {
   const biasLat = startLat ? parseFloat(startLat) : null;
   const biasLon = startLon ? parseFloat(startLon) : null;
 
-  const { addRecent } = useRecentSearches();
+  const { recents, addRecent } = useRecentSearches();
+  const { preferences } = usePreferences();
 
   const [query, setQuery] = useState('');
   const inputRef = useRef<TextInput>(null);
@@ -67,7 +69,13 @@ export default function DestinationScreen() {
 
   const InputRow = (
     <View style={styles.inputRow}>
-      <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <TouchableOpacity
+        onPress={onBack}
+        style={styles.backBtn}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityLabel="Go back"
+        accessibilityRole="button"
+      >
         <Icon name="back" size={isDesktop ? 18 : 20} stroke={colors.ink} />
       </TouchableOpacity>
       <View style={styles.inputWrap}>
@@ -79,14 +87,18 @@ export default function DestinationScreen() {
           placeholder={mode === 'from' ? 'Search start location…' : 'Search destination…'}
           placeholderTextColor={colors.muted2}
           style={styles.input}
-          autoCorrect={false}
           autoCapitalize="none"
+          autoCorrect={false}
           returnKeyType="search"
-          clearButtonMode="while-editing"
+          accessibilityLabel={mode === 'from' ? 'Search start location' : 'Search destination'}
         />
-        {loading && <ActivityIndicator size="small" color={colors.forest} style={{ flexShrink: 0 }} />}
-        {!loading && query.length > 0 && (
-          <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        {query.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setQuery('')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Clear search text"
+            accessibilityRole="button"
+          >
             <View style={styles.clearDot}>
               <Text style={styles.clearX}>×</Text>
             </View>
@@ -100,9 +112,78 @@ export default function DestinationScreen() {
 
   const body = (() => {
     if (query.trim().length < 2) {
+      if (recents.length > 0 || preferences.favorite_routes.length > 0) {
+        return (
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ padding: 16, gap: 16 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {preferences.favorite_routes.length > 0 && (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.sectionHeader}>⭐ FAVORITE ROUTES</Text>
+                {preferences.favorite_routes.map(fav => (
+                  <TouchableOpacity
+                    key={fav.id}
+                    onPress={() => onSelect({
+                      id: fav.id,
+                      name: fav.name,
+                      secondary: 'Favorite route',
+                      lat: fav.end_lat,
+                      lon: fav.end_lon,
+                    })}
+                    style={styles.recentRow}
+                    activeOpacity={0.75}
+                    accessibilityLabel={`Favorite route: ${fav.name}`}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.recentIcon}>
+                      <Icon name="pin" size={15} stroke={colors.forest} width={2} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.resultName}>{fav.name}</Text>
+                      <Text style={styles.resultSecondary}>Favorite destination</Text>
+                    </View>
+                    <Icon name="back" size={16} stroke={colors.muted2} style={{ transform: [{ rotate: '180deg' }] }} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {recents.length > 0 && (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.sectionHeader}>🕒 RECENT DESTINATIONS</Text>
+                {recents.map(r => (
+                  <TouchableOpacity
+                    key={r.id}
+                    onPress={() => onSelect({
+                      id: r.id,
+                      name: r.name,
+                      secondary: 'Recent search',
+                      lat: r.lat,
+                      lon: r.lon,
+                    })}
+                    style={styles.recentRow}
+                    activeOpacity={0.75}
+                    accessibilityLabel={`Recent destination: ${r.name}`}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.recentIcon}>
+                      <Icon name="search" size={14} stroke={colors.muted} />
+                    </View>
+                    <Text style={[styles.resultName, { flex: 1 }]}>{r.name}</Text>
+                    <Icon name="back" size={16} stroke={colors.muted2} style={{ transform: [{ rotate: '180deg' }] }} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        );
+      }
+
       return (
         <View style={styles.hint}>
-          <Text style={styles.hintText}>Type at least 2 characters to search</Text>
+          <Text style={styles.hintText}>Search any landmark, metro station, or street name</Text>
         </View>
       );
     }
@@ -110,6 +191,7 @@ export default function DestinationScreen() {
       return (
         <View style={styles.hint}>
           <ActivityIndicator color={colors.forest} />
+          <Text style={[styles.hintText, { marginTop: 8 }]}>Finding places…</Text>
         </View>
       );
     }
@@ -117,6 +199,14 @@ export default function DestinationScreen() {
       return (
         <View style={styles.hint}>
           <Text style={[styles.hintText, { color: colors.high }]}>Search unavailable — check your connection</Text>
+          <TouchableOpacity
+            onPress={() => setQuery(q => q.trim())}
+            style={{ marginTop: 12, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.line }}
+            accessibilityLabel="Retry search"
+            accessibilityRole="button"
+          >
+            <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 13, color: colors.forest }}>Retry Search</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -304,6 +394,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
     textAlign: 'center',
+  },
+  hintSub: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: colors.muted2,
+    textAlign: 'center',
+  },
+  sectionHeader: {
+    fontFamily: fonts.uiBold,
+    fontSize: 11,
+    color: colors.muted2,
+    letterSpacing: 0.5,
+    paddingHorizontal: 4,
+  },
+  recentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  recentIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#F3F6F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   // Desktop panel
   desktopOverlay: {

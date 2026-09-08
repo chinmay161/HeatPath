@@ -14,7 +14,6 @@ import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import { useCurrentConditions } from '../../hooks/useCurrentConditions';
 import { MascotBadge, Mascot } from '../../components/Mascot';
-import { BlockedBanner } from '../../components/BlockedBanner';
 import { IconChip, Button } from '../../components/ui';
 import Icon from '../../components/Icon';
 import { colors, fonts, radius } from '../../theme/colors';
