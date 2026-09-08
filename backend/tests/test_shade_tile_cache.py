@@ -139,5 +139,5 @@ async def test_fetch_failure_returns_fallback(monkeypatch):
     shade_percentages = res["shade_values"]
     sources = res["shade_sources"]
     assert len(shade_percentages) == 1
-    assert shade_percentages[0] == 25.0
-    assert sources[0] == "failed_fallback"
+    assert shade_percentages[0] is None
+    assert sources[0] == "failed"

@@ -87,8 +87,8 @@ async def test_shade_for_path_error(httpx_mock):
     sources = res["shade_sources"]
     
     assert len(shade_percentages) == 1
-    assert shade_percentages[0] == 25.0  # fallback defaults to 25.0
-    assert sources[0] == "failed_fallback"
+    assert shade_percentages[0] is None
+    assert sources[0] == "failed"
 
 @pytest.mark.asyncio
 async def test_fetch_shade_features_returns_tuple(httpx_mock):
@@ -133,8 +133,8 @@ async def test_estimate_shade_from_street_type_no_tags(httpx_mock):
     }
     httpx_mock.add_response(url="https://overpass-api.de/api/interpreter", json=mock_response)
     shade_pct, source = await estimate_shade_from_street_type(18.9347, 72.8353)
-    assert shade_pct == 25.0
-    assert source == "street_type"
+    assert shade_pct == 0.0
+    assert source == "unknown"
 
 @pytest.mark.asyncio
 async def test_cache_hit_skips_api(httpx_mock):
@@ -188,7 +188,7 @@ async def test_shade_for_path_uses_fallback_on_failure(httpx_mock):
     shade_percentages = res["shade_values"]
     sources = res["shade_sources"]
     assert shade_percentages[0] == 35.0
-    assert sources[0] == "failed_fallback"
+    assert sources[0] == "street_type"
 
 def test_bridge_feature_scores_25_percent():
     features = [{"type": "way", "tags": {"bridge": "yes", "highway": "primary"}}]

@@ -105,7 +105,7 @@ class HeatZonePoint(BaseModel):
     lat: float
     lon: float
     comfort_score: float
-    shade_pct: float
+    shade_pct: Optional[float] = None
     source: str
     model_config = ConfigDict(from_attributes=True)
 

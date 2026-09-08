@@ -112,7 +112,7 @@ async def _load_shade_tiles_for_grid(
         for key, result in zip(missing_keys, results):
             if isinstance(result, Exception):
                 logger.warning("[heat-zones] tile %s fetch failed: %s", key, result)
-                fetched[key] = {"shade_pct": 25.0, "source": "fallback"}
+                fetched[key] = {"shade_pct": None, "source": "failed"}
             else:
                 fetched[key] = result
         await store_tiles(fetched)

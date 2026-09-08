@@ -69,8 +69,11 @@ async def estimate_shade_from_street_type(lat: float, lon: float, solar_elevatio
         logger.warning(f"Overpass street type API failed: error={type(e).__name__}: {e}")
         api_failed = True
 
-    if api_failed or not elements:
-        return 25.0, "street_type"
+    if api_failed:
+        return None, "failed"
+
+    if not elements:
+        return 0.0, "unknown"
 
     for el in elements:
         tags = el.get("tags", {})
@@ -110,7 +113,7 @@ async def estimate_shade_from_street_type(lat: float, lon: float, solar_elevatio
             matched_scores.append(15.0)
 
     if not matched_scores:
-        return 25.0, "street_type"
+        return 0.0, "unknown"
 
     return float(max(matched_scores)), "street_type"
 
@@ -334,37 +337,6 @@ def estimate_shade_percent(
 
 
 
-def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6371000
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    d_phi = math.radians(lat2 - lat1)
-    d_lam = math.radians(lon2 - lon1)
-    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-
-def _fallback_shade(lat: float, lon: float, index: int) -> float:
-    """
-    Realistic shade fallback when Overpass is unreachable.
-    Uses coordinate hash + segment index to produce varied but
-    deterministic shade values that differ between routes.
-    Simulates real Indian urban shade patterns:
-    - Some segments near buildings: 15–40% shade
-    - Open roads: 5–15% shade
-    - Tree-lined stretches: 30–60% shade
-    """
-    # Hash the coordinates to get a stable pseudo-random value
-    seed = abs(hash(f"{lat:.4f}{lon:.4f}{index}")) % 100
-    if seed < 20:
-        return round(5 + (seed / 20) * 10, 1)   # Open road: 5–15%
-    elif seed < 55:
-        return round(15 + (seed / 55) * 25, 1)  # Buildings: 15–40%
-    elif seed < 80:
-        return round(30 + (seed / 80) * 30, 1)  # Tree-lined: 30–60%
-    else:
-        return round(10 + (seed / 100) * 15, 1) # Mixed: 10–25%
-
-
 def midpoint(p1: Dict[str, float], p2: Dict[str, float]) -> Dict[str, float]:
     """Calculate the midpoint between two coordinates."""
     return {
@@ -396,22 +368,28 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
         logger.warning(f"[shade] PostGIS query failed at {tile_lat},{tile_lon}, falling back to Overpass")
         features, source = await fetch_shade_features(tile_lat, tile_lon, radius_m=60)
 
-    if source in ("postgis", "overpass") and features:
-        shade = estimate_shade_percent(
-            features,
-            solar_elevation=solar["elevation"],
-            solar_azimuth=solar["azimuth"],
-            segment_length_m=250,
-            tile_lat=tile_lat,
-            tile_lon=tile_lon,
-        )
-        data_source = source
+    if source in ("postgis", "overpass"):
+        if features:
+            shade = estimate_shade_percent(
+                features,
+                solar_elevation=solar["elevation"],
+                solar_azimuth=solar["azimuth"],
+                segment_length_m=250,
+                tile_lat=tile_lat,
+                tile_lon=tile_lon,
+            )
+            data_source = source
+        else:
+            # Query succeeded and returned 0 features — physically no occluding objects
+            shade = 0.0
+            data_source = source
     else:
+        # Both PostGIS and Overpass failed — attempt street type query
         shade, src = await estimate_shade_from_street_type(tile_lat, tile_lon, solar["elevation"])
-        data_source = "fallback" if source == "failed" else src
+        data_source = src
 
     return {
-        "shade_pct": round(shade, 2),
+        "shade_pct": round(shade, 2) if shade is not None else None,
         "source": data_source,
         "solar_elevation": round(solar["elevation"], 1),
         "solar_multiplier": 1.0
@@ -437,9 +415,10 @@ async def shade_for_path(path: List[Dict[str, float]]) -> dict:
     """
     # Step 1 — guard:
     if len(path) < 2:
+        elev = solar_service.get_current_elevation(path[0]["lat"], path[0]["lon"]) if path else 0.0
         return {
             "shade_values": [],
-            "solar_elevation": 45.0,
+            "solar_elevation": round(elev, 1),
             "solar_multiplier": 1.0,
             "shade_sources": []
         }
@@ -468,7 +447,7 @@ async def shade_for_path(path: List[Dict[str, float]]) -> dict:
         for key, result in zip(missing_keys, results):
             if isinstance(result, Exception):
                 logger.warning(f"[shade] tile {key} fetch failed: {result}")
-                fetched[key] = {"shade_pct": 25.0, "source": "fallback"}
+                fetched[key] = {"shade_pct": None, "source": "failed"}
             else:
                 fetched[key] = result
         await store_tiles(fetched)
@@ -481,11 +460,7 @@ async def shade_for_path(path: List[Dict[str, float]]) -> dict:
         if k in initially_cached_keys:
             sources.append("cached")
         else:
-            src = cached[k]["source"]
-            if src == "fallback":
-                sources.append("failed_fallback")
-            else:
-                sources.append(src)
+            sources.append(cached[k].get("source", "failed"))
                 
     return {
         "shade_values": shade_percentages,
