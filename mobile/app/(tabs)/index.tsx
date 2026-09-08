@@ -466,7 +466,7 @@ function RecentRow({ icon = 'pin', bg = '#E8F2E6', color = colors.forest, title,
           <Text style={{ fontFamily: fonts.uiBold, fontSize: 12, color: pillFg }}>{sev}</Text>
         </View>
       ) : (
-        <Icon name="back" size={16} stroke={colors.muted2} style={{ transform: [{ rotate: '180deg' }] } as any} />
+        <Icon name="back" size={16} stroke={colors.muted2} style={{ transform: [{ rotate: '180deg' }] }} />
       )}
     </TouchableOpacity>
   );

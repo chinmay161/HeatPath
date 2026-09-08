@@ -1,4 +1,5 @@
 import React from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
 // Same SVG path strings as the reference icons.jsx — line, 2px, rounded
@@ -117,13 +118,14 @@ interface IconProps {
   size?: number;
   stroke?: string;
   width?: number;
+  style?: StyleProp<ViewStyle>;
 }
 
-export default function Icon({ name, size = 20, stroke = '#15241C', width = 2 }: IconProps) {
+export default function Icon({ name, size = 20, stroke = '#15241C', width = 2, style }: IconProps) {
   const svgStr = PATHS[name] || '';
   const elements = parseElements(svgStr, stroke, width);
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={style}>
       {elements}
     </Svg>
   );

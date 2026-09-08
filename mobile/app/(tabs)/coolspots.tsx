@@ -97,7 +97,7 @@ export default function CoolSpotsScreen() {
           </Text>
           <View style={[styles.emptyActions, { flexDirection: isDesktop ? 'row' : 'column' }]}>
             <Button onPress={() => setRadius(3)}>{widenLabel}</Button>
-            <Button variant="ghost" onPress={() => router.navigate('/(tabs)/')}>Back to home</Button>
+            <Button variant="ghost" onPress={() => router.navigate('/(tabs)')}>Back to home</Button>
           </View>
         </View>
       </View>

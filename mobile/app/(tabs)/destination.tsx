@@ -44,7 +44,7 @@ export default function DestinationScreen() {
   const onSelect = (place: PlaceSuggestion) => {
     if (mode === 'from') {
       router.replace({
-        pathname: '/(tabs)/' as any,
+        pathname: '/(tabs)',
         params: {
           fromLat: String(place.lat),
           fromLon: String(place.lon),
@@ -71,7 +71,7 @@ export default function DestinationScreen() {
         <Icon name="back" size={isDesktop ? 18 : 20} stroke={colors.ink} />
       </TouchableOpacity>
       <View style={styles.inputWrap}>
-        <Icon name="search" size={17} stroke={colors.muted} style={{ flexShrink: 0 } as any} />
+        <Icon name="search" size={17} stroke={colors.muted} style={{ flexShrink: 0 }} />
         <TextInput
           ref={inputRef}
           value={query}
@@ -149,7 +149,7 @@ export default function DestinationScreen() {
                 <Text style={styles.resultSecondary} numberOfLines={1}>{place.secondary}</Text>
               ) : null}
             </View>
-            <Icon name="back" size={16} stroke={colors.muted2} style={{ transform: [{ rotate: '180deg' }] } as any} />
+            <Icon name="back" size={16} stroke={colors.muted2} style={{ transform: [{ rotate: '180deg' }] }} />
           </TouchableOpacity>
         ))}
       </ScrollView>

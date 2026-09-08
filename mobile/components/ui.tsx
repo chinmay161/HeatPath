@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ViewStyle,
   TextStyle,
+  StyleProp,
   Image,
 } from 'react-native';
 import Icon from './Icon';
@@ -110,11 +111,12 @@ interface ButtonProps {
   block?: boolean;
   children: React.ReactNode;
   onPress?: () => void;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
+  disabled?: boolean;
 }
 
-export function Button({ variant = '', block, children, onPress, style, textStyle }: ButtonProps) {
+export function Button({ variant = '', block, children, onPress, style, textStyle, disabled = false }: ButtonProps) {
   let containerStyle: any = [styles.btn];
   let txtStyle: any = [styles.btnText];
 
@@ -126,11 +128,17 @@ export function Button({ variant = '', block, children, onPress, style, textStyl
     txtStyle.push({ color: '#16633B' });
   }
   if (block) containerStyle.push({ width: '100%' });
+  if (disabled) containerStyle.push({ opacity: 0.5 });
   if (style) containerStyle.push(style);
   if (textStyle) txtStyle.push(textStyle);
 
   return (
-    <TouchableOpacity onPress={onPress} style={containerStyle} activeOpacity={0.85}>
+    <TouchableOpacity
+      onPress={disabled ? undefined : onPress}
+      style={containerStyle}
+      activeOpacity={disabled ? 1 : 0.85}
+      disabled={disabled}
+    >
       <Text style={txtStyle}>{children}</Text>
     </TouchableOpacity>
   );
