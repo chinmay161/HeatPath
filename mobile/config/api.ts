@@ -61,3 +61,34 @@ export async function getHeatZones(
   }
   return res.json() as Promise<HeatZonesResponse>;
 }
+
+export type UserProfile = {
+  name: string;
+  email?: string | null;
+  bio?: string | null;
+  avatar_id: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function getProfile(): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/profile/`);
+  if (!res.ok) {
+    throw new Error(`Profile fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<UserProfile>;
+}
+
+export async function updateProfile(data: Partial<UserProfile> & { name: string }): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/profile/`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
+    throw new Error(err.detail || 'Failed to update profile');
+  }
+  return res.json() as Promise<UserProfile>;
+}
+

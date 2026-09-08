@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './Icon';
 import { colors, fonts, radius } from '../theme/colors';
+import { useUserProfile } from '../hooks/useUserProfile';
 
 const NAV_ITEMS = [
   { key: 'home', label: 'Home', icon: 'home' },
@@ -19,6 +20,8 @@ interface AppSidebarProps {
 
 export function AppSidebar({ active, onNav }: AppSidebarProps) {
   const insets = useSafeAreaInsets();
+  const { profile } = useUserProfile();
+
 
   return (
     <View style={[styles.sidebar, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
@@ -58,15 +61,22 @@ export function AppSidebar({ active, onNav }: AppSidebarProps) {
       </View>
 
       {/* Profile footer */}
-      <View style={styles.meCard}>
+      <TouchableOpacity
+        onPress={() => onNav('profile')}
+        style={[styles.meCard, active === 'profile' && styles.meCardActive]}
+        activeOpacity={0.8}
+        accessibilityLabel="View profile"
+      >
         <View style={styles.meAvatar}>
           <Icon name="user" size={18} stroke={colors.forest} width={2} />
         </View>
-        <View>
-          <Text style={styles.meName}>Aanya R.</Text>
-          <Text style={styles.meMeta}>Heat-sensitive</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.meName} numberOfLines={1}>{profile.name || 'Your Profile'}</Text>
+          <Text style={styles.meMeta} numberOfLines={1}>
+            {profile.bio || 'Pedestrian profile'}
+          </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -142,6 +152,10 @@ const styles = StyleSheet.create({
     borderColor: '#EAEFE5',
     marginTop: 'auto',
   } as any,
+  meCardActive: {
+    borderColor: colors.forest,
+    backgroundColor: '#F4FAF2',
+  },
   meAvatar: {
     width: 36,
     height: 36,

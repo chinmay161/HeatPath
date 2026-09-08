@@ -128,9 +128,10 @@ interface ButtonProps {
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   disabled?: boolean;
+  accessibilityLabel?: string;
 }
 
-export function Button({ variant = '', block, children, onPress, style, textStyle, disabled = false }: ButtonProps) {
+export function Button({ variant = '', block, children, onPress, style, textStyle, disabled = false, accessibilityLabel }: ButtonProps) {
   let containerStyle: any = [styles.btn];
   let txtStyle: any = [styles.btnText];
 
@@ -138,6 +139,7 @@ export function Button({ variant = '', block, children, onPress, style, textStyl
     containerStyle.push(styles.btnLime);
     txtStyle.push({ color: '#1f3d12' });
   } else if (variant === 'ghost') {
+
     containerStyle.push(styles.btnGhost);
     txtStyle.push({ color: '#16633B' });
   }
@@ -152,6 +154,7 @@ export function Button({ variant = '', block, children, onPress, style, textStyl
       style={containerStyle}
       activeOpacity={disabled ? 1 : 0.85}
       disabled={disabled}
+      accessibilityLabel={accessibilityLabel}
     >
       <Text style={txtStyle}>{children}</Text>
     </TouchableOpacity>

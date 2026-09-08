@@ -135,3 +135,24 @@ class HeatZonesResponse(BaseModel):
     conditions: dict
     generated_at: str
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserProfile(BaseModel):
+    """User profile model."""
+    name: str = Field(..., min_length=1, max_length=60, description="User's display name")
+    email: Optional[str] = Field(default=None, max_length=120, description="Optional contact email")
+    bio: Optional[str] = Field(default=None, max_length=200, description="Brief user bio or walking note")
+    avatar_id: str = Field(default="tree", description="Selected avatar identifier")
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Request model for updating user profile."""
+    name: str = Field(..., min_length=1, max_length=60, description="User's display name")
+    email: Optional[str] = Field(default=None, max_length=120, description="Optional contact email")
+    bio: Optional[str] = Field(default=None, max_length=200, description="Brief user bio or walking note")
+    avatar_id: Optional[str] = Field(default="tree", description="Selected avatar identifier")
+    model_config = ConfigDict(from_attributes=True)
+

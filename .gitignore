@@ -34,3 +34,8 @@ mobile/dist/
 *.osm.pbf
 *.pbf
 
+# SQLite databases
+*.db
+backend/data/*.db
+
+
