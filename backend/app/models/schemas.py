@@ -202,3 +202,29 @@ class HourlyForecastResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CoolSpotItem(BaseModel):
+    """A cool refuge location (park, AC refuge, or water point)."""
+    id: str = Field(..., description="Unique OSM or place ID")
+    name: str = Field(..., description="Spot name or feature title")
+    lat: float = Field(..., description="Latitude")
+    lon: float = Field(..., description="Longitude")
+    distance_m: float = Field(..., description="Straight-line or walking distance in meters")
+    walk_min: int = Field(..., description="Estimated walking time in minutes")
+    category: str = Field(..., description="'park' | 'ac' | 'water'")
+    icon: str = Field(..., description="'shade' | 'ac' | 'water'")
+    tone: str = Field(..., description="'green' | 'blue'")
+    badge: str = Field(..., description="'DEEP SHADE' | 'A/C REFUGE' | 'WATER'")
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CoolSpotsResponse(BaseModel):
+    """Response schema for nearby cool spots."""
+    status: str = Field(default="available", description="'available' | 'unavailable'")
+    provider: str = Field(default="overpass")
+    count: int = Field(..., description="Number of cool spots found")
+    radius_m: int = Field(..., description="Search radius in meters")
+    spots: List[CoolSpotItem] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+
+

@@ -165,5 +165,38 @@ export async function getHourlyForecast(lat: number, lon: number): Promise<Hourl
   return res.json() as Promise<HourlyForecastResponse>;
 }
 
+export type CoolSpotItem = {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  distance_m: number;
+  walk_min: number;
+  icon: 'shade' | 'ac' | 'water';
+  tone: 'green' | 'blue';
+  badge: 'DEEP SHADE' | 'A/C REFUGE' | 'WATER';
+  category: 'shade' | 'ac' | 'water';
+};
 
+export type CoolSpotsResponse = {
+  status: 'available' | 'unavailable';
+  provider: string;
+  spots: CoolSpotItem[];
+  total: number;
+  center_lat: number;
+  center_lon: number;
+};
 
+export async function getCoolSpots(
+  lat: number,
+  lon: number,
+  radiusM: number = 1500,
+  category: string = 'all',
+): Promise<CoolSpotsResponse> {
+  const url = `${API_BASE}/cool-spots?lat=${lat}&lon=${lon}&radius_m=${radiusM}&category=${encodeURIComponent(category)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Cool spots fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<CoolSpotsResponse>;
+}
