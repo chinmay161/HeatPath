@@ -135,4 +135,35 @@ export async function updatePreferences(data: Partial<UserPreferences>): Promise
   return (body.preferences || data) as UserPreferences;
 }
 
+export type HourlyForecastItem = {
+  time: string;
+  temperature_c: number;
+  humidity_pct: number;
+  feels_like_c: number;
+  uv_index: number;
+  precipitation_probability: number;
+  wind_speed_kmh: number;
+  comfort_score: number;
+  severity: 'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME';
+  is_best_time: boolean;
+};
+
+export type HourlyForecastResponse = {
+  status: 'available' | 'unavailable';
+  provider: string;
+  provider_status: string;
+  observed_at: string | null;
+  retry_after?: number | null;
+  hours: HourlyForecastItem[];
+};
+
+export async function getHourlyForecast(lat: number, lon: number): Promise<HourlyForecastResponse> {
+  const res = await fetch(`${API_BASE}/forecast/hourly?lat=${lat}&lon=${lon}`);
+  if (!res.ok) {
+    throw new Error(`Forecast fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<HourlyForecastResponse>;
+}
+
+
 

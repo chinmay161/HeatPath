@@ -21,6 +21,9 @@ import { colors, fonts, radius } from '../../theme/colors';
 import { useNearbyCoolSpots, type CoolSpot } from '../../hooks/useNearbyCoolSpots';
 import { useRecentSearches, type RecentSearch } from '../../hooks/useRecentSearches';
 import { usePreferences } from '../../hooks/usePreferences';
+import { HourlyComfortCard } from '../../components/HourlyComfortCard';
+
+
 
 
 function aqiLabel(index: number): string {
@@ -56,6 +59,12 @@ export default function HomeScreen() {
   const params = useLocalSearchParams<{ fromLat?: string; fromLon?: string; fromName?: string; fromToken?: string }>();
   const [fromOverride, setFromOverride] = useState<{ lat: number; lon: number; label: string } | null>(null);
   const lastFromTokenRef = useRef<string | null>(null);
+  const mobileScrollRef = useRef<ScrollView>(null);
+
+  const onBestTimePress = () => {
+    mobileScrollRef.current?.scrollToEnd({ animated: true });
+  };
+
 
   // Consume a "from" pick navigated back from destination.tsx with mode=from
   useEffect(() => {
@@ -161,25 +170,8 @@ export default function HomeScreen() {
     </View>
   );
 
-  const BestTime = (
-    <View style={styles.bestTimeCard}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={[styles.cardTitle, { color: '#E8F0EA' }]}>Hourly comfort forecast</Text>
-        <View style={{ backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-          <Text style={{ fontSize: 11, color: '#9fb7a6', fontFamily: fonts.uiBold }}>COMING SOON</Text>
-        </View>
-      </View>
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 24, gap: 8 }}>
-        <Icon name="clock" size={32} stroke="#9fb7a6" />
-        <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 14, color: '#E8F0EA', textAlign: 'center' }}>
-          Best-time-to-walk forecasts are in active development.
-        </Text>
-        <Text style={{ fontFamily: fonts.ui, fontSize: 12, color: '#9fb7a6', textAlign: 'center', maxWidth: 280 }}>
-          Requires live hourly weather and solar forecast integration.
-        </Text>
-      </View>
-    </View>
-  );
+  const BestTime = <HourlyComfortCard lat={fromLat} lon={fromLon} />;
+
 
   // ─── Desktop ─────────────────────────────────────────────────────────────────
   if (isDesktop) {
@@ -299,6 +291,7 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView
+        ref={mobileScrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={styles.mobileScroll}
         showsVerticalScrollIndicator={false}
@@ -316,13 +309,14 @@ export default function HomeScreen() {
 
         <View style={{ flexDirection: 'row', gap: 9 }}>
           <QuickLink onPress={onCoolspots} icon="park" bg="#E6F4E2" color={colors.forest} label="Cool spots" />
-          <QuickLink onPress={() => {}} icon="clock" bg="#E1ECFB" color={colors.coolBlue} label="Best time" />
+          <QuickLink onPress={onBestTimePress} icon="clock" bg="#E1ECFB" color={colors.coolBlue} label="Best time" />
           <QuickLink onPress={onHeatmap} icon="heatmap" bg="#FCEEDD" color={colors.high} label="Heat map" />
           <QuickLink onPress={onSearch} icon="routes" bg="#E6F4E2" color={colors.forest} label="Routes" />
         </View>
 
         {BestTime}
       </ScrollView>
+
     </View>
   );
 }

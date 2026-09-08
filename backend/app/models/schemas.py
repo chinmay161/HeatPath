@@ -175,3 +175,30 @@ class ProfileUpdateRequest(BaseModel):
     avatar_id: Optional[str] = Field(default="tree", description="Selected avatar identifier")
     model_config = ConfigDict(from_attributes=True)
 
+
+class HourlyForecastItem(BaseModel):
+    """Hourly forecast slice for comfort tracking."""
+    time: str = Field(..., description="ISO hourly timestamp")
+    temperature_c: float = Field(..., description="Air temperature in Celsius")
+    humidity_pct: float = Field(..., description="Relative humidity percentage")
+    feels_like_c: float = Field(..., description="Apparent temperature in Celsius")
+    uv_index: float = Field(default=0.0, description="UV index")
+    precipitation_probability: float = Field(default=0.0, description="Precipitation chance %")
+    wind_speed_kmh: float = Field(default=0.0, description="Wind speed in km/h")
+    comfort_score: float = Field(..., description="Comfort score 0.0 to 1.0")
+    severity: str = Field(..., description="'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME'")
+    is_best_time: bool = Field(default=False, description="Flagged as optimal walking window")
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HourlyForecastResponse(BaseModel):
+    """Response schema for hourly weather & comfort forecast."""
+    status: str = Field(default="available", description="'available' | 'unavailable'")
+    provider: str = Field(default="open-meteo")
+    provider_status: str = Field(default="healthy")
+    observed_at: Optional[str] = None
+    retry_after: Optional[int] = None
+    hours: List[HourlyForecastItem] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+

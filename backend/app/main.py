@@ -4,7 +4,7 @@ Main FastAPI application module.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
-from app.routers import conditions, routes, preferences, find_routes, heat_zones, profile
+from app.routers import conditions, routes, preferences, find_routes, heat_zones, profile, forecast
 
 app = FastAPI(title="HeatPath API", version="0.1.0")
 
@@ -23,6 +23,8 @@ app.include_router(preferences.router)
 app.include_router(find_routes.router)
 app.include_router(heat_zones.router)
 app.include_router(profile.router)
+app.include_router(forecast.router)
+
 
 
 @app.get("/health")
