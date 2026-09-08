@@ -10,14 +10,23 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "in.heatpath.app",
-      "icon": "./public/favicon.png"
+      "icon": "./public/favicon.png",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "HeatPath uses your location to show real-time heat indices, find nearby cool spots, and calculate shaded walking routes.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "HeatPath uses your location to monitor heat exposure and provide timely shade alerts along your walking journey."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./public/favicon.png",
         "backgroundColor": "#1C7C4A"
       },
-      "package": "in.heatpath.app"
+      "package": "in.heatpath.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "${GOOGLE_MAPS_API_KEY}"
+        }
+      }
     },
     "web": {
       "bundler": "metro",
@@ -28,7 +37,13 @@
       "expo-router",
       "expo-font",
       "expo-video",
-      "expo-location"
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "HeatPath uses your location to show real-time heat indices, find nearby cool spots, and calculate shaded walking routes.",
+          "locationAlwaysAndWhenInUsePermission": "HeatPath uses your location to monitor heat exposure and provide timely shade alerts along your walking journey."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
