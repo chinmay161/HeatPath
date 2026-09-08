@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import { API_BASE } from '../config/api';
 
+export type ConfidenceReport = {
+  value: number;
+  missing_inputs: string[];
+  degraded_inputs: string[];
+  computed_from: string[];
+};
+
 export type ScoredRoute = {
   rank: number;
-  overall_score: number;
-  confidence?: number;
+  overall_score: number | null;
+  score_version?: string;
+  confidence?: number | ConfidenceReport;
   missing_inputs?: string[];
   shade_safety_score: number;
   heat_safety_score: number;
@@ -19,6 +27,7 @@ export type ScoredRoute = {
 };
 
 export type RoutesResult = {
+  score_version?: string;
   routes: ScoredRoute[];
   conditions: {
     heat_index: number;

@@ -1,4 +1,4 @@
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Any
 from app.config import config
 
 # Max perceived temperature reduction in full shade vs full sun exposure (°C)
@@ -53,11 +53,19 @@ def score_segment(
     return max(0.0, min(1.0, comfort + 0.5))
 
 
-def score_route(segments: List[Dict[str, Union[float, int, bool, None]]]) -> Dict[str, Union[float, List[float], None, List[str]]]:
+def score_route(segments: List[Dict[str, Union[float, int, bool, None]]]) -> Dict[str, Any]:
     """
     Calculate the overall scores for a route containing multiple segments.
 
-    Calculates data confidence and tracks missing inputs.
+    Computes interpretable confidence breakdown:
+    - value: numeric confidence 0.0 to 1.0
+    - missing_inputs: completely missing signals
+    - degraded_inputs: low-precision or fallback signals
+    - computed_from: signals actively used in scoring
+
+    Anti-Inflation Rule:
+    Applies confidence multiplier to base score: final_score = base_score * confidence.value
+    If confidence falls below SCORING_MIN_CONFIDENCE_THRESHOLD, overall_score is marked None (unavailable).
     """
     if not segments:
         return {
@@ -66,7 +74,13 @@ def score_route(segments: List[Dict[str, Union[float, int, bool, None]]]) -> Dic
             "heat_safety_score": 0.0,
             "crowd_safety_score": None,
             "overall_score": 0.0,
-            "confidence": 0.0,
+            "score_version": config.SCORE_VERSION,
+            "confidence": {
+                "value": 0.0,
+                "missing_inputs": ["all"],
+                "degraded_inputs": [],
+                "computed_from": [],
+            },
             "missing_inputs": ["all"],
         }
 
@@ -75,26 +89,44 @@ def score_route(segments: List[Dict[str, Union[float, int, bool, None]]]) -> Dic
     valid_shade_count  = 0
     total_heat_penalty = 0.0
     missing_inputs     = []
-    confidence         = 1.0
+    degraded_inputs    = []
+    computed_from      = []
+    confidence_val     = 1.0
 
     for segment in segments:
         raw_shade = segment.get("shade_pct")
         shade_pct = float(raw_shade) if raw_shade is not None else None
-        heat_idx  = float(segment["heat_index"])
+        raw_heat  = segment.get("heat_index")
+        heat_idx  = float(raw_heat) if raw_heat is not None else None
         raw_aqi   = segment.get("aqi")
         aqi       = float(raw_aqi) if raw_aqi is not None else None
+        shade_src = segment.get("shade_source", "")
 
         if shade_pct is None and "shade" not in missing_inputs:
             missing_inputs.append("shade")
+        elif shade_pct is not None and "shade" not in computed_from:
+            computed_from.append("shade")
+
+        if shade_src in ("street_type", "unknown") and "shade_street_type" not in degraded_inputs:
+            degraded_inputs.append("shade_street_type")
+
+        if heat_idx is None and "heat_index" not in missing_inputs:
+            missing_inputs.append("heat_index")
+        elif heat_idx is not None and "heat_index" not in computed_from:
+            computed_from.append("heat_index")
+
         if aqi is None and "aqi" not in missing_inputs:
             missing_inputs.append("aqi")
+        elif aqi is not None and "aqi" not in computed_from:
+            computed_from.append("aqi")
 
+        effective_heat = heat_idx if heat_idx is not None else 0.0
         score = score_segment(
             shade_pct=shade_pct,
-            heat_index=heat_idx,
+            heat_index=effective_heat,
             aqi=aqi,
-            heat_sensitivity=int(segment["heat_sensitivity"]),
-            aqi_sensitivity=int(segment["aqi_sensitivity"]),
+            heat_sensitivity=int(segment.get("heat_sensitivity", 5)),
+            aqi_sensitivity=int(segment.get("aqi_sensitivity", 5)),
             crowd_pct=None,
             avoid_crowds=False,
         )
@@ -104,27 +136,50 @@ def score_route(segments: List[Dict[str, Union[float, int, bool, None]]]) -> Dic
             total_shade_score += shade_pct / 95.0
             valid_shade_count += 1
 
-        heat_penalty = min(heat_idx / config.SCORING_MAX_HEAT_INDEX, 1.0) * (int(segment["heat_sensitivity"]) / 10.0)
+        heat_penalty = min(effective_heat / config.SCORING_MAX_HEAT_INDEX, 1.0) * (int(segment.get("heat_sensitivity", 5)) / 10.0)
         total_heat_penalty += heat_penalty
 
     num_segments = len(segments)
 
-    # Adjust confidence for missing inputs
+    # Multi-factor confidence calculation
+    if "heat_index" in missing_inputs:
+        confidence_val -= 0.40
     if "aqi" in missing_inputs:
-        confidence -= 0.15
+        confidence_val -= 0.15
     if valid_shade_count < num_segments:
         missing_shade_fraction = (num_segments - valid_shade_count) / num_segments
-        confidence -= missing_shade_fraction * 0.35
+        confidence_val -= missing_shade_fraction * 0.35
+    if degraded_inputs:
+        confidence_val -= 0.05 * len(degraded_inputs)
+
+    confidence_val = round(max(0.0, min(1.0, confidence_val)), 2)
+
+    # Base score
+    base_score = sum(segment_scores) / num_segments
+
+    # Anti-inflation rule & minimum confidence threshold gate
+    if confidence_val < config.SCORING_MIN_CONFIDENCE_THRESHOLD:
+        overall_score = None
+    else:
+        overall_score = round(base_score * confidence_val, 3)
 
     shade_safety = min(1.0, total_shade_score / valid_shade_count) if valid_shade_count > 0 else 0.0
+
+    confidence_report = {
+        "value": confidence_val,
+        "missing_inputs": missing_inputs,
+        "degraded_inputs": degraded_inputs,
+        "computed_from": computed_from,
+    }
 
     return {
         "segment_scores": segment_scores,
         "shade_safety_score": round(shade_safety, 3),
         "heat_safety_score": round(1.0 - (total_heat_penalty / num_segments), 3),
         "crowd_safety_score": None,  # Feature disabled
-        "overall_score": round(sum(segment_scores) / num_segments, 3),
-        "confidence": round(max(0.1, min(1.0, confidence)), 2),
+        "overall_score": overall_score,
+        "score_version": config.SCORE_VERSION,
+        "confidence": confidence_report,
         "missing_inputs": missing_inputs,
     }
 

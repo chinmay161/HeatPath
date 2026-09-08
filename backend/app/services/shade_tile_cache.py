@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 from app.config import config
 from app.services.cache import get_cache, get_cache_sync
+from app.services.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +34,15 @@ async def get_tiles(keys: List[str]) -> Dict[str, dict]:
         return {}
     cache = await get_cache()
     cached = await cache.get_many(keys)
-    return {
+    valid = {
         k: v
         for k, v in cached.items()
         if isinstance(v, dict) and "shade_pct" in v
     }
+    hits = len(valid)
+    misses = len(keys) - hits
+    metrics.record_cache_access(hits, misses)
+    return valid
 
 
 async def store_tiles(tiles: Dict[str, dict]) -> None:

@@ -59,3 +59,46 @@ def test_score_route_known_segments():
     
     # overall: (1.0 + 0.0) / 2 = 0.5
     assert round(result["overall_score"], 2) == 0.5
+    assert result["score_version"] == "v1.3"
+    assert result["confidence"]["value"] == 1.0
+    assert result["confidence"]["missing_inputs"] == []
+    assert set(result["confidence"]["computed_from"]) == {"shade", "heat_index", "aqi"}
+
+
+def test_score_route_anti_inflation_missing_aqi():
+    """Verify that missing AQI scales down score via confidence multiplier rather than inflating it."""
+    segments = [
+        {
+            "shade_pct": 95.0,
+            "heat_index": 0.0,
+            "aqi": None,  # AQI missing
+            "heat_sensitivity": 5,
+            "aqi_sensitivity": 5,
+        }
+    ]
+    result = score_route(segments)
+    # Base comfort = 1.0, confidence = 1.0 - 0.15 = 0.85
+    # Overall score = 1.0 * 0.85 = 0.85 (not inflated to 1.0)
+    assert result["confidence"]["value"] == 0.85
+    assert "aqi" in result["confidence"]["missing_inputs"]
+    assert result["overall_score"] == 0.85
+
+
+def test_score_route_below_min_confidence_marks_score_unavailable():
+    """Verify that when confidence falls below 0.40 (e.g. weather + shade missing), overall_score is None."""
+    segments = [
+        {
+            "shade_pct": None,  # shade missing (-0.35)
+            "heat_index": None, # heat missing (-0.40)
+            "aqi": None,        # aqi missing (-0.15)
+            "heat_sensitivity": 5,
+            "aqi_sensitivity": 5,
+        }
+    ]
+    result = score_route(segments)
+    # Confidence drops to 0.10 (< 0.40 threshold)
+    assert result["confidence"]["value"] <= 0.40
+    assert result["overall_score"] is None
+    assert "heat_index" in result["confidence"]["missing_inputs"]
+    assert "shade" in result["confidence"]["missing_inputs"]
+    assert "aqi" in result["confidence"]["missing_inputs"]

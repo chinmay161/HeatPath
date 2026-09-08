@@ -26,6 +26,8 @@ from app.services.shade_tile_cache import tile_key, get_tiles, store_tiles
 from app.services.postgis_shade import fetch_shade_features_postgis
 import app.services.solar as solar_service
 from app.config import config
+from app.services.metrics import metrics
+import time
 
 logger = logging.getLogger(__name__)
 MAX_CONCURRENT_TILE_FETCHES = 8
@@ -138,18 +140,24 @@ async def fetch_shade_features(lat: float, lon: float, radius_m: int = 100) -> t
     );
     out tags geom;
     """
+    start_time = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=15.0, headers=OVERPASS_HEADERS) as client:
             resp = await client.post(
                 "https://overpass-api.de/api/interpreter",
                 data={"data": query},
             )
+            duration_ms = (time.perf_counter() - start_time) * 1000
             if resp.status_code != 200:
+                metrics.record_provider_call("shade", duration_ms, success=False)
                 logger.warning(f"Overpass API failed: status={resp.status_code}, using fallback")
                 return [], "failed"
+            metrics.record_provider_call("shade", duration_ms, success=True)
             data = resp.json()
             return data.get("elements", []), "overpass"
     except Exception as e:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        metrics.record_provider_call("shade", duration_ms, success=False)
         # Try to extract status code if it's an HTTP exception
         status_code = getattr(getattr(e, "response", None), "status_code", None)
         if status_code is not None:

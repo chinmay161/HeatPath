@@ -27,7 +27,8 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
 /**
  * Convert a comfort score into the shared HeatPath heat-map gradient colour.
  */
-export function scoreToColor(score: number): string {
+export function scoreToColor(score: number | null | undefined): string {
+  if (score == null) return '#9aa89d';
   const s = clamp(score, 0, 1);
   for (let i = 0; i < STOPS.length - 1; i += 1) {
     const a = STOPS[i];
@@ -49,7 +50,8 @@ export function scoreToColor(score: number): string {
 /**
  * Convert a comfort score into the shared route severity label.
  */
-export function scoreToLabel(score: number): ScoreLabel {
+export function scoreToLabel(score: number | null | undefined): ScoreLabel {
+  if (score == null) return 'CAUTION';
   const s = clamp(score, 0, 1);
   if (s >= 0.70) return 'SAFE';
   if (s >= 0.50) return 'CAUTION';

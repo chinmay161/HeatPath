@@ -42,6 +42,10 @@ async def get_conditions(
         return ConditionsResponse(
             status="unavailable",
             provider="open-meteo",
+            provider_status=weather.get("provider_status", "unreachable"),
+            retry_after=weather.get("retry_after", 60),
+            observed_at=None,
+            age_seconds=None,
             weather=None,
             aqi=aqi,
             heat_index=None,
@@ -72,6 +76,10 @@ async def get_conditions(
     return ConditionsResponse(
         status="available",
         provider="open-meteo",
+        provider_status=weather.get("provider_status", "healthy"),
+        retry_after=None,
+        observed_at=weather.get("observed_at"),
+        age_seconds=weather.get("age_seconds", 0),
         heat_index=heat_index,
         shade_index=shade_index,
         aqi_index=aqi_index,

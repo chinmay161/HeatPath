@@ -26,10 +26,11 @@ app.include_router(heat_zones.router)
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint exposing database, cache, and postgis status.
+    Health check endpoint exposing database, cache, postgis, and operational metrics status.
     """
     from app.services.cache import get_cache
     from app.services.postgis_shade import get_pool
+    from app.services.metrics import metrics
 
     cache = await get_cache()
     cache_healthy = await cache.health_check()
@@ -54,4 +55,19 @@ async def health_check():
             "backend": cache_backend_name,
             "status": "healthy" if cache_healthy else "degraded",
         },
+        "metrics": {
+            "cache_hit_rate": metrics.cache_hit_rate,
+            "weather_provider_failures_total": metrics.weather_provider_failures_total,
+            "aqi_provider_failures_total": metrics.aqi_provider_failures_total,
+            "shade_provider_failures_total": metrics.shade_provider_failures_total,
+        },
     }
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """
+    Operational metrics endpoint exposing provider failures, cache hit rate, and latency summaries.
+    """
+    from app.services.metrics import metrics
+    return metrics.get_metrics()

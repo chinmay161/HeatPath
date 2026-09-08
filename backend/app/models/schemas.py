@@ -2,7 +2,7 @@
 Pydantic schemas for request and response validation.
 """
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 
 
 class Location(BaseModel):
@@ -12,10 +12,23 @@ class Location(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ConfidenceReport(BaseModel):
+    """Detailed confidence breakdown for route scoring."""
+    value: float = Field(..., description="Confidence score 0.0 to 1.0")
+    missing_inputs: List[str] = Field(default_factory=list, description="List of completely unavailable inputs")
+    degraded_inputs: List[str] = Field(default_factory=list, description="List of fallback/low-fidelity inputs")
+    computed_from: List[str] = Field(default_factory=list, description="List of verified inputs successfully used in calculation")
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ConditionsResponse(BaseModel):
     """Response schema for environmental conditions."""
     status: str = "available"  # "available" | "unavailable"
     provider: Optional[str] = "open-meteo"
+    provider_status: Optional[str] = Field(default="healthy", description="'healthy' | 'timeout' | 'rate_limited' | 'unreachable' | 'http_error'")
+    retry_after: Optional[int] = Field(default=None, description="Seconds to wait before retrying request")
+    observed_at: Optional[str] = Field(default=None, description="ISO timestamp of weather observation")
+    age_seconds: Optional[int] = Field(default=None, description="Age of data in seconds")
     heat_index: Optional[float] = None
     shade_index: Optional[float] = None
     aqi_index: Optional[float] = None
@@ -40,6 +53,8 @@ class RouteScoreResponse(BaseModel):
     shade_safety_score: float
     overall_score:      float
     shade_source:       str = "unknown"
+    score_version:      str = "v1.3"
+    confidence:         Optional[Union[ConfidenceReport, float]] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -68,8 +83,9 @@ class RouteRequest(BaseModel):
 class ScoredRoute(BaseModel):
     """Schema for a scored route with details."""
     rank:                int                    = Field(..., description="Score rank (1 = best)")
-    overall_score:       float                  = Field(..., description="Overall comfort score 0–1")
-    confidence:          float                  = Field(default=1.0, description="Confidence score 0.0–1.0 based on data completeness")
+    score_version:       str                    = Field(default="v1.3", description="Algorithm version used for comfort scoring")
+    overall_score:       Optional[float]        = Field(default=None, description="Overall comfort score 0–1 (None if confidence is below threshold)")
+    confidence:          Union[ConfidenceReport, float] = Field(default=1.0, description="Confidence report or score 0.0–1.0 based on data completeness")
     missing_inputs:      List[str]              = Field(default_factory=list, description="List of unavailable environmental inputs")
     shade_safety_score:  float                  = Field(..., description="Shade safety score 0–1")
     heat_safety_score:   float                  = Field(..., description="Heat safety score 0–1")
@@ -95,8 +111,9 @@ class ConditionsSummary(BaseModel):
 
 class ScoredRoutesResponse(BaseModel):
     """Response for route search and scoring."""
-    routes:     List[ScoredRoute]  = Field(..., description="Ranked scored routes")
-    conditions: ConditionsSummary  = Field(..., description="Environmental conditions summary")
+    score_version: str                = Field(default="v1.3", description="Algorithm version used for comfort scoring")
+    routes:        List[ScoredRoute]  = Field(..., description="Ranked scored routes")
+    conditions:    ConditionsSummary  = Field(..., description="Environmental conditions summary")
     model_config = ConfigDict(from_attributes=True)
 
 

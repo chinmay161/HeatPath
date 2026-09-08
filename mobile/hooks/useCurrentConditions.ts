@@ -6,6 +6,10 @@ export type Severity = 'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME';
 export type Conditions = {
   status?: string;
   provider?: string;
+  provider_status?: string;
+  retry_after?: number;
+  observed_at?: string;
+  age_seconds?: number;
   heat_index: number | null;
   shade_index: number | null;
   aqi_index: number | null;

@@ -14,6 +14,7 @@ from app.services.weather import get_weather, get_aqi, compute_heat_index
 from app.services.osm_shade import shade_for_path
 from app.services.comfort_scorer import score_route as calculate_route_scores, estimate_feels_like
 from app.routers.preferences import _user_preferences
+from app.config import config
 
 router = APIRouter(prefix="/find-routes", tags=["Routes"])
 
@@ -77,6 +78,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         segments = [
             {
                 "shade_pct":        shade_pcts[i],
+                "shade_source":     shade_sources[i] if i < len(shade_sources) else "unknown",
                 "heat_index":       heat_index,
                 "aqi":              aqi_val,
                 "crowd_pct":        None,
@@ -93,8 +95,9 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         feels_like_c  = estimate_feels_like(heat_index, avg_shade_pct)
 
         return {
+            "score_version":       scores.get("score_version", config.SCORE_VERSION),
             "overall_score":       scores["overall_score"],
-            "confidence":          scores.get("confidence", 1.0),
+            "confidence":          scores.get("confidence", {"value": 1.0, "missing_inputs": [], "degraded_inputs": [], "computed_from": []}),
             "missing_inputs":      scores.get("missing_inputs", []),
             "shade_safety_score":  scores["shade_safety_score"],
             "heat_safety_score":   scores["heat_safety_score"],
@@ -109,11 +112,16 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
         }
 
     scored_list = await asyncio.gather(*[score_one(p) for p in candidate_paths])
-    scored_list = sorted(scored_list, key=lambda x: x["overall_score"], reverse=True)
+    scored_list = sorted(
+        scored_list,
+        key=lambda x: (x["overall_score"] is not None, x["overall_score"] if x["overall_score"] is not None else -1.0),
+        reverse=True
+    )
 
     routes_response = [
         ScoredRoute(
             rank=rank + 1,
+            score_version=r["score_version"],
             overall_score=r["overall_score"],
             confidence=r["confidence"],
             missing_inputs=r["missing_inputs"],
@@ -132,6 +140,7 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
     ]
 
     return ScoredRoutesResponse(
+        score_version=config.SCORE_VERSION,
         routes=routes_response,
         conditions=ConditionsSummary(
             heat_index=heat_index,
@@ -139,4 +148,4 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
             fetched_at_lat=request.start.lat,
             fetched_at_lon=request.start.lon,
         ),
-    )
+    )

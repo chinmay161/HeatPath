@@ -110,7 +110,7 @@ export default function RoutesScreen() {
         distanceM: String(distanceM),
         feelLikeC: String(parseFloat(sel.feels_like_c.toFixed(1))),
         shadePct: String(Math.round(sel.avg_shade_pct)),
-        overallScore: String(parseFloat(sel.overall_score.toFixed(2))),
+        overallScore: sel.overall_score != null ? String(parseFloat(sel.overall_score.toFixed(2))) : '—',
         heatHoursAvoided: String(heatHoursAvoided),
       },
     });

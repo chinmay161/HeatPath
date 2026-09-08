@@ -37,5 +37,8 @@ class Config:
     # Standard urban architecture floor-to-floor and building defaults (OSM urban modeling standard)
     DEFAULT_BUILDING_HEIGHT_M = float(os.getenv("DEFAULT_BUILDING_HEIGHT_M", "12.0"))
     LEVEL_HEIGHT_M = float(os.getenv("LEVEL_HEIGHT_M", "3.5"))
+    # Algorithm Versioning & Integrity Gates
+    SCORE_VERSION = os.getenv("SCORE_VERSION", "v1.3")
+    SCORING_MIN_CONFIDENCE_THRESHOLD = float(os.getenv("SCORING_MIN_CONFIDENCE_THRESHOLD", "0.40"))
 
 config = Config()

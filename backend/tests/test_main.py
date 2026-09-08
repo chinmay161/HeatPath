@@ -119,6 +119,10 @@ def test_conditions_weather_unavailable_returns_200_structured(monkeypatch):
         return {
             "status": "unavailable",
             "provider": "open-meteo",
+            "provider_status": "timeout",
+            "retry_after": 60,
+            "observed_at": None,
+            "age_seconds": None,
             "temperature_c": None,
             "humidity_pct": None,
             "feels_like_c": None,
@@ -129,6 +133,8 @@ def test_conditions_weather_unavailable_returns_200_structured(monkeypatch):
             "value": None,
             "status": "unavailable",
             "provider": "open-meteo",
+            "provider_status": "timeout",
+            "retry_after": 60,
         }
 
     monkeypatch.setattr(conditions_module, "get_weather", mock_unavailable_weather)
@@ -138,8 +144,52 @@ def test_conditions_weather_unavailable_returns_200_structured(monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "unavailable"
+    assert data["provider"] == "open-meteo"
+    assert data["provider_status"] == "timeout"
+    assert data["retry_after"] == 60
     assert data["weather"] is None
     assert data["heat_index"] is None
     assert data["temperature_c"] is None
     assert data["aqi"]["status"] == "unavailable"
-    assert data["aqi"]["value"] is None
+    assert data["aqi"]["value"] is None
+
+
+def test_conditions_available_includes_freshness_metadata(monkeypatch):
+    """Verify that available conditions response contains observed_at and age_seconds freshness."""
+    import app.routers.conditions as conditions_module
+
+    async def mock_available_weather(lat, lon):
+        return {
+            "status": "available",
+            "provider": "open-meteo",
+            "provider_status": "healthy",
+            "observed_at": "2026-09-08T16:00:00Z",
+            "age_seconds": 45,
+            "retry_after": None,
+            "temperature_c": 31.5,
+            "humidity_pct": 60.0,
+            "feels_like_c": 36.0,
+        }
+
+    async def mock_available_aqi(lat, lon):
+        return {
+            "value": 45,
+            "status": "available",
+            "provider": "open-meteo",
+            "provider_status": "healthy",
+            "observed_at": "2026-09-08T16:00:00Z",
+            "age_seconds": 45,
+        }
+
+    monkeypatch.setattr(conditions_module, "get_weather", mock_available_weather)
+    monkeypatch.setattr(conditions_module, "get_aqi", mock_available_aqi)
+
+    response = client.get("/conditions/?lat=18.9220&lon=72.8347")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "available"
+    assert data["provider_status"] == "healthy"
+    assert data["observed_at"] == "2026-09-08T16:00:00Z"
+    assert data["age_seconds"] == 45
+    assert data["temperature_c"] == 31.5
+
