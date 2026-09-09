@@ -80,11 +80,7 @@ export function usePreferences() {
     setError(null);
     try {
       const merged = { ...preferences, ...updates };
-      // Optimistic update
-      setPreferences(merged);
-      broadcast(merged);
-      await AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(merged));
-
+      // Send to backend first (Backend is Single Source of Truth)
       const updated = await apiUpdatePreferences(merged);
       setPreferences(updated);
       broadcast(updated);

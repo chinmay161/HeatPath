@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, List
 import asyncpg
 
 from app.config import config
+from app.services.cache import get_cache
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,39 @@ DEFAULT_PREFERENCES = {
     "theme": "system",
     "favorite_routes": [],
 }
+
+USER_CACHE_TTL = 300  # 300 seconds TTL for Redis cache
+
+
+async def _cache_get(key: str) -> Optional[Any]:
+    """Retrieve item from Redis cache; falls back safely to None on failure."""
+    try:
+        cache = await get_cache()
+        return await cache.get(key)
+    except Exception as e:
+        logger.warning(f"[user_store] Cache get failed for '{key}': {e}")
+        return None
+
+
+async def _cache_set(key: str, value: Any, ttl: int = USER_CACHE_TTL) -> bool:
+    """Store item in Redis cache; fails silently if Redis is unreachable."""
+    try:
+        cache = await get_cache()
+        return await cache.set(key, value, ttl=ttl)
+    except Exception as e:
+        logger.warning(f"[user_store] Cache set failed for '{key}': {e}")
+        return False
+
+
+async def _cache_delete(key: str) -> bool:
+    """Evict item from Redis cache; fails silently if Redis is unreachable."""
+    try:
+        cache = await get_cache()
+        return await cache.delete(key)
+    except Exception as e:
+        logger.warning(f"[user_store] Cache delete failed for '{key}': {e}")
+        return False
+
 
 _db_pool: Optional[asyncpg.Pool] = None
 _db_initialized: bool = False
@@ -150,7 +184,7 @@ async def init_db() -> None:
 
 
 async def reset_db() -> None:
-    """Reset database tables to default state for test isolation."""
+    """Reset database tables to default state for test isolation and purge user cache."""
     await init_db()
     pool = await get_db_pool()
     async with pool.acquire() as conn:
@@ -172,6 +206,10 @@ async def reset_db() -> None:
 
     global _cached_preferences
     _cached_preferences = DEFAULT_PREFERENCES.copy()
+
+    # Invalidate Redis cache
+    await _cache_delete("user:1:profile")
+    await _cache_delete("user:1:preferences")
 
 
 def reset_db_sync() -> None:
@@ -200,7 +238,12 @@ def _format_timestamp(dt: Any) -> Optional[str]:
 
 
 async def get_profile(user_id: int = 1) -> Dict[str, Any]:
-    """Retrieve user profile from PostgreSQL."""
+    """Retrieve user profile from PostgreSQL, with Redis cache read-through."""
+    cache_key = f"user:{user_id}:profile"
+    cached = await _cache_get(cache_key)
+    if isinstance(cached, dict) and "name" in cached:
+        return cached
+
     await init_db()
     pool = await get_db_pool()
     async with pool.acquire() as conn:
@@ -208,39 +251,33 @@ async def get_profile(user_id: int = 1) -> Dict[str, Any]:
             "SELECT id, name, email, bio, avatar_id, created_at, updated_at FROM users WHERE id = $1",
             user_id,
         )
-        if row:
-            return {
-                "name": row["name"],
-                "email": row["email"],
-                "bio": row["bio"],
-                "avatar_id": row["avatar_id"],
-                "created_at": _format_timestamp(row["created_at"]),
-                "updated_at": _format_timestamp(row["updated_at"]),
-            }
+        if not row:
+            # User row missing, insert default
+            await conn.execute("""
+                INSERT INTO users (id, name, email, bio, avatar_id)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (id) DO NOTHING;
+            """, user_id, DEFAULT_PROFILE["name"], DEFAULT_PROFILE["email"], DEFAULT_PROFILE["bio"], DEFAULT_PROFILE["avatar_id"])
 
-        # User row missing, insert default
-        await conn.execute("""
-            INSERT INTO users (id, name, email, bio, avatar_id)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (id) DO NOTHING;
-        """, user_id, DEFAULT_PROFILE["name"], DEFAULT_PROFILE["email"], DEFAULT_PROFILE["bio"], DEFAULT_PROFILE["avatar_id"])
+            row = await conn.fetchrow(
+                "SELECT id, name, email, bio, avatar_id, created_at, updated_at FROM users WHERE id = $1",
+                user_id,
+            )
 
-        row = await conn.fetchrow(
-            "SELECT id, name, email, bio, avatar_id, created_at, updated_at FROM users WHERE id = $1",
-            user_id,
-        )
-        return {
-            "name": row["name"],
-            "email": row["email"],
-            "bio": row["bio"],
-            "avatar_id": row["avatar_id"],
-            "created_at": _format_timestamp(row["created_at"]),
-            "updated_at": _format_timestamp(row["updated_at"]),
-        }
+    result = {
+        "name": row["name"],
+        "email": row["email"],
+        "bio": row["bio"],
+        "avatar_id": row["avatar_id"],
+        "created_at": _format_timestamp(row["created_at"]),
+        "updated_at": _format_timestamp(row["updated_at"]),
+    }
+    await _cache_set(cache_key, result)
+    return result
 
 
 async def update_profile(data: Dict[str, Any], user_id: int = 1) -> Dict[str, Any]:
-    """Update user profile in PostgreSQL within an atomic transaction."""
+    """Update user profile in PostgreSQL within an atomic transaction, invalidating Redis cache."""
     await init_db()
     current = await get_profile(user_id)
     name = data.get("name", current["name"]).strip()
@@ -262,7 +299,7 @@ async def update_profile(data: Dict[str, Any], user_id: int = 1) -> Dict[str, An
                 RETURNING id, name, email, bio, avatar_id, created_at, updated_at;
             """, name, email, bio, avatar_id, user_id)
 
-    return {
+    result = {
         "name": row["name"],
         "email": row["email"],
         "bio": row["bio"],
@@ -270,10 +307,19 @@ async def update_profile(data: Dict[str, Any], user_id: int = 1) -> Dict[str, An
         "created_at": _format_timestamp(row["created_at"]),
         "updated_at": _format_timestamp(row["updated_at"]),
     }
+    await _cache_delete(f"user:{user_id}:profile")
+    return result
 
 
 async def get_preferences(user_id: int = 1) -> Dict[str, Any]:
-    """Retrieve user preferences and normalized favorite routes from PostgreSQL."""
+    """Retrieve user preferences and normalized favorite routes from PostgreSQL, with Redis cache read-through."""
+    cache_key = f"user:{user_id}:preferences"
+    cached = await _cache_get(cache_key)
+    if isinstance(cached, dict) and "heat_sensitivity" in cached:
+        global _cached_preferences
+        _cached_preferences = cached.copy()
+        return cached
+
     await init_db()
     pool = await get_db_pool()
     async with pool.acquire() as conn:
@@ -328,14 +374,14 @@ async def get_preferences(user_id: int = 1) -> Dict[str, Any]:
         "updated_at": _format_timestamp(row["updated_at"]),
     }
 
-    global _cached_preferences
     _cached_preferences = result.copy()
+    await _cache_set(cache_key, result)
 
     return result
 
 
 async def update_preferences(data: Dict[str, Any], user_id: int = 1) -> Dict[str, Any]:
-    """Update user preferences and normalized favorite routes in PostgreSQL within an atomic transaction."""
+    """Update user preferences and normalized favorite routes in PostgreSQL within an atomic transaction, invalidating Redis cache."""
     await init_db()
     current = await get_preferences(user_id)
 
@@ -389,5 +435,8 @@ async def update_preferences(data: Dict[str, Any], user_id: int = 1) -> Dict[str
                         end_lat = EXCLUDED.end_lat,
                         end_lon = EXCLUDED.end_lon;
                 """, route_id, user_id, name, start_lat, start_lon, end_lat, end_lon)
+
+    # Invalidate Redis cache immediately
+    await _cache_delete(f"user:{user_id}:preferences")
 
     return await get_preferences(user_id)
