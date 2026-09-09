@@ -13,7 +13,7 @@ from app.services.ors_client import fetch_candidate_routes, simplify_path, haver
 from app.services.weather import get_weather, get_aqi, compute_heat_index
 from app.services.osm_shade import shade_for_path
 from app.services.comfort_scorer import score_route as calculate_route_scores, estimate_feels_like
-from app.routers.preferences import _user_preferences
+from app.services.user_store import get_preferences as store_get_preferences
 from app.config import config
 
 router = APIRouter(prefix="/find-routes", tags=["Routes"])
@@ -56,9 +56,10 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
     heat_index     = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
     aqi_val        = raw_aqi.get("value") if isinstance(raw_aqi, dict) else raw_aqi
     aqi_normalised = min(float(aqi_val) / 300.0, 1.0) if aqi_val is not None else 0.0
-    avoid_crowds   = _user_preferences.get("avoid_crowds", False)
+    user_prefs     = await store_get_preferences()
+    avoid_crowds   = user_prefs.get("avoid_crowds", False)
 
-    walking_speed_pref = _user_preferences.get("walking_speed", "normal")
+    walking_speed_pref = user_prefs.get("walking_speed", "normal")
     speed_m_per_min = 60.0 if walking_speed_pref == "slow" else (96.6 if walking_speed_pref == "brisk" else 80.0)
 
     def get_aqi_category(val) -> str:
@@ -120,8 +121,8 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
                 "heat_index":       heat_index,
                 "aqi":              aqi_val,
                 "crowd_pct":        None,
-                "heat_sensitivity": _user_preferences["heat_sensitivity"],
-                "aqi_sensitivity":  _user_preferences["aqi_sensitivity"],
+                "heat_sensitivity": user_prefs["heat_sensitivity"],
+                "aqi_sensitivity":  user_prefs["aqi_sensitivity"],
                 "avoid_crowds":     avoid_crowds,
             }
             for i in range(len(shade_pcts))

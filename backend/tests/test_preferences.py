@@ -8,10 +8,10 @@ from app.services.user_store import reset_db, DEFAULT_PREFERENCES
 
 
 @pytest.fixture(autouse=True)
-def clean_user_db():
-    reset_db()
+async def clean_user_db():
+    await reset_db()
     yield
-    reset_db()
+    await reset_db()
 
 
 @pytest.mark.anyio

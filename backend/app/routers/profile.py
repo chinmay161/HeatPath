@@ -17,7 +17,7 @@ EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
 @router.get("", response_model=UserProfile, include_in_schema=False)
 async def fetch_profile():
     """Retrieve the current user profile from persistent storage."""
-    data = get_profile()
+    data = await get_profile()
     return UserProfile(**data)
 
 
@@ -51,7 +51,7 @@ async def save_profile(req: ProfileUpdateRequest):
             detail="Bio cannot exceed 200 characters",
         )
 
-    data = update_profile({
+    data = await update_profile({
         "name": name,
         "email": email,
         "bio": req.bio.strip() if req.bio else None,

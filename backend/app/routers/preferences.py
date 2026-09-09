@@ -1,20 +1,24 @@
 """
 Router for user routing and app preferences.
-Persisted in SQLite via user_store service.
+Persisted in PostgreSQL via user_store service.
 """
 from fastapi import APIRouter, HTTPException, status
 from app.models.schemas import PreferencesRequest, PreferencesResponse
-from app.services.user_store import get_preferences as store_get_preferences, update_preferences as store_update_preferences
+from app.services.user_store import (
+    get_preferences as store_get_preferences,
+    update_preferences as store_update_preferences,
+    get_preferences_cached,
+)
 
 router = APIRouter(prefix="/preferences", tags=["Preferences"])
 
-# Synchronized session cache for backwards compatibility with existing imports
-_user_preferences: dict = store_get_preferences()
+# Synchronized session cache for backwards compatibility with existing synchronous imports
+_user_preferences: dict = get_preferences_cached()
 
 
-def _refresh_cache():
+async def _refresh_cache() -> dict:
     global _user_preferences
-    _user_preferences = store_get_preferences()
+    _user_preferences = await store_get_preferences()
     return _user_preferences
 
 
@@ -23,7 +27,7 @@ def _refresh_cache():
 async def update_user_preferences(request: PreferencesRequest):
     """
     Update user routing and application preferences.
-    Persists to SQLite database and synchronizes session cache.
+    Persists to PostgreSQL database and synchronizes session cache.
     """
     # Validation
     if request.heat_sensitivity < 1 or request.heat_sensitivity > 10:
@@ -58,7 +62,7 @@ async def update_user_preferences(request: PreferencesRequest):
         )
 
     fav_routes = [r.model_dump() for r in request.favorite_routes]
-    updated = store_update_preferences({
+    updated = await store_update_preferences({
         "heat_sensitivity": request.heat_sensitivity,
         "aqi_sensitivity": request.aqi_sensitivity,
         "avoid_crowds": request.avoid_crowds,
@@ -68,7 +72,7 @@ async def update_user_preferences(request: PreferencesRequest):
         "theme": request.theme,
         "favorite_routes": fav_routes,
     })
-    _refresh_cache()
+    await _refresh_cache()
 
     return PreferencesResponse(
         status="success",
@@ -82,5 +86,5 @@ async def get_user_preferences():
     """
     Return current user preferences from persistent store.
     """
-    data = _refresh_cache()
+    data = await _refresh_cache()
     return PreferencesRequest(**data)
