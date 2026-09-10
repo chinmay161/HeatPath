@@ -10,6 +10,13 @@ import type { ScoredRoute } from '../../hooks/useFindRoutes';
 import { NavigationContext, type NavigationContextValue } from '../context';
 import { NavigationEventEmitter } from '../events';
 import {
+  locationService,
+  type GPSHealth,
+  type Heading,
+  type LocationSample,
+  type SpeedEstimate,
+} from '../location';
+import {
   NavigationEvents,
   type NavigationProgress,
   type NavigationRoute,
@@ -31,6 +38,21 @@ export interface NavigationProviderProps {
 export function NavigationProvider({ children }: NavigationProviderProps) {
   const [session, setSession] = useState<NavigationSession | null>(null);
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
+
+  // Live GPS tracking state (Phase 5.2)
+  const [location, setLocation] = useState<LocationSample | null>(null);
+  const [heading, setHeading] = useState<Heading>({ degrees: null, source: 'unknown' });
+  const [speed, setSpeed] = useState<SpeedEstimate>({
+    currentSpeedMps: null,
+    averageSpeedMps: null,
+    walkingSpeedKmph: null,
+    isEstimated: false,
+  });
+  const [gpsHealth, setGpsHealth] = useState<GPSHealth>('searching');
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [isGpsTracking, setIsGpsTracking] = useState<boolean>(false);
+
+  const gpsUnsubsRef = useRef<(() => void)[]>([]);
 
   // Persistent event emitter instance
   const eventEmitterRef = useRef<NavigationEventEmitter>(new NavigationEventEmitter());
@@ -68,7 +90,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
     };
   }, [events]);
 
-  // Synchronize state changes to persistence
+  // Synchronize state changes to persistence (transient GPS data is never saved)
   const syncPersistence = useCallback((updated: NavigationSession | null) => {
     if (!updated || updated.status === 'IDLE' || updated.status === 'COMPLETED') {
       clearNavigationSession();
@@ -76,6 +98,86 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       saveNavigationSession(updated);
     }
   }, []);
+
+  // GPS Control Functions
+  const stopGps = useCallback(async () => {
+    for (const unsub of gpsUnsubsRef.current) {
+      try {
+        unsub();
+      } catch {
+        // Safe disposal
+      }
+    }
+    gpsUnsubsRef.current = [];
+
+    try {
+      await locationService.stopTracking();
+    } catch {
+      // Safe disposal
+    }
+
+    setIsGpsTracking(false);
+    setGpsHealth('searching');
+  }, []);
+
+  const startGps = useCallback(async () => {
+    // Prevent duplicate watchers
+    for (const unsub of gpsUnsubsRef.current) {
+      try {
+        unsub();
+      } catch {
+        // Safe disposal
+      }
+    }
+    gpsUnsubsRef.current = [];
+
+    setGpsError(null);
+    setIsGpsTracking(true);
+
+    const unsubLoc = locationService.subscribeLocation((loc) => {
+      setLocation(loc);
+      const currentSpeed = locationService.getLatestSpeed();
+      setSpeed(currentSpeed);
+      setSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              current_location: loc,
+              current_speed: currentSpeed,
+            }
+          : null
+      );
+    });
+
+    const unsubHeading = locationService.subscribeHeading((h) => {
+      setHeading(h);
+      setSession((prev) => (prev ? { ...prev, current_heading: h } : null));
+    });
+
+    const unsubHealth = locationService.subscribeHealth((health) => {
+      setGpsHealth(health);
+      setSession((prev) => (prev ? { ...prev, gps_health: health } : null));
+    });
+
+    const unsubError = locationService.subscribeError((err) => {
+      setGpsError(err.message);
+    });
+
+    gpsUnsubsRef.current = [unsubLoc, unsubHeading, unsubHealth, unsubError];
+
+    try {
+      await locationService.startTracking();
+    } catch (err) {
+      setGpsError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  // Teardown GPS on unmount to prevent leaks
+  useEffect(() => {
+    return () => {
+      stopGps();
+    };
+  }, [stopGps]);
 
   const initSession = useCallback(
     (route: ScoredRoute, destinationName: string, title?: string): NavigationSession => {
@@ -109,7 +211,10 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       });
       return updated;
     });
-  }, [events, syncPersistence]);
+
+    // Start live GPS tracking when entering NAVIGATING
+    startGps();
+  }, [events, syncPersistence, startGps]);
 
   const pauseNavigation = useCallback(() => {
     setSession((prev) => {
@@ -153,9 +258,14 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       });
       return updated;
     });
-  }, [events, syncPersistence]);
+
+    // Ensure GPS tracking is active on resume
+    startGps();
+  }, [events, syncPersistence, startGps]);
 
   const stopNavigation = useCallback(() => {
+    stopGps();
+
     setSession((prev) => {
       if (!prev) {
         return null;
@@ -175,9 +285,11 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       });
       return null;
     });
-  }, [events, syncPersistence]);
+  }, [events, syncPersistence, stopGps]);
 
   const completeNavigation = useCallback(() => {
+    stopGps();
+
     setSession((prev) => {
       if (!prev) {
         throw new Error('Cannot complete navigation: no active session.');
@@ -198,12 +310,13 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       });
       return updated;
     });
-  }, [events, syncPersistence]);
+  }, [events, syncPersistence, stopGps]);
 
   const resetNavigation = useCallback(() => {
+    stopGps();
     syncPersistence(null);
     setSession(null);
-  }, [syncPersistence]);
+  }, [syncPersistence, stopGps]);
 
   const currentState: NavigationState = session ? session.status : 'IDLE';
   const currentRoute: NavigationRoute | null = session ? session.route : null;
@@ -217,6 +330,12 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       progress: currentProgress,
       events,
       isRestoring,
+      location,
+      heading,
+      speed,
+      gpsHealth,
+      gpsError,
+      isGpsTracking,
       initSession,
       startNavigation,
       pauseNavigation,
@@ -232,6 +351,12 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       currentProgress,
       events,
       isRestoring,
+      location,
+      heading,
+      speed,
+      gpsHealth,
+      gpsError,
+      isGpsTracking,
       initSession,
       startNavigation,
       pauseNavigation,

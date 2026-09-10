@@ -1,4 +1,10 @@
 import type { ScoredRoute } from '../../hooks/useFindRoutes';
+import type {
+  LocationSample,
+  Heading,
+  SpeedEstimate,
+  GPSHealth,
+} from '../location/types';
 
 /**
  * Valid states in the finite state machine.
@@ -82,6 +88,11 @@ export interface NavigationSession {
   readonly remaining_distance_m: number;
   readonly estimated_duration_s: number;
   readonly remaining_duration_s: number;
+  // Live GPS tracking fields (Phase 5.2)
+  readonly current_location?: LocationSample | null;
+  readonly current_heading?: Heading | null;
+  readonly current_speed?: SpeedEstimate | null;
+  readonly gps_health?: GPSHealth;
 }
 
 /**

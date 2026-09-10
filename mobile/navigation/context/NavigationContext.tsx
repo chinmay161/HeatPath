@@ -2,6 +2,12 @@ import { createContext } from 'react';
 import type { ScoredRoute } from '../../hooks/useFindRoutes';
 import type { NavigationEventEmitter } from '../events';
 import type {
+  GPSHealth,
+  Heading,
+  LocationSample,
+  SpeedEstimate,
+} from '../location/types';
+import type {
   NavigationProgress,
   NavigationRoute,
   NavigationSession,
@@ -15,6 +21,14 @@ export interface NavigationContextValue {
   readonly progress: NavigationProgress | null;
   readonly events: NavigationEventEmitter;
   readonly isRestoring: boolean;
+  // Live GPS tracking fields (Phase 5.2)
+  readonly location: LocationSample | null;
+  readonly heading: Heading;
+  readonly speed: SpeedEstimate;
+  readonly gpsHealth: GPSHealth;
+  readonly gpsError: string | null;
+  readonly isGpsTracking: boolean;
+  // Methods
   readonly initSession: (
     route: ScoredRoute,
     destinationName: string,
