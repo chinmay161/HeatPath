@@ -9,7 +9,8 @@
     "web": "expo start --web",
     "build": "expo export -p web",
     "build:web": "expo export -p web",
-    "build:all": "expo export"
+    "build:all": "expo export",
+    "test": "tsx --test navigation/__tests__/navigation.test.ts"
   },
   "dependencies": {
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
@@ -40,9 +41,11 @@
     "react-native-worklets": "0.8.3"
   },
   "devDependencies": {
+    "@types/node": "^22.20.2",
     "@types/react": "~19.2.14",
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.3"
   }
 }
