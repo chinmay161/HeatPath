@@ -17,6 +17,7 @@ import { Button } from '../components/ui';
 import Icon from '../components/Icon';
 import { colors, fonts } from '../theme/colors';
 import { scoreToColor, scoreToLabel } from '../utils/scoreToColor';
+import { degreesToCardinal, getAccuracyCategory } from '../navigation/location';
 
 export function NavigationScreen() {
   const router = useRouter();
@@ -27,6 +28,12 @@ export function NavigationScreen() {
     session,
     state,
     route,
+    location,
+    heading,
+    speed,
+    gpsHealth,
+    gpsError,
+    isGpsTracking,
     startNavigation,
     pauseNavigation,
     resumeNavigation,
@@ -206,6 +213,127 @@ export function NavigationScreen() {
     </View>
   );
 
+  // Live GPS Diagnostics Card (Phase 5.2)
+  const GpsDiagnosticsCard = (
+    <View style={styles.card}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View
+            style={[
+              styles.gpsPulseDot,
+              {
+                backgroundColor:
+                  gpsHealth === 'healthy'
+                    ? '#16A34A'
+                    : gpsHealth === 'weak'
+                    ? '#CA8A04'
+                    : gpsHealth === 'searching'
+                    ? '#2563EB'
+                    : '#DC2626',
+              },
+            ]}
+          />
+          <Text style={styles.cardTitle}>Live GPS Diagnostics</Text>
+        </View>
+        <View
+          style={[
+            styles.healthPill,
+            {
+              backgroundColor:
+                gpsHealth === 'healthy'
+                  ? '#DCFCE7'
+                  : gpsHealth === 'weak'
+                  ? '#FEF9C3'
+                  : gpsHealth === 'searching'
+                  ? '#DBEAFE'
+                  : '#FEE2E2',
+              borderColor:
+                gpsHealth === 'healthy'
+                  ? '#86EFAC'
+                  : gpsHealth === 'weak'
+                  ? '#FDE047'
+                  : gpsHealth === 'searching'
+                  ? '#93C5FD'
+                  : '#FCA5A5',
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.healthPillText,
+              {
+                color:
+                  gpsHealth === 'healthy'
+                    ? '#15803D'
+                    : gpsHealth === 'weak'
+                    ? '#854D0E'
+                    : gpsHealth === 'searching'
+                    ? '#1D4ED8'
+                    : '#B91C1C',
+              },
+            ]}
+          >
+            {gpsHealth.toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      {gpsError && (
+        <View style={styles.gpsErrorBanner}>
+          <Text style={styles.gpsErrorText}>⚠️ {gpsError}</Text>
+        </View>
+      )}
+
+      <View style={styles.metricsGrid}>
+        <View style={styles.metricItem}>
+          <Text style={styles.metricLabel}>Coordinates</Text>
+          <Text style={[styles.metricValue, { fontSize: 13 }]} numberOfLines={1}>
+            {location ? `${location.latitude.toFixed(5)}°, ${location.longitude.toFixed(5)}°` : 'Acquiring lock...'}
+          </Text>
+          <Text style={styles.metricSub}>{location ? 'WGS84 fix' : 'Searching satellites'}</Text>
+        </View>
+
+        <View style={styles.metricItem}>
+          <Text style={styles.metricLabel}>Accuracy</Text>
+          <Text style={styles.metricValue}>
+            {location ? `±${location.accuracy.toFixed(1)} m` : '—'}
+          </Text>
+          <Text style={styles.metricSub}>
+            {location ? `${getAccuracyCategory(location.accuracy).toUpperCase()} precision` : 'Measuring error'}
+          </Text>
+        </View>
+
+        <View style={styles.metricItem}>
+          <Text style={styles.metricLabel}>Current Speed</Text>
+          <Text style={styles.metricValue}>
+            {speed.walkingSpeedKmph !== null ? `${speed.walkingSpeedKmph} km/h` : '0.0 km/h'}
+          </Text>
+          <Text style={styles.metricSub}>
+            {speed.currentSpeedMps !== null && speed.currentSpeedMps > 0.2
+              ? `${speed.currentSpeedMps} m/s ${speed.isEstimated ? '(derived)' : '(sensor)'}`
+              : 'Stationary'}
+          </Text>
+        </View>
+
+        <View style={styles.metricItem}>
+          <Text style={styles.metricLabel}>Heading</Text>
+          <Text style={styles.metricValue}>
+            {heading.degrees !== null ? `${Math.round(heading.degrees)}° ${degreesToCardinal(heading.degrees)}` : '—'}
+          </Text>
+          <Text style={styles.metricSub}>
+            {heading.source === 'compass'
+              ? 'Device compass'
+              : heading.source === 'gps'
+              ? 'GPS track'
+              : heading.source === 'movement_vector'
+              ? 'Movement vector'
+              : 'Calibrating'}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
   // Steps Summary Card
   const StepsOverviewCard = (
     <View style={styles.card}>
@@ -334,6 +462,7 @@ export function NavigationScreen() {
           <View style={styles.desktopSideRail}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
               {RouteSummaryCard}
+              {GpsDiagnosticsCard}
               {StepsOverviewCard}
               {ActionControls}
             </ScrollView>
@@ -385,6 +514,7 @@ export function NavigationScreen() {
         contentContainerStyle={[styles.mobileScroll, { paddingBottom: insets.bottom + 90 }]}
       >
         {RouteSummaryCard}
+        {GpsDiagnosticsCard}
         {StepsOverviewCard}
       </ScrollView>
 
@@ -665,5 +795,34 @@ const styles = StyleSheet.create({
     borderTopColor: colors.line,
     paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  gpsPulseDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+  },
+  healthPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  healthPillText: {
+    fontFamily: fonts.dataBold,
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  gpsErrorBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  gpsErrorText: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: '#991B1B',
   },
 });
