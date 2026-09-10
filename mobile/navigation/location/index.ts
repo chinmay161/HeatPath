@@ -5,3 +5,6 @@ export * from './permissions';
 export * from './filters';
 export * from './speed';
 export * from './heading';
+export * from './health';
+export * from './logger';
+export * from './LocationService';
