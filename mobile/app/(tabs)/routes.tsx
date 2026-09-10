@@ -19,6 +19,7 @@ import { RouteCard, Button, type Route } from '../../components/ui';
 import Icon from '../../components/Icon';
 import { colors, fonts } from '../../theme/colors';
 import { scoreToColor, scoreToLabel } from '../../utils/scoreToColor';
+import { useNavigation } from '../../navigation';
 
 // ─── API → display mapping ────────────────────────────────────────────────────
 
@@ -92,28 +93,13 @@ export default function RoutesScreen() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const cur = displayRoutes[selectedIdx] ?? displayRoutes[0];
 
+  const { initSession } = useNavigation();
+
   const onBack = () => router.back();
   const onStart = () => {
     const sel = data!.routes[selectedIdx];
-    const distanceM = Math.round(sel.distance_m ?? sel.segment_distances_m.reduce((a, b) => a + b, 0));
-    const walkMin = sel.duration_min ?? Math.max(1, Math.round(distanceM / 100));
-    const maxFeelsLike = Math.max(...data!.routes.map(r => r.feels_like_c));
-    const heatHoursAvoided = sel.heat_hours_avoided ?? parseFloat(
-      Math.max(0, (maxFeelsLike - sel.feels_like_c) * walkMin / 60).toFixed(2),
-    );
-    router.navigate({
-      pathname: '/(tabs)/impact' as any,
-      params: {
-        walkToken: String(Date.now()),
-        routeTitle: cur.title,
-        destName,
-        distanceM: String(distanceM),
-        feelLikeC: String(parseFloat(sel.feels_like_c.toFixed(1))),
-        shadePct: String(Math.round(sel.avg_shade_pct)),
-        overallScore: sel.overall_score != null ? String(parseFloat(sel.overall_score.toFixed(2))) : '—',
-        heatHoursAvoided: String(heatHoursAvoided),
-      },
-    });
+    initSession(sel, destName, cur.title);
+    router.push('/(tabs)/navigation' as any);
   };
 
   // ─── Coach banner ─────────────────────────────────────────────────────────────

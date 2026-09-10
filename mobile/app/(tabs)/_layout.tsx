@@ -20,6 +20,7 @@ function pathnameToTab(pathname: string): string {
   if (pathname.includes('/profile')) return 'profile';
   // Searching, destination, and coolspots are sub-flows of home
   if (pathname.includes('/searching') || pathname.includes('/coolspots') || pathname.includes('/destination')) return 'home';
+  if (pathname.includes('/navigation')) return 'routes';
   return 'home';
 }
 
@@ -50,6 +51,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="searching"   options={{ title: 'Searching',   href: null } as any} />
       <Tabs.Screen name="coolspots"   options={{ title: 'Cool Spots',  href: null } as any} />
       <Tabs.Screen name="destination" options={{ title: 'Destination', href: null } as any} />
+      <Tabs.Screen name="navigation"  options={{ title: 'Navigation',  href: null } as any} />
     </Tabs>
   );
 
