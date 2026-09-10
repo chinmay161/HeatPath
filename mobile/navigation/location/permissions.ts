@@ -1,13 +1,27 @@
-import { Platform } from 'react-native';
-import * as Location from 'expo-location';
 import type { LocationPermission } from './types';
+
+function getPlatformOS(): string {
+  try {
+    return require('react-native').Platform?.OS ?? 'web';
+  } catch {
+    return typeof navigator !== 'undefined' ? 'web' : 'node';
+  }
+}
+
+function getExpoLocation() {
+  try {
+    return require('expo-location');
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Checks current location permission without prompting the user.
  */
 export async function checkLocationPermissions(): Promise<LocationPermission> {
   try {
-    if (Platform.OS === 'web') {
+    if (getPlatformOS() === 'web') {
       if (typeof navigator === 'undefined' || !navigator.permissions) {
         return 'unknown';
       }
@@ -21,19 +35,27 @@ export async function checkLocationPermissions(): Promise<LocationPermission> {
       }
     }
 
+    const Location = getExpoLocation();
+    if (!Location) {
+      return 'unknown';
+    }
+
     const { status } = await Location.getForegroundPermissionsAsync();
     switch (status) {
-      case Location.PermissionStatus.GRANTED:
+      case 'granted':
+      case Location.PermissionStatus?.GRANTED:
         return 'granted';
-      case Location.PermissionStatus.DENIED:
+      case 'denied':
+      case Location.PermissionStatus?.DENIED:
         return 'denied';
-      case Location.PermissionStatus.UNDETERMINED:
+      case 'undetermined':
+      case Location.PermissionStatus?.UNDETERMINED:
         return 'unknown';
       default:
         return 'denied';
     }
   } catch (error) {
-    if (__DEV__) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.warn('[checkLocationPermissions] Error checking permissions:', error);
     }
     return 'unknown';
@@ -45,7 +67,7 @@ export async function checkLocationPermissions(): Promise<LocationPermission> {
  */
 export async function requestLocationPermissions(): Promise<LocationPermission> {
   try {
-    if (Platform.OS === 'web') {
+    if (getPlatformOS() === 'web') {
       if (typeof navigator === 'undefined' || !navigator.geolocation) {
         return 'denied';
       }
@@ -65,8 +87,13 @@ export async function requestLocationPermissions(): Promise<LocationPermission> 
       });
     }
 
+    const Location = getExpoLocation();
+    if (!Location) {
+      return 'denied';
+    }
+
     const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
-    if (status === Location.PermissionStatus.GRANTED) {
+    if (status === 'granted' || status === Location.PermissionStatus?.GRANTED) {
       return 'granted';
     }
     if (!canAskAgain) {
@@ -74,7 +101,7 @@ export async function requestLocationPermissions(): Promise<LocationPermission> 
     }
     return 'denied';
   } catch (error) {
-    if (__DEV__) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.warn('[requestLocationPermissions] Error requesting permissions:', error);
     }
     return 'denied';
@@ -86,8 +113,12 @@ export async function requestLocationPermissions(): Promise<LocationPermission> 
  */
 export async function isLocationServicesEnabled(): Promise<boolean> {
   try {
-    if (Platform.OS === 'web') {
+    if (getPlatformOS() === 'web') {
       return typeof navigator !== 'undefined' && 'geolocation' in navigator;
+    }
+    const Location = getExpoLocation();
+    if (!Location) {
+      return true;
     }
     return await Location.hasServicesEnabledAsync();
   } catch {

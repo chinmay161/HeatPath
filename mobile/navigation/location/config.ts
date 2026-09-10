@@ -1,7 +1,14 @@
-import * as Location from 'expo-location';
+export enum LocationAccuracyMode {
+  Lowest = 1,
+  Low = 2,
+  Balanced = 3,
+  High = 4,
+  Highest = 5,
+  BestForNavigation = 6,
+}
 
 export interface LocationConfig {
-  readonly accuracy: Location.Accuracy;
+  readonly accuracy: number;
   readonly timeIntervalMs: number;
   readonly distanceIntervalM: number;
   readonly maxAccuracyThresholdM: number;
@@ -11,8 +18,8 @@ export interface LocationConfig {
 }
 
 export const DEFAULT_LOCATION_CONFIG: LocationConfig = {
-  // Best for navigation gives highest accuracy GPS on device
-  accuracy: Location.Accuracy.BestForNavigation,
+  // Best for navigation gives highest accuracy GPS on device (matches Location.Accuracy.BestForNavigation = 6)
+  accuracy: LocationAccuracyMode.BestForNavigation,
   // 1-second interval for responsive navigation
   timeIntervalMs: 1000,
   // 1-meter movement threshold

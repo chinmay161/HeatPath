@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-import * as Location from 'expo-location';
 import type { LocationConfig } from './config';
 import type {
   LocationSample,
@@ -8,6 +6,22 @@ import type {
   HeadingListener,
   ErrorListener,
 } from './types';
+
+function getPlatformOS(): string {
+  try {
+    return require('react-native').Platform?.OS ?? 'web';
+  } catch {
+    return typeof navigator !== 'undefined' ? 'web' : 'node';
+  }
+}
+
+function getExpoLocation() {
+  try {
+    return require('expo-location');
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Common interface for location providers, preparing infrastructure for
@@ -28,8 +42,8 @@ export interface ILocationProvider {
  * Foreground location provider utilizing Expo Location and device sensors.
  */
 export class ForegroundLocationProvider implements ILocationProvider {
-  private positionSubscription: Location.LocationSubscription | null = null;
-  private headingSubscription: Location.LocationSubscription | null = null;
+  private positionSubscription: { remove: () => void } | null = null;
+  private headingSubscription: { remove: () => void } | null = null;
   private webWatchId: number | null = null;
   private tracking = false;
 
@@ -51,7 +65,7 @@ export class ForegroundLocationProvider implements ILocationProvider {
       this.tracking = true;
 
       // Platform specific subscription: Web vs Native
-      if (Platform.OS === 'web') {
+      if (getPlatformOS() === 'web') {
         this.startWebTracking(config, onLocation, onError);
       } else {
         await this.startNativeTracking(config, onLocation, onHeading, onError);
@@ -100,6 +114,12 @@ export class ForegroundLocationProvider implements ILocationProvider {
     onHeading: HeadingListener,
     onError: ErrorListener
   ): Promise<void> {
+    const Location = getExpoLocation();
+    if (!Location) {
+      onError(new Error('Location module is not available on this platform.'));
+      return;
+    }
+
     // 1. Watch position
     this.positionSubscription = await Location.watchPositionAsync(
       {
@@ -107,7 +127,7 @@ export class ForegroundLocationProvider implements ILocationProvider {
         timeInterval: config.timeIntervalMs,
         distanceInterval: config.distanceIntervalM,
       },
-      (loc: Location.LocationObject) => {
+      (loc: { coords: { latitude: number; longitude: number; accuracy: number | null; altitude: number | null; heading: number | null; speed: number | null }; timestamp: number }) => {
         const sample: LocationSample = {
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
@@ -124,7 +144,7 @@ export class ForegroundLocationProvider implements ILocationProvider {
 
     // 2. Watch compass heading (if device sensor is available)
     try {
-      this.headingSubscription = await Location.watchHeadingAsync((h: Location.LocationHeadingObject) => {
+      this.headingSubscription = await Location.watchHeadingAsync((h: { trueHeading: number; magHeading: number; accuracy: number | null }) => {
         const degrees = h.trueHeading >= 0 ? h.trueHeading : (h.magHeading >= 0 ? h.magHeading : null);
         if (degrees !== null) {
           const heading: Heading = {

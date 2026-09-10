@@ -10,7 +10,7 @@
     "build": "expo export -p web",
     "build:web": "expo export -p web",
     "build:all": "expo export",
-    "test": "tsx --test navigation/__tests__/navigation.test.ts"
+    "test": "tsx --test navigation/__tests__/navigation.test.ts navigation/location/__tests__/location.test.ts"
   },
   "dependencies": {
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
