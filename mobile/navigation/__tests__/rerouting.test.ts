@@ -11,7 +11,11 @@ import type { NavigationCoordinate } from '../models';
 import type { LocationSample } from '../location/types';
 import { RouteMatcher, projectPointToSegment } from '../rerouting/RouteMatcher';
 import { OffRouteDetector } from '../rerouting/OffRouteDetector';
+import { RouteRecovery } from '../rerouting/RouteRecovery';
+import { ComparisonEngine } from '../rerouting/ComparisonEngine';
 import { DEFAULT_NAVIGATION_THRESHOLDS } from '../rerouting/config';
+import type { NavigationRoute } from '../models';
+import type { ScoredRoute } from '../../hooks/useFindRoutes';
 
 const sampleRoute: NavigationCoordinate[] = [
   { lat: 18.9220, lon: 72.8347 }, // Colaba Causeway Start
@@ -176,5 +180,70 @@ test('OffRouteDetector: confirms immediately on critical divergence distance (>6
   assert.equal(evalCritical.status, 'OFF_ROUTE_CONFIRMED');
   assert.ok(evalCritical.reason.includes('Critical divergence'));
 });
+
+test('RouteRecovery: detects recovery when user returns to route corridor', () => {
+  const matcher = new RouteMatcher(DEFAULT_NAVIGATION_THRESHOLDS);
+  const detector = new OffRouteDetector(DEFAULT_NAVIGATION_THRESHOLDS);
+  const recovery = new RouteRecovery(DEFAULT_NAVIGATION_THRESHOLDS);
+
+  // 1. User drifts off-route
+  const offLoc = createMockSample({ latitude: 18.9235, longitude: 72.8351, accuracy: 5 });
+  const evalOff = detector.evaluate(matcher.match(sampleRoute, offLoc, 0), offLoc, 0);
+  recovery.trackStatus(evalOff.status);
+
+  // 2. User walks back onto the route (dist <= 15m)
+  const backLoc = createMockSample({ latitude: 18.9235, longitude: 72.8348, accuracy: 5 });
+  const matchBack = matcher.match(sampleRoute, backLoc, 0);
+  const recoveryResult = recovery.evaluateRecovery(matchBack, detector);
+
+  assert.equal(recoveryResult.isRecovered, true);
+  assert.equal(detector.getStatus(), 'ON_ROUTE');
+});
+
+test('ComparisonEngine: calculates positive comfort score and shade deltas', () => {
+  const engine = new ComparisonEngine(DEFAULT_NAVIGATION_THRESHOLDS);
+
+  const mockCurrentRoute = {
+    id: 'current_1',
+    title: 'Current Route',
+    destination_name: 'Gateway of India',
+    distance_m: 800,
+    duration_min: 10,
+    avg_shade_pct: 45,
+    feels_like_c: 32,
+    overall_score: 0.60,
+    geometry: sampleRoute,
+    steps: [],
+    raw_route: {} as any,
+  } as unknown as NavigationRoute;
+
+  const mockCandidateScored: ScoredRoute = {
+    rank: 1,
+    overall_score: 0.72, // +20%
+    avg_shade_pct: 60, // +15%
+    feels_like_c: 30,
+    shade_safety_score: 0.8,
+    heat_safety_score: 0.7,
+    crowd_safety_score: null,
+    shade_segments: [0.6, 0.6],
+    shade_sources: ['overpass'],
+    segment_distances_m: [400, 350],
+    path: [{ lat: 18.9235, lon: 72.8350 }, { lat: 18.9300, lon: 72.8380 }],
+    segment_count: 2,
+    distance_m: 750,
+    duration_min: 9, // -1 min
+  };
+
+  const comp = engine.compareRoutes(mockCurrentRoute, mockCandidateScored);
+
+  assert.equal(comp.isCooler, true);
+  assert.equal(comp.scoreDeltaPct, 20);
+  assert.equal(comp.shadeDeltaPct, 15);
+  assert.equal(comp.durationDeltaMin, -1);
+  assert.ok(comp.summaryText.includes('+20% cooler'));
+  assert.ok(comp.summaryText.includes('1 min shorter'));
+  assert.equal(engine.isMeaningfulImprovement(comp), true);
+});
+
 
 
