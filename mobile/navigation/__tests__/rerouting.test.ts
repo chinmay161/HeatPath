@@ -13,9 +13,10 @@ import { RouteMatcher, projectPointToSegment } from '../rerouting/RouteMatcher';
 import { OffRouteDetector } from '../rerouting/OffRouteDetector';
 import { RouteRecovery } from '../rerouting/RouteRecovery';
 import { ComparisonEngine } from '../rerouting/ComparisonEngine';
+import { RerouteManager } from '../rerouting/RerouteManager';
 import { DEFAULT_NAVIGATION_THRESHOLDS } from '../rerouting/config';
-import type { NavigationRoute } from '../models';
-import type { ScoredRoute } from '../../hooks/useFindRoutes';
+import type { NavigationRoute, NavigationSession } from '../models';
+import type { RoutesResult, ScoredRoute } from '../../hooks/useFindRoutes';
 
 const sampleRoute: NavigationCoordinate[] = [
   { lat: 18.9220, lon: 72.8347 }, // Colaba Causeway Start
@@ -244,6 +245,130 @@ test('ComparisonEngine: calculates positive comfort score and shade deltas', () 
   assert.ok(comp.summaryText.includes('1 min shorter'));
   assert.equal(engine.isMeaningfulImprovement(comp), true);
 });
+
+test('RerouteManager: enforces cooldown between successive reroute requests', async () => {
+  const mockFetch = async () => ({
+    routes: [
+      {
+        rank: 1,
+        overall_score: 0.8,
+        avg_shade_pct: 65,
+        feels_like_c: 29,
+        shade_safety_score: 0.8,
+        heat_safety_score: 0.8,
+        crowd_safety_score: null,
+        shade_segments: [0.65],
+        shade_sources: ['overpass'],
+        segment_distances_m: [500],
+        path: [{ lat: 18.9240, lon: 72.8360 }, { lat: 18.9300, lon: 72.8380 }],
+        segment_count: 1,
+        distance_m: 500,
+        duration_min: 6,
+      } as ScoredRoute,
+    ],
+    conditions: { heat_index: 30, aqi_normalised: 0.2, fetched_at_lat: 18.924, fetched_at_lon: 72.836 },
+  });
+
+  const manager = new RerouteManager(DEFAULT_NAVIGATION_THRESHOLDS, undefined, mockFetch);
+  const mockSession = {
+    id: 'session_1',
+    route: {
+      id: 'route_1',
+      title: 'Current Route',
+      destination_name: 'Gateway of India',
+      distance_m: 1000,
+      duration_min: 12,
+      avg_shade_pct: 40,
+      feels_like_c: 33,
+      overall_score: 0.5,
+      geometry: sampleRoute,
+      steps: [],
+      raw_route: {} as any,
+    },
+    route_geometry: sampleRoute,
+    steps: [],
+    started_at: '2026-09-19T12:00:00Z',
+    created_at: '2026-09-19T12:00:00Z',
+    status: 'NAVIGATING',
+    progress: {} as any,
+    paused: false,
+    completed: false,
+    current_step_index: 0,
+    total_distance_m: 1000,
+    remaining_distance_m: 1000,
+    estimated_duration_s: 720,
+    remaining_duration_s: 720,
+  } as NavigationSession;
+
+  const userLocation = createMockSample({ latitude: 18.9240, longitude: 72.8360 });
+
+  // 1. Initial reroute succeeds
+  const res1 = await manager.executeReroute(mockSession, userLocation, 'Test reroute', 1000);
+  assert.equal(res1.success, true);
+  if (res1.success) {
+    // Destination is preserved!
+    assert.equal(res1.updatedRoute.destination_name, 'Gateway of India');
+    assert.equal(
+      res1.updatedRoute.geometry[res1.updatedRoute.geometry.length - 1].lat,
+      sampleRoute[sampleRoute.length - 1].lat
+    );
+  }
+
+  // 2. Immediate second reroute (within 15s cooldown) is throttled
+  const res2 = await manager.executeReroute(mockSession, userLocation, 'Immediate duplicate', 3000);
+  assert.equal(res2.success, false);
+  assert.ok(res2.error.includes('cooldown active'));
+
+  // 3. Reroute after 16s cooldown passes
+  const res3 = await manager.executeReroute(mockSession, userLocation, 'After cooldown', 18000);
+  assert.equal(res3.success, true);
+});
+
+test('RerouteManager: handles backend network failure gracefully without crashing', async () => {
+  const failingFetch = async () => {
+    throw new Error('502 Bad Gateway: ORS timeout');
+  };
+
+  const manager = new RerouteManager(DEFAULT_NAVIGATION_THRESHOLDS, undefined, failingFetch);
+  const mockSession = {
+    id: 'session_fail',
+    route: {
+      id: 'route_fail',
+      title: 'Current Route',
+      destination_name: 'Marine Drive',
+      distance_m: 800,
+      duration_min: 10,
+      avg_shade_pct: 40,
+      feels_like_c: 32,
+      overall_score: 0.5,
+      geometry: sampleRoute,
+      steps: [],
+      raw_route: {} as any,
+    },
+    route_geometry: sampleRoute,
+    steps: [],
+    started_at: null,
+    created_at: '',
+    status: 'NAVIGATING',
+    progress: {} as any,
+    paused: false,
+    completed: false,
+    current_step_index: 0,
+    total_distance_m: 800,
+    remaining_distance_m: 800,
+    estimated_duration_s: 600,
+    remaining_duration_s: 600,
+  } as NavigationSession;
+
+  const loc = createMockSample({ latitude: 18.9240, longitude: 72.8360 });
+  const result = await manager.executeReroute(mockSession, loc, 'Network error test', 1000);
+
+  // Must NOT throw; gracefully returns failure with existing route preserved
+  assert.equal(result.success, false);
+  assert.ok(result.error.includes('Continuing on current route'));
+  assert.equal(result.fallbackRoute.id, 'route_fail');
+});
+
 
 
 
