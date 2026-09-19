@@ -14,59 +14,14 @@ import { calculateForwardBearing } from '../location/heading';
 import { normalizeAngleDelta } from '../engine/maneuvers';
 import { DEFAULT_NAVIGATION_THRESHOLDS, type NavigationThresholds } from './config';
 import type { RouteMatchResult } from './types';
+import {
+  projectPointToSegment,
+  calculatePolylineDistanceMeters,
+} from '../utils/geo';
 
-/**
- * Projects a point P onto line segment [A, B] using equirectangular projection.
- * Returns the projected coordinate and fraction along the segment [0, 1].
- */
-export function projectPointToSegment(
-  pLat: number,
-  pLon: number,
-  aLat: number,
-  aLon: number,
-  bLat: number,
-  bLon: number
-): { readonly lat: number; readonly lon: number; readonly fraction: number } {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const latFactor = Math.cos(toRad((aLat + bLat) / 2));
-
-  const dx = (bLon - aLon) * latFactor;
-  const dy = bLat - aLat;
-  const segLenSq = dx * dx + dy * dy;
-
-  if (segLenSq === 0) {
-    return { lat: aLat, lon: aLon, fraction: 0 };
-  }
-
-  const px = (pLon - aLon) * latFactor;
-  const py = pLat - aLat;
-
-  // Dot product projection factor clamped to [0, 1]
-  const u = Math.max(0, Math.min(1, (px * dx + py * dy) / segLenSq));
-
-  return {
-    lat: aLat + u * (bLat - aLat),
-    lon: aLon + u * (bLon - aLon),
-    fraction: u,
-  };
-}
-
-/**
- * Computes the total cumulative length of a polyline in meters.
- */
-export function calculatePolylineLengthMeters(coords: readonly NavigationCoordinate[]): number {
-  if (coords.length <= 1) return 0;
-  let total = 0;
-  for (let i = 0; i < coords.length - 1; i += 1) {
-    total += haversineDistanceMeters(
-      coords[i].lat,
-      coords[i].lon,
-      coords[i + 1].lat,
-      coords[i + 1].lon
-    );
-  }
-  return total;
-}
+// Re-export for backward compatibility with existing tests and callers
+export { projectPointToSegment };
+export const calculatePolylineLengthMeters = calculatePolylineDistanceMeters;
 
 export class RouteMatcher {
   private readonly thresholds: NavigationThresholds;

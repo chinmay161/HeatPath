@@ -24,56 +24,12 @@ export interface RouteProgressState {
   readonly remainingGeoJSON: Feature<LineString>;
 }
 
-/**
- * Projects a point onto a line segment [a, b] and returns the projected coordinate.
- */
-function projectPointOnSegment(
-  pLat: number,
-  pLon: number,
-  aLat: number,
-  aLon: number,
-  bLat: number,
-  bLon: number
-): { lat: number; lon: number; fraction: number } {
-  const dLat = bLat - aLat;
-  const dLon = bLon - aLon;
-  const lengthSq = dLat * dLat + dLon * dLon;
+import {
+  projectPointToSegment,
+  calculatePolylineDistanceMeters,
+} from '../utils/geo';
 
-  if (lengthSq === 0) {
-    return { lat: aLat, lon: aLon, fraction: 0 };
-  }
-
-  // Dot product projection
-  const u = Math.max(
-    0,
-    Math.min(1, ((pLat - aLat) * dLat + (pLon - aLon) * dLon) / lengthSq)
-  );
-
-  return {
-    lat: aLat + u * dLat,
-    lon: aLon + u * dLon,
-    fraction: u,
-  };
-}
-
-/**
- * Computes the distance along a list of coordinates.
- */
-export function calculatePolylineDistanceMeters(
-  coords: readonly NavigationCoordinate[]
-): number {
-  if (coords.length <= 1) return 0;
-  let total = 0;
-  for (let i = 0; i < coords.length - 1; i += 1) {
-    total += haversineDistanceMeters(
-      coords[i].lat,
-      coords[i].lon,
-      coords[i + 1].lat,
-      coords[i + 1].lon
-    );
-  }
-  return total;
-}
+export { calculatePolylineDistanceMeters };
 
 /**
  * Evaluates route progress given user GPS sample and full route geometry.
@@ -143,7 +99,7 @@ export function evaluateRouteProgress(
   for (let i = searchStart; i < routeGeometry.length - 1; i += 1) {
     const a = routeGeometry[i];
     const b = routeGeometry[i + 1];
-    const proj = projectPointOnSegment(uLat, uLon, a.lat, a.lon, b.lat, b.lon);
+    const proj = projectPointToSegment(uLat, uLon, a.lat, a.lon, b.lat, b.lon);
     const distToProj = haversineDistanceMeters(uLat, uLon, proj.lat, proj.lon);
 
     if (distToProj < minDistance) {
@@ -158,7 +114,7 @@ export function evaluateRouteProgress(
     for (let i = 0; i < searchStart; i += 1) {
       const a = routeGeometry[i];
       const b = routeGeometry[i + 1];
-      const proj = projectPointOnSegment(uLat, uLon, a.lat, a.lon, b.lat, b.lon);
+      const proj = projectPointToSegment(uLat, uLon, a.lat, a.lon, b.lat, b.lon);
       const distToProj = haversineDistanceMeters(uLat, uLon, proj.lat, proj.lon);
 
       if (distToProj < minDistance) {
