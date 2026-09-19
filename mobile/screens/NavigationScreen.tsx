@@ -42,6 +42,12 @@ export function NavigationScreen() {
     heading,
     speed,
     gpsHealth,
+    offRouteStatus,
+    rerouteStatus,
+    latestComparison,
+    arrivalStage,
+    isMuted,
+    toggleMute,
     startNavigation,
     pauseNavigation,
     resumeNavigation,
@@ -232,6 +238,12 @@ export function NavigationScreen() {
                 stats={routeStats}
                 cameraMode={cameraMode}
                 isOffline={isOffline}
+                offRouteStatus={offRouteStatus}
+                rerouteStatus={rerouteStatus}
+                latestComparison={latestComparison}
+                arrivalStage={arrivalStage}
+                isMuted={isMuted}
+                onToggleMute={toggleMute}
                 onRecenter={handleRecenter}
                 onToggleOverview={handleToggleOverview}
                 onStart={startNavigation}
@@ -285,6 +297,12 @@ export function NavigationScreen() {
         stats={routeStats}
         cameraMode={cameraMode}
         isOffline={isOffline}
+        offRouteStatus={offRouteStatus}
+        rerouteStatus={rerouteStatus}
+        latestComparison={latestComparison}
+        arrivalStage={arrivalStage}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
         onRecenter={handleRecenter}
         onToggleOverview={handleToggleOverview}
         onStart={startNavigation}

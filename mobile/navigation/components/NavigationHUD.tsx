@@ -14,7 +14,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WifiOff, CheckCircle2, ChevronUp, ChevronDown } from 'lucide-react-native';
+import { WifiOff, CheckCircle2, ChevronUp, ChevronDown, RefreshCw, AlertTriangle, Sparkles } from 'lucide-react-native';
 
 import { ManeuverCard } from './ManeuverCard';
 import { RecenterButton } from './RecenterButton';
@@ -41,6 +41,19 @@ export interface NavigationHUDProps {
   readonly stats: RouteStatsCalculation;
   readonly cameraMode: CameraMode;
   readonly isOffline?: boolean;
+  readonly offRouteStatus?: 'ON_ROUTE' | 'OFF_ROUTE_POTENTIAL' | 'OFF_ROUTE_CONFIRMED';
+  readonly rerouteStatus?: 'IDLE' | 'DETECTING' | 'REQUESTING' | 'COMPARING' | 'RECOVERED' | 'FAILED';
+  readonly latestComparison?: {
+    readonly scoreDeltaPct: number;
+    readonly shadeDeltaPct: number;
+    readonly durationDeltaMin: number;
+    readonly distanceDeltaM: number;
+    readonly isCooler: boolean;
+    readonly summaryText: string;
+  } | null;
+  readonly arrivalStage?: 'EN_ROUTE' | 'APPROACHING' | 'ARRIVED' | 'COMPLETED';
+  readonly isMuted?: boolean;
+  readonly onToggleMute?: () => void;
   readonly onRecenter: () => void;
   readonly onToggleOverview: () => void;
   readonly onStart: () => void;
@@ -62,6 +75,12 @@ export function NavigationHUD({
   stats,
   cameraMode,
   isOffline = false,
+  offRouteStatus = 'ON_ROUTE',
+  rerouteStatus = 'IDLE',
+  latestComparison,
+  arrivalStage,
+  isMuted = false,
+  onToggleMute,
   onRecenter,
   onToggleOverview,
   onStart,
@@ -73,7 +92,7 @@ export function NavigationHUD({
   const insets = useSafeAreaInsets();
   const [isStatsExpanded, setIsStatsExpanded] = useState<boolean>(false);
 
-  const isArrived = state === 'ARRIVED';
+  const isArrived = state === 'ARRIVED' || arrivalStage === 'ARRIVED' || arrivalStage === 'COMPLETED';
 
   return (
     <View style={styles.overlay} pointerEvents="box-none">
@@ -87,6 +106,30 @@ export function NavigationHUD({
           <View style={styles.offlineBanner}>
             <WifiOff size={15} color="#B45309" />
             <Text style={styles.offlineBannerText}>Offline · Following downloaded route</Text>
+          </View>
+        )}
+
+        {/* Rerouting in progress banner */}
+        {(rerouteStatus === 'REQUESTING' || rerouteStatus === 'COMPARING') && (
+          <View style={styles.reroutingBanner}>
+            <RefreshCw size={14} color="#047857" />
+            <Text style={styles.reroutingBannerText}>Calculating coolest route...</Text>
+          </View>
+        )}
+
+        {/* Off route warning */}
+        {offRouteStatus === 'OFF_ROUTE_CONFIRMED' && rerouteStatus !== 'REQUESTING' && rerouteStatus !== 'RECOVERED' && (
+          <View style={styles.offRouteBanner}>
+            <AlertTriangle size={14} color="#B45309" />
+            <Text style={styles.offRouteBannerText}>Off route · Recalculating path</Text>
+          </View>
+        )}
+
+        {/* Route recovered notice */}
+        {rerouteStatus === 'RECOVERED' && (
+          <View style={styles.recoveredBanner}>
+            <CheckCircle2 size={14} color="#15803D" />
+            <Text style={styles.recoveredBannerText}>Back on route · Cool path resumed</Text>
           </View>
         )}
 
@@ -110,6 +153,14 @@ export function NavigationHUD({
             distanceToManeuverM={distanceToManeuverM}
             destinationName={route.destination_name}
           />
+        )}
+
+        {/* Route Comparison Summary Chip */}
+        {latestComparison && (
+          <View style={styles.comparisonBadge}>
+            <Sparkles size={13} color="#065F46" />
+            <Text style={styles.comparisonBadgeText}>{latestComparison.summaryText}</Text>
+          </View>
         )}
       </View>
 
@@ -172,6 +223,8 @@ export function NavigationHUD({
         {/* Action Controls */}
         <NavigationControls
           state={state}
+          isMuted={isMuted}
+          onToggleMute={onToggleMute}
           onStart={onStart}
           onPause={onPause}
           onResume={onResume}
@@ -192,6 +245,74 @@ const styles = StyleSheet.create({
   topContainer: {
     paddingHorizontal: 16,
     gap: 8,
+  },
+  reroutingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+  },
+  reroutingBannerText: {
+    fontFamily: fonts.uiSemiBold,
+    fontSize: 12,
+    color: '#065F46',
+  },
+  offRouteBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+  },
+  offRouteBannerText: {
+    fontFamily: fonts.uiSemiBold,
+    fontSize: 12,
+    color: '#92400E',
+  },
+  recoveredBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+  },
+  recoveredBannerText: {
+    fontFamily: fonts.uiSemiBold,
+    fontSize: 12,
+    color: '#15803D',
+  },
+  comparisonBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 6,
+    backgroundColor: '#D1FAE5',
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+    borderRadius: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  comparisonBadgeText: {
+    fontFamily: fonts.dataBold,
+    fontSize: 11,
+    color: '#065F46',
   },
   offlineBanner: {
     flexDirection: 'row',

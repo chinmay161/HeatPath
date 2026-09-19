@@ -7,12 +7,14 @@
 
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { Play, Pause, Square, VolumeX, CheckCircle } from 'lucide-react-native';
+import { Play, Pause, Square, Volume2, VolumeX, CheckCircle } from 'lucide-react-native';
 import type { NavigationState } from '../models';
 import { colors, fonts } from '../../theme/colors';
 
 export interface NavigationControlsProps {
   readonly state: NavigationState;
+  readonly isMuted?: boolean;
+  readonly onToggleMute?: () => void;
   readonly onStart: () => void;
   readonly onPause: () => void;
   readonly onResume: () => void;
@@ -22,6 +24,8 @@ export interface NavigationControlsProps {
 
 export function NavigationControls({
   state,
+  isMuted = false,
+  onToggleMute,
   onStart,
   onPause,
   onResume,
@@ -92,13 +96,18 @@ export function NavigationControls({
   // NAVIGATING
   return (
     <View style={styles.btnRow}>
-      {/* Mute placeholder (disabled until Phase 5.4 voice guidance) */}
+      {/* Voice Mute / Unmute Toggle Button */}
       <TouchableOpacity
-        disabled
+        onPress={onToggleMute}
         activeOpacity={0.7}
-        style={styles.muteBtnDisabled}
+        style={[styles.muteBtn, isMuted && styles.muteBtnActive]}
+        accessibilityLabel={isMuted ? 'Unmute voice guidance' : 'Mute voice guidance'}
       >
-        <VolumeX size={18} color={colors.muted} />
+        {isMuted ? (
+          <VolumeX size={18} color="#DC2626" />
+        ) : (
+          <Volume2 size={18} color={colors.forest} />
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -189,6 +198,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.uiBold,
     fontSize: 14,
     color: '#DC2626',
+  },
+  muteBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  muteBtnActive: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
   },
   muteBtnDisabled: {
     width: 46,
