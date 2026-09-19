@@ -37,6 +37,9 @@ export interface NavigationStep {
   readonly start_location: NavigationCoordinate;
   readonly end_location: NavigationCoordinate;
   readonly name?: string;
+  readonly maneuver_type?: string;
+  readonly bearing_deg?: number;
+  readonly icon_name?: string;
 }
 
 /**
@@ -102,6 +105,7 @@ export const NavigationEvents = {
   STARTED: 'navigation_started',
   PAUSED: 'navigation_paused',
   RESUMED: 'navigation_resumed',
+  ARRIVED: 'navigation_arrived',
   CANCELLED: 'navigation_cancelled',
   COMPLETED: 'navigation_completed',
   RESTORED: 'navigation_restored',
@@ -116,6 +120,7 @@ export interface NavigationEventPayloadMap {
   [NavigationEvents.STARTED]: { readonly session: NavigationSession; readonly timestamp: number };
   [NavigationEvents.PAUSED]: { readonly session: NavigationSession; readonly timestamp: number };
   [NavigationEvents.RESUMED]: { readonly session: NavigationSession; readonly timestamp: number };
+  [NavigationEvents.ARRIVED]: { readonly session: NavigationSession; readonly timestamp: number };
   [NavigationEvents.CANCELLED]: { readonly session: NavigationSession; readonly timestamp: number };
   [NavigationEvents.COMPLETED]: { readonly session: NavigationSession; readonly timestamp: number };
   [NavigationEvents.RESTORED]: { readonly session: NavigationSession; readonly timestamp: number };

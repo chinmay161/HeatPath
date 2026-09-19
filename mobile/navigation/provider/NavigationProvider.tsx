@@ -30,6 +30,8 @@ import {
 } from '../persistence';
 import { assertValidTransition } from '../state';
 import { createNavigationSession } from '../utils';
+import { evaluateArrival } from '../engine/arrivalDetector';
+import { evaluateRouteProgress } from '../map/ProgressRenderer';
 
 export interface NavigationProviderProps {
   children: ReactNode;
@@ -138,15 +140,54 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       setLocation(loc);
       const currentSpeed = locationService.getLatestSpeed();
       setSpeed(currentSpeed);
-      setSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              current_location: loc,
-              current_speed: currentSpeed,
-            }
-          : null
-      );
+      setSession((prev) => {
+        if (!prev) return null;
+
+        let updatedStatus = prev.status;
+        // Arrival detection: trigger ARRIVED state within 15 meters
+        if (prev.status === 'NAVIGATING' && prev.route.geometry.length > 0) {
+          const destination = prev.route.geometry[prev.route.geometry.length - 1];
+          const arrival = evaluateArrival(loc, destination, 15);
+          if (arrival.hasArrived) {
+            updatedStatus = 'ARRIVED';
+            events.emit(NavigationEvents.ARRIVED, {
+              session: { ...prev, status: 'ARRIVED', current_location: loc },
+              timestamp: Date.now(),
+            });
+          }
+        }
+
+        // Evaluate continuous route progress
+        const progressEval = evaluateRouteProgress(
+          prev.route.geometry,
+          loc,
+          prev.current_step_index
+        );
+
+        const updatedProgress = {
+          ...prev.progress,
+          distance_traveled_m: progressEval.distanceTraveledM,
+          remaining_distance_m: progressEval.remainingDistanceM,
+          fraction_completed:
+            prev.total_distance_m > 0
+              ? Math.min(1, Math.max(0, progressEval.distanceTraveledM / prev.total_distance_m))
+              : 0,
+          current_step_index: progressEval.closestSegmentIndex,
+        };
+
+        const updated: NavigationSession = {
+          ...prev,
+          status: updatedStatus,
+          progress: updatedProgress,
+          current_location: loc,
+          current_speed: currentSpeed,
+          remaining_distance_m: progressEval.remainingDistanceM,
+          current_step_index: progressEval.closestSegmentIndex,
+        };
+
+        syncPersistence(updated);
+        return updated;
+      });
     });
 
     const unsubHeading = locationService.subscribeHeading((h) => {
