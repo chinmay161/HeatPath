@@ -2,7 +2,7 @@ import {
   NavigationEvents,
   type NavigationEventType,
   type NavigationEventPayloadMap,
-} from '../models';
+} from './types';
 
 export type EventHandler<E extends NavigationEventType> = (
   payload: NavigationEventPayloadMap[E]
