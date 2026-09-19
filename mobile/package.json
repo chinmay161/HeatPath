@@ -9,8 +9,7 @@
     "web": "expo start --web",
     "build": "expo export -p web",
     "build:web": "expo export -p web",
-    "build:all": "expo export",
-    "test": "tsx --test navigation/__tests__/navigation.test.ts navigation/location/__tests__/location.test.ts navigation/__tests__/mapAndEngine.test.ts"
+    "test": "tsx --test navigation/__tests__/navigation.test.ts navigation/location/__tests__/location.test.ts navigation/__tests__/mapAndEngine.test.ts navigation/__tests__/rerouting.test.ts navigation/__tests__/voice.test.ts navigation/__tests__/arrivalStages.test.ts navigation/__tests__/navigationHistory.test.ts"
   },
   "dependencies": {
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",

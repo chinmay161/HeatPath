@@ -27,7 +27,21 @@ export interface NavigationContextValue {
   readonly speed: SpeedEstimate;
   readonly gpsHealth: GPSHealth;
   readonly gpsError: string | null;
-  readonly isGpsTracking: boolean;
+  // Intelligent Navigation fields (Phase 5.4)
+  readonly offRouteStatus: 'ON_ROUTE' | 'OFF_ROUTE_POTENTIAL' | 'OFF_ROUTE_CONFIRMED';
+  readonly rerouteStatus: 'IDLE' | 'DETECTING' | 'REQUESTING' | 'COMPARING' | 'RECOVERED' | 'FAILED';
+  readonly latestComparison: {
+    readonly scoreDeltaPct: number;
+    readonly shadeDeltaPct: number;
+    readonly durationDeltaMin: number;
+    readonly distanceDeltaM: number;
+    readonly isCooler: boolean;
+    readonly summaryText: string;
+  } | null;
+  readonly arrivalStage: 'EN_ROUTE' | 'APPROACHING' | 'ARRIVED' | 'COMPLETED';
+  readonly isMuted: boolean;
+  readonly toggleMute: () => Promise<boolean>;
+  readonly triggerReroute: () => Promise<void>;
   // Methods
   readonly initSession: (
     route: ScoredRoute,

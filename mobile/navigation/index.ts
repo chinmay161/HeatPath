@@ -10,3 +10,6 @@ export * from './location';
 export * from './map';
 export * from './components';
 export * from './engine';
+export * from './rerouting';
+export * from './voice';
+export * from './analytics';

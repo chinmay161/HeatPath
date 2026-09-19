@@ -96,12 +96,25 @@ export interface NavigationSession {
   readonly current_heading?: Heading | null;
   readonly current_speed?: SpeedEstimate | null;
   readonly gps_health?: GPSHealth;
+  // Intelligent Navigation fields (Phase 5.4)
+  readonly off_route_status?: 'ON_ROUTE' | 'OFF_ROUTE_POTENTIAL' | 'OFF_ROUTE_CONFIRMED';
+  readonly reroute_status?: 'IDLE' | 'DETECTING' | 'REQUESTING' | 'COMPARING' | 'RECOVERED' | 'FAILED';
+  readonly latest_comparison?: {
+    readonly scoreDeltaPct: number;
+    readonly shadeDeltaPct: number;
+    readonly durationDeltaMin: number;
+    readonly distanceDeltaM: number;
+    readonly isCooler: boolean;
+    readonly summaryText: string;
+  } | null;
+  readonly arrival_stage?: 'EN_ROUTE' | 'APPROACHING' | 'ARRIVED' | 'COMPLETED';
 }
 
 /**
  * Navigation internal event names as strongly-typed constants.
  */
 export const NavigationEvents = {
+  // Core Session Lifecycle
   STARTED: 'navigation_started',
   PAUSED: 'navigation_paused',
   RESUMED: 'navigation_resumed',
@@ -109,6 +122,17 @@ export const NavigationEvents = {
   CANCELLED: 'navigation_cancelled',
   COMPLETED: 'navigation_completed',
   RESTORED: 'navigation_restored',
+
+  // Intelligent Navigation Events (Phase 5.4)
+  OFF_ROUTE_DETECTED: 'off_route_detected',
+  OFF_ROUTE_CONFIRMED: 'off_route_confirmed',
+  ROUTE_RECOVERED: 'route_recovered',
+  REROUTE_REQUESTED: 'reroute_requested',
+  REROUTE_COMPLETED: 'reroute_completed',
+  REROUTE_FAILED: 'reroute_failed',
+  VOICE_INSTRUCTION: 'voice_instruction',
+  DESTINATION_NEARBY: 'destination_nearby',
+  ARRIVAL_CONFIRMED: 'arrival_confirmed',
 } as const;
 
 export type NavigationEventType = (typeof NavigationEvents)[keyof typeof NavigationEvents];
@@ -124,4 +148,54 @@ export interface NavigationEventPayloadMap {
   [NavigationEvents.CANCELLED]: { readonly session: NavigationSession; readonly timestamp: number };
   [NavigationEvents.COMPLETED]: { readonly session: NavigationSession; readonly timestamp: number };
   [NavigationEvents.RESTORED]: { readonly session: NavigationSession; readonly timestamp: number };
+
+  // Phase 5.4 Event Payloads
+  [NavigationEvents.OFF_ROUTE_DETECTED]: {
+    readonly session: NavigationSession;
+    readonly distanceM: number;
+    readonly sampleCount: number;
+    readonly timestamp: number;
+  };
+  [NavigationEvents.OFF_ROUTE_CONFIRMED]: {
+    readonly session: NavigationSession;
+    readonly distanceM: number;
+    readonly reason: string;
+    readonly timestamp: number;
+  };
+  [NavigationEvents.ROUTE_RECOVERED]: {
+    readonly session: NavigationSession;
+    readonly distanceM: number;
+    readonly timestamp: number;
+  };
+  [NavigationEvents.REROUTE_REQUESTED]: {
+    readonly session: NavigationSession;
+    readonly reason: string;
+    readonly timestamp: number;
+  };
+  [NavigationEvents.REROUTE_COMPLETED]: {
+    readonly session: NavigationSession;
+    readonly oldRoute: NavigationRoute;
+    readonly newRoute: NavigationRoute;
+    readonly comparison?: unknown;
+    readonly timestamp: number;
+  };
+  [NavigationEvents.REROUTE_FAILED]: {
+    readonly session: NavigationSession;
+    readonly error: string;
+    readonly timestamp: number;
+  };
+  [NavigationEvents.VOICE_INSTRUCTION]: {
+    readonly instruction: unknown;
+    readonly timestamp: number;
+  };
+  [NavigationEvents.DESTINATION_NEARBY]: {
+    readonly session: NavigationSession;
+    readonly distanceM: number;
+    readonly timestamp: number;
+  };
+  [NavigationEvents.ARRIVAL_CONFIRMED]: {
+    readonly session: NavigationSession;
+    readonly stage: string;
+    readonly timestamp: number;
+  };
 }
