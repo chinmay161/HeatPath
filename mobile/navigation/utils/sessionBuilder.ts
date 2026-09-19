@@ -7,6 +7,8 @@ import type {
   NavigationStep,
 } from '../models';
 
+import { deriveManeuverAtVertex } from '../engine/maneuvers';
+
 let sessionCounter = 0;
 
 export function generateSessionId(): string {
@@ -39,6 +41,9 @@ export function buildNavigationSteps(
         start_location: single,
         end_location: single,
         name: destinationName,
+        maneuver_type: 'arrive',
+        bearing_deg: 0,
+        icon_name: 'flag',
       },
     ];
   }
@@ -53,26 +58,20 @@ export function buildNavigationSteps(
     const durationSeconds = Math.max(1, Math.round(dist / 1.33)); // ~80m/min = 1.33 m/s pedestrian speed
     const shadePct = shadeSegments[i] ?? null;
 
-    let instruction: string;
-    if (i === 0) {
-      instruction = `Head toward ${destinationName}`;
-    } else if (i === count - 1) {
-      instruction = `Arrive at ${destinationName}`;
-    } else {
-      instruction = shadePct && shadePct > 50
-        ? 'Continue along shaded path'
-        : 'Continue along route';
-    }
+    const maneuver = deriveManeuverAtVertex(path, i, destinationName, shadePct);
 
     steps.push({
       index: i,
-      instruction,
+      instruction: maneuver.instruction,
       distance_m: dist,
       duration_s: durationSeconds,
       shade_pct: shadePct,
       start_location: startLoc,
       end_location: endLoc,
       name: i === count - 1 ? destinationName : undefined,
+      maneuver_type: maneuver.type,
+      bearing_deg: maneuver.bearingDeg,
+      icon_name: maneuver.iconName,
     });
   }
 
