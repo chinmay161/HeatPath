@@ -7,7 +7,10 @@ import {
   transitionState,
   isActiveNavigation,
   canStartOrResume,
+  canStart,
+  canResume,
   canPause,
+  canComplete,
   canStop,
   IllegalNavigationStateTransitionError,
 } from '../state';
@@ -133,16 +136,28 @@ test('FSM: helper status functions', () => {
   assert.equal(canStartOrResume('PAUSED'), true);
   assert.equal(canStartOrResume('NAVIGATING'), false);
 
+  assert.equal(canStart('READY'), true);
+  assert.equal(canStart('PAUSED'), false);
+  assert.equal(canStart('NAVIGATING'), false);
+
+  assert.equal(canResume('PAUSED'), true);
+  assert.equal(canResume('READY'), false);
+  assert.equal(canResume('NAVIGATING'), false);
+
   assert.equal(canPause('NAVIGATING'), true);
   assert.equal(canPause('READY'), false);
   assert.equal(canPause('PAUSED'), false);
+
+  assert.equal(canComplete('ARRIVED'), true);
+  assert.equal(canComplete('NAVIGATING'), false);
+  assert.equal(canComplete('READY'), false);
 
   assert.equal(canStop('READY'), true);
   assert.equal(canStop('NAVIGATING'), true);
   assert.equal(canStop('PAUSED'), true);
   assert.equal(canStop('ARRIVED'), true);
+  assert.equal(canStop('COMPLETED'), true);
   assert.equal(canStop('IDLE'), false);
-  assert.equal(canStop('COMPLETED'), false);
 });
 
 // ─── 2. Navigation Event System Tests ─────────────────────────────────────────

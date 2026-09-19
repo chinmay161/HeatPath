@@ -40,7 +40,21 @@ export function isActiveNavigation(state: NavigationState): boolean {
 }
 
 /**
- * Helper to determine if the state can transition to NAVIGATING.
+ * Helper to determine if the state can start navigation for the first time.
+ */
+export function canStart(state: NavigationState): boolean {
+  return state === 'READY';
+}
+
+/**
+ * Helper to determine if the state can resume navigation from a paused state.
+ */
+export function canResume(state: NavigationState): boolean {
+  return state === 'PAUSED';
+}
+
+/**
+ * Helper to determine if the state can transition to NAVIGATING (either initial start or resume).
  */
 export function canStartOrResume(state: NavigationState): boolean {
   return state === 'READY' || state === 'PAUSED';
@@ -54,8 +68,17 @@ export function canPause(state: NavigationState): boolean {
 }
 
 /**
+ * Helper to determine if the state can transition to COMPLETED.
+ */
+export function canComplete(state: NavigationState): boolean {
+  return state === 'ARRIVED';
+}
+
+/**
  * Helper to determine if navigation can be stopped/cancelled back to IDLE.
+ * Consistent with NAVIGATION_TRANSITIONS where all non-IDLE states (READY, NAVIGATING,
+ * PAUSED, ARRIVED, COMPLETED) can transition to IDLE.
  */
 export function canStop(state: NavigationState): boolean {
-  return state !== 'IDLE' && state !== 'COMPLETED';
+  return state !== 'IDLE';
 }
