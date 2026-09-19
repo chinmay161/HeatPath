@@ -1,19 +1,18 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+/**
+ * useWalkHistory.ts
+ *
+ * Hook for consuming walk history and stats in Impact and Profile screens.
+ * Refactored to consume navigationHistoryService as the single source of truth (HIGH-5).
+ * Eliminates duplicate storage keys, duplicate records, and out-of-sync stats.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
+import {
+  navigationHistoryService,
+  type WalkRecordShape,
+} from '../navigation/analytics/NavigationHistory';
 
-const KEY = 'heatpath_walk_history';
-
-export type WalkRecord = {
-  id: string;
-  timestamp: number;
-  routeTitle: string;
-  destName: string;
-  distanceM: number;
-  feelLikeC: number;
-  shadePct: number;
-  overallScore: number;
-  heatHoursAvoided: number;
-};
+export type WalkRecord = WalkRecordShape;
 
 export type WalkStats = {
   totalWalks: number;
@@ -28,9 +27,9 @@ function dayKey(ts: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function computeStreak(walks: WalkRecord[]): number {
+export function computeStreak(walks: WalkRecord[]): number {
   if (walks.length === 0) return 0;
-  const days = new Set(walks.map(w => dayKey(w.timestamp)));
+  const days = new Set(walks.map((w) => dayKey(w.timestamp)));
   const todayKey = dayKey(Date.now());
 
   // If no walk today, count from yesterday (today hasn't broken streak yet)
@@ -53,7 +52,7 @@ function computeStreak(walks: WalkRecord[]): number {
   return streak;
 }
 
-function computeStats(walks: WalkRecord[]): WalkStats {
+export function computeStats(walks: WalkRecord[]): WalkStats {
   const totalWalks = walks.length;
   const totalHeatHoursAvoided = walks.reduce((sum, w) => sum + w.heatHoursAvoided, 0);
   const streak = computeStreak(walks);
@@ -64,7 +63,7 @@ function computeStats(walks: WalkRecord[]): WalkStats {
     d.setDate(d.getDate() - (7 - i));
     const k = dayKey(d.getTime());
     return walks
-      .filter(w => dayKey(w.timestamp) === k)
+      .filter((w) => dayKey(w.timestamp) === k)
       .reduce((sum, w) => sum + w.heatHoursAvoided, 0);
   });
 
@@ -72,7 +71,7 @@ function computeStats(walks: WalkRecord[]): WalkStats {
     const d = new Date();
     d.setDate(d.getDate() - (7 - i));
     const k = dayKey(d.getTime());
-    return walks.filter(w => dayKey(w.timestamp) === k).length;
+    return walks.filter((w) => dayKey(w.timestamp) === k).length;
   });
 
   return { totalWalks, streak, totalHeatHoursAvoided, last8DaysAvoided, last8DaysWalks };
@@ -82,27 +81,27 @@ export function useWalkHistory() {
   const [walks, setWalks] = useState<WalkRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    AsyncStorage.getItem(KEY).then(raw => {
-      if (raw) {
-        try { setWalks(JSON.parse(raw)); } catch {}
-      }
+  const reload = useCallback(async () => {
+    try {
+      const history = await navigationHistoryService.getHistory();
+      setWalks(navigationHistoryService.toWalkRecords(history));
+    } finally {
       setLoading(false);
-    });
+    }
   }, []);
 
-  const recordWalk = useCallback((walk: Omit<WalkRecord, 'id' | 'timestamp'>) => {
-    const record: WalkRecord = {
-      id: String(Date.now()) + '_' + Math.random().toString(36).slice(2),
-      timestamp: Date.now(),
-      ...walk,
-    };
-    setWalks(prev => {
-      const updated = [...prev, record];
-      AsyncStorage.setItem(KEY, JSON.stringify(updated)).catch(() => {});
-      return updated;
-    });
-  }, []);
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
-  return { walks, stats: computeStats(walks), recordWalk, loading };
+  const recordWalk = useCallback(
+    async (walk: Omit<WalkRecord, 'id' | 'timestamp'> & { readonly id?: string; readonly timestamp?: number }) => {
+      await navigationHistoryService.recordWalk(walk);
+      const history = await navigationHistoryService.getHistory();
+      setWalks(navigationHistoryService.toWalkRecords(history));
+    },
+    []
+  );
+
+  return { walks, stats: computeStats(walks), recordWalk, loading, reload };
 }

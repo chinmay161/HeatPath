@@ -18,10 +18,12 @@ export interface NavigationHistoryRecord {
   readonly origin: NavigationCoordinate;
   readonly destination: NavigationCoordinate;
   readonly destinationName: string;
+  readonly routeTitle?: string;
   readonly originalDistanceM: number;
   readonly walkedDistanceM: number;
   readonly originalScore: number | null;
   readonly avgShadePct: number;
+  readonly feelsLikeC?: number;
   readonly heatHoursAvoided: number;
   readonly rerouteCount: number;
   readonly reroutes: readonly RerouteRecord[];
