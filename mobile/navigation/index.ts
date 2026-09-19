@@ -7,3 +7,6 @@ export * from './provider';
 export * from './hooks';
 export * from './utils';
 export * from './location';
+export * from './map';
+export * from './components';
+export * from './engine';

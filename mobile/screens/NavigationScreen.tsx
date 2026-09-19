@@ -1,4 +1,11 @@
-import React from 'react';
+/**
+ * NavigationScreen.tsx
+ *
+ * Real-time Interactive Navigation Experience powered by MapLibre GL.
+ * Presentation-only view coordinating MapViewContainer and NavigationHUD.
+ */
+
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,15 +16,18 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ArrowLeft } from 'lucide-react-native';
+
 import { useNavigation } from '../navigation';
 import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
-import { RouteMap } from '../components/RouteMap';
-import { MascotBadge, type MascotState } from '../components/Mascot';
+import { MapViewContainer } from '../navigation/map/MapViewContainer';
+import type { CameraMode } from '../navigation/map/CameraModes';
+import { evaluateRouteProgress } from '../navigation/map/ProgressRenderer';
+import { calculateRouteStats } from '../navigation/engine/etaCalculator';
+import { NavigationHUD } from '../navigation/components/NavigationHUD';
 import { Button } from '../components/ui';
 import Icon from '../components/Icon';
 import { colors, fonts } from '../theme/colors';
-import { scoreToColor, scoreToLabel } from '../utils/scoreToColor';
-import { degreesToCardinal, getAccuracyCategory } from '../navigation/location';
 
 export function NavigationScreen() {
   const router = useRouter();
@@ -32,14 +42,96 @@ export function NavigationScreen() {
     heading,
     speed,
     gpsHealth,
-    gpsError,
-    isGpsTracking,
     startNavigation,
     pauseNavigation,
     resumeNavigation,
     stopNavigation,
     completeNavigation,
   } = useNavigation();
+
+  // Camera Controller Mode State
+  const [cameraMode, setCameraMode] = useState<CameraMode>('FOLLOW');
+  const [isOffline, setIsOffline] = useState<boolean>(false);
+
+  // Network connection monitor (graceful fallback)
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleOnline = () => setIsOffline(false);
+      const handleOffline = () => setIsOffline(true);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      setIsOffline(!navigator.onLine);
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+  }, []);
+
+  // Continuous Route Progress Projection
+  const routeProgress = useMemo(() => {
+    if (!route) return null;
+    return evaluateRouteProgress(
+      route.geometry,
+      location,
+      session?.current_step_index ?? 0
+    );
+  }, [route, location, session?.current_step_index]);
+
+  // Derived Real-Time ETA and Walking Pace (Strictly derived from speed and distance)
+  const routeStats = useMemo(() => {
+    if (!session || !route) {
+      return {
+        elapsedDurationS: 0,
+        remainingDurationS: 0,
+        estimatedArrivalTime: new Date(),
+        averagePaceMinPerKm: null,
+        progressPct: 0,
+        effectiveSpeedMps: 1.33,
+      };
+    }
+
+    const walkedDist = routeProgress
+      ? routeProgress.distanceTraveledM
+      : session.progress.distance_traveled_m;
+    const remainingDist = routeProgress
+      ? routeProgress.remainingDistanceM
+      : session.progress.remaining_distance_m;
+
+    return calculateRouteStats({
+      startedAt: session.started_at,
+      totalDistanceM: route.distance_m,
+      walkedDistanceM: walkedDist,
+      remainingDistanceM: remainingDist,
+      currentSpeed: speed,
+    });
+  }, [session, route, routeProgress, speed]);
+
+  // Upcoming Turn Maneuver Information
+  const currentStep = useMemo(() => {
+    if (!route || route.steps.length === 0) return null;
+    const stepIdx = routeProgress
+      ? routeProgress.closestSegmentIndex
+      : session?.current_step_index ?? 0;
+    return route.steps[stepIdx] ?? route.steps[0];
+  }, [route, routeProgress, session?.current_step_index]);
+
+  const distanceToManeuverM = routeProgress ? routeProgress.distanceToNextStepM : 0;
+
+  // Camera Actions
+  const handleRecenter = () => {
+    setCameraMode('FOLLOW');
+  };
+
+  const handleToggleOverview = () => {
+    setCameraMode((prev) => (prev === 'OVERVIEW' ? 'FOLLOW' : 'OVERVIEW'));
+  };
+
+  const handleMapGesture = () => {
+    if (cameraMode !== 'FREE_EXPLORE') {
+      setCameraMode('FREE_EXPLORE');
+    }
+  };
 
   // If there is no active session, render a clean fallback
   if (!session || !route || state === 'IDLE') {
@@ -76,9 +168,9 @@ export function NavigationScreen() {
     const distanceM = route.distance_m;
     const walkMin = route.duration_min;
     const feelsLikeC = route.feels_like_c;
-    const heatHoursAvoided = raw.heat_hours_avoided ?? parseFloat(
-      Math.max(0, (35 - feelsLikeC) * walkMin / 60).toFixed(2)
-    );
+    const heatHoursAvoided =
+      raw.heat_hours_avoided ??
+      parseFloat(Math.max(0, ((35 - feelsLikeC) * walkMin) / 60).toFixed(2));
 
     completeNavigation();
 
@@ -91,337 +183,14 @@ export function NavigationScreen() {
         distanceM: String(distanceM),
         feelLikeC: String(parseFloat(feelsLikeC.toFixed(1))),
         shadePct: String(Math.round(route.avg_shade_pct)),
-        overallScore: route.overall_score != null ? String(parseFloat(route.overall_score.toFixed(2))) : '—',
+        overallScore:
+          route.overall_score != null
+            ? String(parseFloat(route.overall_score.toFixed(2)))
+            : '—',
         heatHoursAvoided: String(heatHoursAvoided),
       },
     });
   };
-
-  // State Badge Configuration
-  const stateBadgeConfig: {
-    label: string;
-    bg: string;
-    border: string;
-    color: string;
-    mascotState: MascotState;
-  } = (() => {
-    switch (state) {
-      case 'READY':
-        return {
-          label: 'Ready to Walk',
-          bg: '#EAF3EC',
-          border: '#BBD8C3',
-          color: colors.forest,
-          mascotState: 'blink',
-        };
-      case 'NAVIGATING':
-        return {
-          label: 'Walking',
-          bg: '#E1F4E5',
-          border: '#9AD6A6',
-          color: '#166534',
-          mascotState: 'walking',
-        };
-      case 'PAUSED':
-        return {
-          label: 'Paused',
-          bg: '#FEF3C7',
-          border: '#FCD34D',
-          color: '#92400E',
-          mascotState: 'blink',
-        };
-      case 'ARRIVED':
-        return {
-          label: 'Arrived at Destination',
-          bg: '#DCFCE7',
-          border: '#86EFAC',
-          color: '#15803D',
-          mascotState: 'excited',
-        };
-      default:
-        return {
-          label: state,
-          bg: '#FFFFFF',
-          border: colors.line,
-          color: colors.muted,
-          mascotState: 'blink',
-        };
-    }
-  })();
-
-  const distStr =
-    route.distance_m < 1000
-      ? `${Math.round(route.distance_m)} m`
-      : `${(route.distance_m / 1000).toFixed(2)} km`;
-
-  const scoreColor = scoreToColor(route.overall_score ?? 0.5);
-  const scoreLabel = scoreToLabel(route.overall_score ?? 0.5);
-
-  const startCoord = route.geometry[0];
-  const endCoord = route.geometry[route.geometry.length - 1];
-
-  // Route Metrics Card
-  const RouteSummaryCard = (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.cardEyebrow}>DESTINATION</Text>
-          <Text style={styles.destinationTitle}>{route.destination_name}</Text>
-          <Text style={styles.routeSubtitle}>{route.title}</Text>
-        </View>
-        <MascotBadge state={stateBadgeConfig.mascotState} size={48} />
-      </View>
-
-      <View style={styles.metricsGrid}>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>Distance</Text>
-          <Text style={styles.metricValue}>{distStr}</Text>
-          <Text style={styles.metricSub}>pedestrian path</Text>
-        </View>
-
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>Est. Duration</Text>
-          <Text style={styles.metricValue}>{route.duration_min} min</Text>
-          <Text style={styles.metricSub}>at walking pace</Text>
-        </View>
-
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>Avg. Shade</Text>
-          <Text style={[styles.metricValue, { color: colors.forest }]}>
-            {Math.round(route.avg_shade_pct)}%
-          </Text>
-          <Text style={styles.metricSub}>canopy & shadows</Text>
-        </View>
-
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>Perceived Temp</Text>
-          <Text style={[styles.metricValue, { color: scoreColor }]}>
-            {Math.round(route.feels_like_c)}°C
-          </Text>
-          <Text style={styles.metricSub}>{scoreLabel}</Text>
-        </View>
-      </View>
-
-      {route.overall_score != null && (
-        <View style={styles.scoreBanner}>
-          <View style={[styles.scoreDot, { backgroundColor: scoreColor }]} />
-          <Text style={styles.scoreText}>
-            HeatPath Comfort Score: <Text style={styles.scoreValue}>{(route.overall_score * 100).toFixed(0)}/100</Text>
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-
-  // Live GPS Diagnostics Card (Phase 5.2)
-  const GpsDiagnosticsCard = (
-    <View style={styles.card}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View
-            style={[
-              styles.gpsPulseDot,
-              {
-                backgroundColor:
-                  gpsHealth === 'healthy'
-                    ? '#16A34A'
-                    : gpsHealth === 'weak'
-                    ? '#CA8A04'
-                    : gpsHealth === 'searching'
-                    ? '#2563EB'
-                    : '#DC2626',
-              },
-            ]}
-          />
-          <Text style={styles.cardTitle}>Live GPS Diagnostics</Text>
-        </View>
-        <View
-          style={[
-            styles.healthPill,
-            {
-              backgroundColor:
-                gpsHealth === 'healthy'
-                  ? '#DCFCE7'
-                  : gpsHealth === 'weak'
-                  ? '#FEF9C3'
-                  : gpsHealth === 'searching'
-                  ? '#DBEAFE'
-                  : '#FEE2E2',
-              borderColor:
-                gpsHealth === 'healthy'
-                  ? '#86EFAC'
-                  : gpsHealth === 'weak'
-                  ? '#FDE047'
-                  : gpsHealth === 'searching'
-                  ? '#93C5FD'
-                  : '#FCA5A5',
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.healthPillText,
-              {
-                color:
-                  gpsHealth === 'healthy'
-                    ? '#15803D'
-                    : gpsHealth === 'weak'
-                    ? '#854D0E'
-                    : gpsHealth === 'searching'
-                    ? '#1D4ED8'
-                    : '#B91C1C',
-              },
-            ]}
-          >
-            {gpsHealth.toUpperCase()}
-          </Text>
-        </View>
-      </View>
-
-      {gpsError && (
-        <View style={styles.gpsErrorBanner}>
-          <Text style={styles.gpsErrorText}>⚠️ {gpsError}</Text>
-        </View>
-      )}
-
-      <View style={styles.metricsGrid}>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>Coordinates</Text>
-          <Text style={[styles.metricValue, { fontSize: 13 }]} numberOfLines={1}>
-            {location ? `${location.latitude.toFixed(5)}°, ${location.longitude.toFixed(5)}°` : 'Acquiring lock...'}
-          </Text>
-          <Text style={styles.metricSub}>{location ? 'WGS84 fix' : 'Searching satellites'}</Text>
-        </View>
-
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>Accuracy</Text>
-          <Text style={styles.metricValue}>
-            {location ? `±${location.accuracy.toFixed(1)} m` : '—'}
-          </Text>
-          <Text style={styles.metricSub}>
-            {location ? `${getAccuracyCategory(location.accuracy).toUpperCase()} precision` : 'Measuring error'}
-          </Text>
-        </View>
-
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>Current Speed</Text>
-          <Text style={styles.metricValue}>
-            {speed.walkingSpeedKmph !== null ? `${speed.walkingSpeedKmph} km/h` : '0.0 km/h'}
-          </Text>
-          <Text style={styles.metricSub}>
-            {speed.currentSpeedMps !== null && speed.currentSpeedMps > 0.2
-              ? `${speed.currentSpeedMps} m/s ${speed.isEstimated ? '(derived)' : '(sensor)'}`
-              : 'Stationary'}
-          </Text>
-        </View>
-
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>Heading</Text>
-          <Text style={styles.metricValue}>
-            {heading.degrees !== null ? `${Math.round(heading.degrees)}° ${degreesToCardinal(heading.degrees)}` : '—'}
-          </Text>
-          <Text style={styles.metricSub}>
-            {heading.source === 'compass'
-              ? 'Device compass'
-              : heading.source === 'gps'
-              ? 'GPS track'
-              : heading.source === 'movement_vector'
-              ? 'Movement vector'
-              : 'Calibrating'}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-
-  // Steps Summary Card
-  const StepsOverviewCard = (
-    <View style={styles.card}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <Text style={styles.cardTitle}>Route Segments</Text>
-        <Text style={styles.stepCountBadge}>{route.steps.length} segments</Text>
-      </View>
-
-      {route.steps.slice(0, 4).map((step, idx) => (
-        <View key={step.index} style={styles.stepRow}>
-          <View style={styles.stepIndexCircle}>
-            <Text style={styles.stepIndexText}>{idx + 1}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.stepInstruction}>{step.instruction}</Text>
-            <Text style={styles.stepMeta}>
-              {Math.round(step.distance_m)} m · {Math.round(step.duration_s / 60)} min
-              {step.shade_pct != null ? ` · ${Math.round(step.shade_pct)}% shade` : ''}
-            </Text>
-          </View>
-        </View>
-      ))}
-
-      {route.steps.length > 4 && (
-        <Text style={styles.moreStepsNote}>
-          + {route.steps.length - 4} more segments to destination
-        </Text>
-      )}
-    </View>
-  );
-
-  // Action Buttons reflecting the current state
-  const ActionControls = (
-    <View style={styles.actionContainer}>
-      {state === 'READY' && (
-        <View style={styles.btnRow}>
-          <Button onPress={handleStop} variant="ghost" style={styles.cancelBtn}>
-            Cancel
-          </Button>
-          <Button onPress={startNavigation} style={styles.primaryActionBtn}>
-            Start Walking
-          </Button>
-        </View>
-      )}
-
-      {state === 'NAVIGATING' && (
-        <View style={styles.btnRow}>
-          <Button
-            onPress={pauseNavigation}
-            style={[styles.halfBtn, { backgroundColor: colors.sunken }]}
-            textStyle={{ color: colors.ink }}
-          >
-            Pause Walk
-          </Button>
-          <Button
-            onPress={handleStop}
-            style={[styles.halfBtn, { backgroundColor: '#FEE2E2' }]}
-            textStyle={{ color: '#DC2626' }}
-          >
-            Stop Walk
-          </Button>
-        </View>
-      )}
-
-      {state === 'PAUSED' && (
-        <View style={styles.btnRow}>
-          <Button onPress={resumeNavigation} style={styles.halfBtn}>
-            Resume Walk
-          </Button>
-          <Button
-            onPress={handleStop}
-            style={[styles.halfBtn, { backgroundColor: '#FEE2E2' }]}
-            textStyle={{ color: '#DC2626' }}
-          >
-            Stop Walk
-          </Button>
-        </View>
-      )}
-
-      {state === 'ARRIVED' && (
-        <View style={styles.btnRow}>
-          <Button onPress={handleFinish} style={styles.primaryActionBtn}>
-            Finish Walk & View Impact →
-          </Button>
-        </View>
-      )}
-    </View>
-  );
 
   // ── Desktop Layout ──
   if (isDesktop) {
@@ -429,42 +198,48 @@ export function NavigationScreen() {
       <View style={styles.container}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
           <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
-            <Icon name="back" size={20} stroke={colors.ink} />
+            <ArrowLeft size={20} color={colors.ink} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Navigation Session</Text>
-          <View
-            style={[
-              styles.stateBadge,
-              {
-                backgroundColor: stateBadgeConfig.bg,
-                borderColor: stateBadgeConfig.border,
-              },
-            ]}
-          >
-            <Text style={[styles.stateBadgeText, { color: stateBadgeConfig.color }]}>
-              {stateBadgeConfig.label}
-            </Text>
+          <Text style={styles.headerTitle}>Navigation Session · {route.title}</Text>
+          <View style={styles.stateBadge}>
+            <Text style={styles.stateBadgeText}>{state}</Text>
           </View>
         </View>
 
         <View style={styles.desktopContent}>
           <View style={styles.desktopMapContainer}>
-            <RouteMap
-              routes={[route.raw_route]}
-              selectedIdx={0}
-              startLat={startCoord ? startCoord.lat : null}
-              startLon={startCoord ? startCoord.lon : null}
-              endLat={endCoord ? endCoord.lat : null}
-              endLon={endCoord ? endCoord.lon : null}
-              routeTitle={route.title}
+            <MapViewContainer
+              route={route}
+              location={location}
+              heading={heading}
+              cameraMode={cameraMode}
+              onCameraModeChange={setCameraMode}
+              onMapGesture={handleMapGesture}
+              progress={routeProgress}
             />
           </View>
           <View style={styles.desktopSideRail}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
-              {RouteSummaryCard}
-              {GpsDiagnosticsCard}
-              {StepsOverviewCard}
-              {ActionControls}
+              <NavigationHUD
+                route={route}
+                state={state}
+                currentStep={currentStep}
+                distanceToManeuverM={distanceToManeuverM}
+                location={location}
+                heading={heading}
+                speed={speed}
+                gpsHealth={gpsHealth}
+                stats={routeStats}
+                cameraMode={cameraMode}
+                isOffline={isOffline}
+                onRecenter={handleRecenter}
+                onToggleOverview={handleToggleOverview}
+                onStart={startNavigation}
+                onPause={pauseNavigation}
+                onResume={resumeNavigation}
+                onStop={handleStop}
+                onFinish={handleFinish}
+              />
             </ScrollView>
           </View>
         </View>
@@ -472,55 +247,52 @@ export function NavigationScreen() {
     );
   }
 
-  // ── Mobile Layout ──
+  // ── Mobile Layout (Full-Bleed Interactive Map with Floating HUD) ──
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
-          <Icon name="back" size={20} stroke={colors.ink} />
-        </TouchableOpacity>
-        <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text style={styles.headerTitle}>Navigation</Text>
-        </View>
-        <View
-          style={[
-            styles.stateBadge,
-            {
-              backgroundColor: stateBadgeConfig.bg,
-              borderColor: stateBadgeConfig.border,
-            },
-          ]}
-        >
-          <Text style={[styles.stateBadgeText, { color: stateBadgeConfig.color }]}>
-            {stateBadgeConfig.label}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.mobileMapContainer}>
-        <RouteMap
-          routes={[route.raw_route]}
-          selectedIdx={0}
-          startLat={startCoord ? startCoord.lat : null}
-          startLon={startCoord ? startCoord.lon : null}
-          endLat={endCoord ? endCoord.lat : null}
-          endLon={endCoord ? endCoord.lon : null}
-          routeTitle={route.title}
+      {/* Full-bleed MapLibre Map View */}
+      <View style={StyleSheet.absoluteFill}>
+        <MapViewContainer
+          route={route}
+          location={location}
+          heading={heading}
+          cameraMode={cameraMode}
+          onCameraModeChange={setCameraMode}
+          onMapGesture={handleMapGesture}
+          progress={routeProgress}
         />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.mobileScroll, { paddingBottom: insets.bottom + 90 }]}
+      {/* Floating Back Button */}
+      <TouchableOpacity
+        onPress={handleBack}
+        style={[styles.floatingBackBtn, { top: insets.top + 12 }]}
+        activeOpacity={0.8}
       >
-        {RouteSummaryCard}
-        {GpsDiagnosticsCard}
-        {StepsOverviewCard}
-      </ScrollView>
+        <ArrowLeft size={20} color={colors.ink} />
+      </TouchableOpacity>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
-        {ActionControls}
-      </View>
+      {/* Floating Navigation HUD Overlay */}
+      <NavigationHUD
+        route={route}
+        state={state}
+        currentStep={currentStep}
+        distanceToManeuverM={distanceToManeuverM}
+        location={location}
+        heading={heading}
+        speed={speed}
+        gpsHealth={gpsHealth}
+        stats={routeStats}
+        cameraMode={cameraMode}
+        isOffline={isOffline}
+        onRecenter={handleRecenter}
+        onToggleOverview={handleToggleOverview}
+        onStart={startNavigation}
+        onPause={pauseNavigation}
+        onResume={resumeNavigation}
+        onStop={handleStop}
+        onFinish={handleFinish}
+      />
     </View>
   );
 }
@@ -528,7 +300,7 @@ export function NavigationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.canvas,
+    backgroundColor: '#F3F6F1',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -568,7 +340,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: colors.canvas,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
@@ -581,248 +353,63 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
+  },
+  floatingBackBtn: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.14,
+        shadowRadius: 6,
+      },
+      default: {
+        elevation: 4,
+      },
+    }),
   },
   headerTitle: {
+    flex: 1,
     fontFamily: fonts.uiBold,
-    fontSize: 17,
+    fontSize: 16,
     color: colors.ink,
   },
   stateBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
+    backgroundColor: '#EAF3EC',
     borderWidth: 1,
+    borderColor: '#BBD8C3',
   },
   stateBadgeText: {
     fontFamily: fonts.uiBold,
     fontSize: 12,
+    color: colors.forest,
   },
   desktopContent: {
     flex: 1,
     flexDirection: 'row',
   },
   desktopMapContainer: {
-    flex: 1.2,
+    flex: 1.3,
   },
   desktopSideRail: {
-    flex: 0.8,
+    flex: 0.7,
     backgroundColor: '#FFFFFF',
     borderLeftWidth: 1,
     borderLeftColor: colors.line,
     padding: 20,
-  },
-  mobileMapContainer: {
-    height: 240,
-    backgroundColor: '#E6ECE0',
-  },
-  mobileScroll: {
-    padding: 16,
-    gap: 14,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-      },
-      default: {},
-    }),
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  cardEyebrow: {
-    fontFamily: fonts.dataBold,
-    fontSize: 10,
-    color: colors.muted,
-    letterSpacing: 0.8,
-    marginBottom: 2,
-  },
-  destinationTitle: {
-    fontFamily: fonts.display,
-    fontSize: 20,
-    color: colors.ink,
-    lineHeight: 26,
-  },
-  routeSubtitle: {
-    fontFamily: fonts.uiSemiBold,
-    fontSize: 13,
-    color: colors.forest,
-    marginTop: 2,
-  },
-  cardTitle: {
-    fontFamily: fonts.uiBold,
-    fontSize: 15,
-    color: colors.ink,
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  metricItem: {
-    width: '48%',
-    backgroundColor: '#F8FAF6',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E6ECE0',
-    padding: 10,
-  },
-  metricLabel: {
-    fontFamily: fonts.ui,
-    fontSize: 11,
-    color: colors.muted2,
-    marginBottom: 2,
-  },
-  metricValue: {
-    fontFamily: fonts.dataBold,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  metricSub: {
-    fontFamily: fonts.ui,
-    fontSize: 10,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  scoreBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F6F1',
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 12,
-    gap: 8,
-  },
-  scoreDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  scoreText: {
-    fontFamily: fonts.ui,
-    fontSize: 12,
-    color: colors.ink,
-  },
-  scoreValue: {
-    fontFamily: fonts.uiBold,
-  },
-  stepCountBadge: {
-    fontFamily: fonts.uiSemiBold,
-    fontSize: 11,
-    color: colors.muted,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-  },
-  stepIndexCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#E6ECE0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepIndexText: {
-    fontFamily: fonts.dataBold,
-    fontSize: 11,
-    color: colors.ink,
-  },
-  stepInstruction: {
-    fontFamily: fonts.uiSemiBold,
-    fontSize: 13,
-    color: colors.ink,
-  },
-  stepMeta: {
-    fontFamily: fonts.ui,
-    fontSize: 11,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  moreStepsNote: {
-    fontFamily: fonts.ui,
-    fontSize: 11,
-    color: colors.muted,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  actionContainer: {
-    width: '100%',
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-  },
-  primaryActionBtn: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 15,
-  },
-  halfBtn: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 14,
-  },
-  cancelBtn: {
-    width: 90,
-    borderRadius: 16,
-    paddingVertical: 14,
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  gpsPulseDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
-  },
-  healthPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  healthPillText: {
-    fontFamily: fonts.dataBold,
-    fontSize: 10,
-    letterSpacing: 0.5,
-  },
-  gpsErrorBanner: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 12,
-  },
-  gpsErrorText: {
-    fontFamily: fonts.ui,
-    fontSize: 12,
-    color: '#991B1B',
   },
 });
