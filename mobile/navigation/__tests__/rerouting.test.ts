@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import type { NavigationCoordinate } from '../models';
 import type { LocationSample } from '../location/types';
 import { RouteMatcher, projectPointToSegment } from '../rerouting/RouteMatcher';
+import { OffRouteDetector } from '../rerouting/OffRouteDetector';
 import { DEFAULT_NAVIGATION_THRESHOLDS } from '../rerouting/config';
 
 const sampleRoute: NavigationCoordinate[] = [
@@ -93,4 +94,87 @@ test('RouteMatcher: calculates heading divergence correctly when user walks away
   const match = matcher.match(sampleRoute, location, 0, { degrees: 90, source: 'compass' });
   assert.equal(match.headingDivergenceDeg, 90);
 });
+
+test('OffRouteDetector: ignores false positives when GPS uncertainty matches distance', () => {
+  const matcher = new RouteMatcher(DEFAULT_NAVIGATION_THRESHOLDS);
+  const detector = new OffRouteDetector(DEFAULT_NAVIGATION_THRESHOLDS);
+
+  // User is 32m away, but GPS accuracy is 35m (urban canyon jitter)
+  const location = createMockSample({
+    latitude: 18.9235,
+    longitude: 72.8350,
+    accuracy: 35,
+    speed: 1.0,
+  });
+
+  const match = matcher.match(sampleRoute, location, 0);
+  const evalResult = detector.evaluate(match, location, 1000);
+
+  assert.equal(evalResult.status, 'ON_ROUTE');
+  assert.ok(evalResult.reason.includes('accuracy uncertainty'));
+});
+
+test('OffRouteDetector: does not confirm off-route on first single sample', () => {
+  const matcher = new RouteMatcher(DEFAULT_NAVIGATION_THRESHOLDS);
+  const detector = new OffRouteDetector(DEFAULT_NAVIGATION_THRESHOLDS);
+
+  // User steps 32m away with good 5m GPS accuracy
+  const location = createMockSample({
+    latitude: 18.9235,
+    longitude: 72.8350,
+    accuracy: 5,
+    speed: 1.0,
+  });
+
+  const match = matcher.match(sampleRoute, location, 0);
+  const evalResult = detector.evaluate(match, location, 1000);
+
+  // Must NOT confirm immediately on sample 1
+  assert.equal(evalResult.status, 'OFF_ROUTE_POTENTIAL');
+  assert.equal(evalResult.consecutiveCount, 1);
+});
+
+test('OffRouteDetector: confirms off-route after consecutive count and time window', () => {
+  const matcher = new RouteMatcher(DEFAULT_NAVIGATION_THRESHOLDS);
+  const detector = new OffRouteDetector(DEFAULT_NAVIGATION_THRESHOLDS);
+
+  const loc1 = createMockSample({ latitude: 18.9235, longitude: 72.8350, accuracy: 5, speed: 1.0 });
+  const loc2 = createMockSample({ latitude: 18.9235, longitude: 72.8352, accuracy: 5, speed: 1.0 });
+  const loc3 = createMockSample({ latitude: 18.9235, longitude: 72.8354, accuracy: 5, speed: 1.0 });
+
+  // Sample 1 at t=0
+  const eval1 = detector.evaluate(matcher.match(sampleRoute, loc1, 0), loc1, 0);
+  assert.equal(eval1.status, 'OFF_ROUTE_POTENTIAL');
+
+  // Sample 2 at t=4s
+  const eval2 = detector.evaluate(matcher.match(sampleRoute, loc2, 0), loc2, 4000);
+  assert.equal(eval2.status, 'OFF_ROUTE_POTENTIAL');
+
+  // Sample 3 at t=9s (satisfies both count >= 3 and time >= 8s)
+  const eval3 = detector.evaluate(matcher.match(sampleRoute, loc3, 0), loc3, 9000);
+  assert.equal(eval3.status, 'OFF_ROUTE_CONFIRMED');
+  assert.equal(eval3.consecutiveCount, 3);
+});
+
+test('OffRouteDetector: confirms immediately on critical divergence distance (>65m)', () => {
+  const matcher = new RouteMatcher(DEFAULT_NAVIGATION_THRESHOLDS);
+  const detector = new OffRouteDetector(DEFAULT_NAVIGATION_THRESHOLDS);
+
+  // Far coordinate > 70m away
+  const farLoc = createMockSample({
+    latitude: 18.9235,
+    longitude: 72.8356, // ~95m from route
+    accuracy: 5,
+    speed: 1.5,
+  });
+
+  // Sample 1
+  detector.evaluate(matcher.match(sampleRoute, farLoc, 0), farLoc, 0);
+  // Sample 2 moving away
+  const evalCritical = detector.evaluate(matcher.match(sampleRoute, farLoc, 0), farLoc, 2000);
+
+  assert.equal(evalCritical.status, 'OFF_ROUTE_CONFIRMED');
+  assert.ok(evalCritical.reason.includes('Critical divergence'));
+});
+
 
