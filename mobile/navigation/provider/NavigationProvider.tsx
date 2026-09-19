@@ -7,8 +7,19 @@ import React, {
   type ReactNode,
 } from 'react';
 import type { ScoredRoute } from '../../hooks/useFindRoutes';
-import { NavigationContext, type NavigationContextValue } from '../context';
-import { NavigationEventEmitter } from '../events';
+import {
+  NavigationContext,
+  NavigationStateContext,
+  NavigationTelemetryContext,
+  NavigationActionsContext,
+  NavigationDiagnosticsContext,
+  type NavigationContextValue,
+  type NavigationStateContextValue,
+  type NavigationTelemetryContextValue,
+  type NavigationActionsContextValue,
+  type NavigationDiagnosticsContextValue,
+} from '../context';
+import { NavigationEventEmitter, NavigationEvents } from '../events';
 import {
   locationService,
   type GPSHealth,
@@ -16,18 +27,13 @@ import {
   type LocationSample,
   type SpeedEstimate,
 } from '../location';
-import {
-  NavigationEvents,
-  type NavigationProgress,
-  type NavigationRoute,
-  type NavigationSession,
-  type NavigationState,
+import type {
+  NavigationProgress,
+  NavigationRoute,
+  NavigationSession,
+  NavigationState,
 } from '../models';
-import {
-  saveNavigationSession,
-  restoreNavigationSession,
-  clearNavigationSession,
-} from '../persistence';
+import { restoreNavigationSession } from '../persistence';
 import { assertValidTransition } from '../state';
 import { createNavigationSession } from '../utils';
 
@@ -43,15 +49,20 @@ import {
 } from '../rerouting';
 import {
   voiceService,
-  formatDestinationNearbySpeech,
-  formatArrivalSpeech,
-  formatOffRouteSpeech,
-  formatRouteRecoveredSpeech,
   formatRerouteCompletedSpeech,
   UpcomingManeuverTracker,
 } from '../voice';
 import { ArrivalTracker, type ArrivalStage } from '../engine/arrivalDetector';
 import { navigationHistoryService, navigationLogger } from '../analytics';
+
+// Phase 5.5 State Evaluator & Side Effect Orchestration
+import {
+  evaluateNavigationState,
+  processArrivalSideEffects,
+  processOffRouteSideEffects,
+  processManeuverVoiceSideEffects,
+  persistNavigationSession,
+} from './stateEvaluator';
 
 export interface NavigationProviderProps {
   children: ReactNode;
@@ -61,7 +72,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   const [session, setSession] = useState<NavigationSession | null>(null);
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
 
-  // Live GPS tracking state (Phase 5.2)
+  // Live GPS tracking state (Phase 5.2) - Telemetry Context
   const [location, setLocation] = useState<LocationSample | null>(null);
   const [heading, setHeading] = useState<Heading>({ degrees: null, source: 'unknown' });
   const [speed, setSpeed] = useState<SpeedEstimate>({
@@ -74,7 +85,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isGpsTracking, setIsGpsTracking] = useState<boolean>(false);
 
-  // Intelligent Navigation State (Phase 5.4)
+  // Intelligent Navigation State (Phase 5.4) - Diagnostics Context
   const [offRouteStatus, setOffRouteStatus] = useState<OffRouteStatus>('ON_ROUTE');
   const [rerouteStatus, setRerouteStatus] = useState<RerouteState>('IDLE');
   const [latestComparison, setLatestComparison] = useState<RouteComparison | null>(null);
@@ -99,7 +110,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   const eventEmitterRef = useRef<NavigationEventEmitter>(new NavigationEventEmitter());
   const events = eventEmitterRef.current;
 
-  // Keep refs synchronized
+  // Keep refs synchronized with active state
   useEffect(() => {
     headingRef.current = heading;
   }, [heading]);
@@ -143,15 +154,6 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       isMounted = false;
     };
   }, [events]);
-
-  // Synchronize state changes to persistence (transient GPS data is never saved)
-  const syncPersistence = useCallback((updated: NavigationSession | null) => {
-    if (!updated || updated.status === 'IDLE' || updated.status === 'COMPLETED') {
-      clearNavigationSession();
-    } else {
-      saveNavigationSession(updated);
-    }
-  }, []);
 
   // GPS Control Functions
   const stopGps = useCallback(async () => {
@@ -207,25 +209,26 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
         routeRecoveryRef.current.reset();
         maneuverTrackerRef.current.reset();
 
-        setSession((prev) => {
-          if (!prev) return null;
-          const updated: NavigationSession = {
-            ...prev,
-            route: result.updatedRoute,
-            route_geometry: result.updatedRoute.geometry,
-            steps: result.updatedRoute.steps,
-            total_distance_m: result.updatedRoute.distance_m,
-            remaining_distance_m: result.updatedRoute.distance_m,
-            estimated_duration_s: result.updatedRoute.duration_min * 60,
-            remaining_duration_s: result.updatedRoute.duration_min * 60,
-            current_step_index: 0,
-            reroute_status: 'IDLE',
-            off_route_status: 'ON_ROUTE',
-            latest_comparison: result.comparison,
-          };
-          syncPersistence(updated);
-          return updated;
-        });
+        const updated: NavigationSession = {
+          ...activeSession,
+          route: result.updatedRoute,
+          route_geometry: result.updatedRoute.geometry,
+          steps: result.updatedRoute.steps,
+          total_distance_m: result.updatedRoute.distance_m,
+          remaining_distance_m: result.updatedRoute.distance_m,
+          estimated_duration_s: result.updatedRoute.duration_min * 60,
+          remaining_duration_s: result.updatedRoute.duration_min * 60,
+          current_step_index: 0,
+          reroute_status: 'IDLE',
+          off_route_status: 'ON_ROUTE',
+          latest_comparison: result.comparison,
+        };
+
+        // Pure state update
+        setSession(updated);
+
+        // Side effects run AFTER state update
+        persistNavigationSession(updated);
 
         events.emit(NavigationEvents.REROUTE_COMPLETED, {
           session: activeSession,
@@ -251,7 +254,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
         navigationLogger.log('reroute_failure', { error: result.error });
       }
     },
-    [events, syncPersistence]
+    [events]
   );
 
   const startGps = useCallback(async () => {
@@ -273,144 +276,61 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       const currentSpeed = locationService.getLatestSpeed();
       setSpeed(currentSpeed);
 
-      setSession((prev) => {
-        if (!prev) return null;
+      const activeSession = sessionRef.current;
+      if (!activeSession) return;
 
-        let updatedStatus = prev.status;
-        const currentActiveHeading = headingRef.current;
+      // 1. Pure navigation state evaluation (no side-effects inside state updater)
+      const evalResult = evaluateNavigationState(
+        activeSession,
+        loc,
+        headingRef.current,
+        currentSpeed,
+        routeMatcherRef.current,
+        arrivalTrackerRef.current,
+        routeRecoveryRef.current,
+        offRouteDetectorRef.current
+      );
 
-        // 1. Intelligent Map Matching
-        const match = routeMatcherRef.current.match(
-          prev.route.geometry,
-          loc,
-          prev.current_step_index,
-          currentActiveHeading
-        );
+      // 2. Pure state update
+      setSession(evalResult.nextSession);
 
-        // 2. Multi-Stage Arrival Tracking
-        if (prev.route.geometry.length > 0) {
-          const destination = prev.route.geometry[prev.route.geometry.length - 1];
-          const arrivalEval = arrivalTrackerRef.current.update(loc, destination);
-          setArrivalStage(arrivalEval.stage);
-
-          if (arrivalEval.stage === 'APPROACHING' && prev.status === 'NAVIGATING') {
-            events.emit(NavigationEvents.DESTINATION_NEARBY, {
-              session: prev,
-              distanceM: arrivalEval.distanceToDestinationM,
-              timestamp: Date.now(),
-            });
-            voiceService.announce(formatDestinationNearbySpeech(prev.route.destination_name));
-          } else if (arrivalEval.hasArrived && prev.status === 'NAVIGATING') {
-            updatedStatus = 'ARRIVED';
-            events.emit(NavigationEvents.ARRIVED, {
-              session: { ...prev, status: 'ARRIVED', current_location: loc },
-              timestamp: Date.now(),
-            });
-            events.emit(NavigationEvents.ARRIVAL_CONFIRMED, {
-              session: { ...prev, status: 'ARRIVED', current_location: loc },
-              stage: 'ARRIVED',
-              timestamp: Date.now(),
-            });
-            voiceService.announce(formatArrivalSpeech(prev.route.destination_name));
-          }
-        }
-
-        // 3. Route Recovery Evaluation
-        const recoveryEval = routeRecoveryRef.current.evaluateRecovery(
-          match,
-          offRouteDetectorRef.current
-        );
-        if (recoveryEval.isRecovered) {
-          setOffRouteStatus('ON_ROUTE');
-          setRerouteStatus('RECOVERED');
-          events.emit(NavigationEvents.ROUTE_RECOVERED, {
-            session: prev,
-            distanceM: match.perpendicularDistanceM,
-            timestamp: Date.now(),
-          });
-          navigationLogger.log('route_recovered', { distanceM: match.perpendicularDistanceM });
-          voiceService.announce(formatRouteRecoveredSpeech());
-        }
-
-        // 4. Off-Route Detection
-        const offRouteEval = offRouteDetectorRef.current.evaluate(match, loc);
-        setOffRouteStatus(offRouteEval.status);
-
-        if (offRouteEval.status === 'OFF_ROUTE_POTENTIAL') {
-          events.emit(NavigationEvents.OFF_ROUTE_DETECTED, {
-            session: prev,
-            distanceM: offRouteEval.perpendicularDistanceM,
-            sampleCount: offRouteEval.consecutiveCount,
-            timestamp: Date.now(),
-          });
-          navigationLogger.log('off_route', {
-            status: 'OFF_ROUTE_POTENTIAL',
-            distanceM: offRouteEval.perpendicularDistanceM,
-            consecutiveCount: offRouteEval.consecutiveCount,
-          });
-        } else if (offRouteEval.status === 'OFF_ROUTE_CONFIRMED' && prev.status === 'NAVIGATING') {
-          events.emit(NavigationEvents.OFF_ROUTE_CONFIRMED, {
-            session: prev,
-            distanceM: offRouteEval.perpendicularDistanceM,
-            reason: offRouteEval.reason,
-            timestamp: Date.now(),
-          });
-          navigationLogger.log('off_route', {
-            status: 'OFF_ROUTE_CONFIRMED',
-            distanceM: offRouteEval.perpendicularDistanceM,
-            reason: offRouteEval.reason,
-          });
-
-          // Trigger automatic reroute if permitted
-          if (rerouteManagerRef.current.canReroute()) {
-            voiceService.announce(formatOffRouteSpeech());
-            triggerReroute(offRouteEval.reason);
-          }
-        }
-
-        // 5. Upcoming Turn Maneuver Voice Announcement
-        if (offRouteEval.status === 'ON_ROUTE' && prev.status === 'NAVIGATING' && updatedStatus !== 'ARRIVED') {
-          const currentStep = prev.route.steps[match.nearestSegmentIndex];
-          const maneuverVoice = maneuverTrackerRef.current.evaluateManeuver(
-            currentStep,
-            match.distanceToNextManeuverM
-          );
-          if (maneuverVoice) {
-            voiceService.announce(maneuverVoice);
-            events.emit(NavigationEvents.VOICE_INSTRUCTION, {
-              instruction: maneuverVoice,
-              timestamp: Date.now(),
-            });
-            navigationLogger.log('voice_played', {
-              text: maneuverVoice.text,
-              stage: maneuverVoice.stage,
-            });
-          }
-        }
-
-        // 6. Route Progress State Assembly
-        const updatedProgress: NavigationProgress = {
-          ...prev.progress,
-          distance_traveled_m: match.progressAlongRouteM,
-          remaining_distance_m: match.remainingDistanceM,
-          fraction_completed: match.fractionCompleted,
-          current_step_index: match.nearestSegmentIndex,
-        };
-
-        const updated: NavigationSession = {
-          ...prev,
-          status: updatedStatus,
-          progress: updatedProgress,
-          current_location: loc,
-          current_speed: currentSpeed,
-          remaining_distance_m: match.remainingDistanceM,
-          current_step_index: match.nearestSegmentIndex,
-          off_route_status: offRouteEval.status,
-        };
-
-        syncPersistence(updated);
-        return updated;
+      // 3. Side effects executed outside React updater
+      processArrivalSideEffects({
+        prevSession: activeSession,
+        nextSession: evalResult.nextSession,
+        arrivalEval: evalResult.arrivalEval,
+        loc,
+        events,
+        voice: voiceService,
+        setArrivalStage,
       });
+
+      processOffRouteSideEffects({
+        prevSession: activeSession,
+        match: evalResult.match,
+        recoveryEval: evalResult.recoveryEval,
+        offRouteEval: evalResult.offRouteEval,
+        events,
+        voice: voiceService,
+        logger: navigationLogger,
+        canReroute: () => rerouteManagerRef.current.canReroute(),
+        triggerReroute,
+        setOffRouteStatus,
+        setRerouteStatus,
+      });
+
+      processManeuverVoiceSideEffects({
+        prevSession: activeSession,
+        nextSession: evalResult.nextSession,
+        match: evalResult.match,
+        offRouteEval: evalResult.offRouteEval,
+        maneuverTracker: maneuverTrackerRef.current,
+        voice: voiceService,
+        events,
+        logger: navigationLogger,
+      });
+
+      persistNavigationSession(evalResult.nextSession);
     });
 
     const unsubHeading = locationService.subscribeHeading((h) => {
@@ -434,7 +354,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
     } catch (err) {
       setGpsError(err instanceof Error ? err.message : String(err));
     }
-  }, [events, syncPersistence, triggerReroute]);
+  }, [events, triggerReroute]);
 
   // Teardown GPS and Voice on unmount to prevent leaks
   useEffect(() => {
@@ -448,7 +368,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
     (route: ScoredRoute, destinationName: string, title?: string): NavigationSession => {
       const newSession = createNavigationSession(route, destinationName, title);
       setSession(newSession);
-      syncPersistence(newSession);
+      persistNavigationSession(newSession);
 
       // Reset trackers for new session
       routeMatcherRef.current = new RouteMatcher();
@@ -464,152 +384,158 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 
       return newSession;
     },
-    [syncPersistence]
+    []
   );
 
   const startNavigation = useCallback(() => {
-    setSession((prev) => {
-      if (!prev) {
-        throw new Error('Cannot start navigation: no active session initialized.');
-      }
-      assertValidTransition(prev.status, 'NAVIGATING');
+    const active = sessionRef.current;
+    if (!active) {
+      throw new Error('Cannot start navigation: no active session initialized.');
+    }
+    assertValidTransition(active.status, 'NAVIGATING');
 
-      const now = new Date().toISOString();
-      const updated: NavigationSession = {
-        ...prev,
-        status: 'NAVIGATING',
-        started_at: prev.started_at ?? now,
-        paused: false,
-      };
+    const now = new Date().toISOString();
+    const updated: NavigationSession = {
+      ...active,
+      status: 'NAVIGATING',
+      started_at: active.started_at ?? now,
+      paused: false,
+    };
 
-      syncPersistence(updated);
-      events.emit(NavigationEvents.STARTED, {
-        session: updated,
-        timestamp: Date.now(),
-      });
-      return updated;
+    setSession(updated);
+    persistNavigationSession(updated);
+    events.emit(NavigationEvents.STARTED, {
+      session: updated,
+      timestamp: Date.now(),
     });
 
     // Start live GPS tracking when entering NAVIGATING
     startGps();
-  }, [events, syncPersistence, startGps]);
+  }, [events, startGps]);
 
   const pauseNavigation = useCallback(() => {
-    setSession((prev) => {
-      if (!prev) {
-        throw new Error('Cannot pause navigation: no active session.');
-      }
-      assertValidTransition(prev.status, 'PAUSED');
+    const active = sessionRef.current;
+    if (!active) {
+      throw new Error('Cannot pause navigation: no active session.');
+    }
+    assertValidTransition(active.status, 'PAUSED');
 
-      const updated: NavigationSession = {
-        ...prev,
-        status: 'PAUSED',
-        paused: true,
-      };
+    const updated: NavigationSession = {
+      ...active,
+      status: 'PAUSED',
+      paused: true,
+    };
 
-      syncPersistence(updated);
-      events.emit(NavigationEvents.PAUSED, {
-        session: updated,
-        timestamp: Date.now(),
-      });
-      return updated;
+    setSession(updated);
+    persistNavigationSession(updated);
+    events.emit(NavigationEvents.PAUSED, {
+      session: updated,
+      timestamp: Date.now(),
     });
-  }, [events, syncPersistence]);
+  }, [events]);
 
   const resumeNavigation = useCallback(() => {
-    setSession((prev) => {
-      if (!prev) {
-        throw new Error('Cannot resume navigation: no active session.');
-      }
-      assertValidTransition(prev.status, 'NAVIGATING');
+    const active = sessionRef.current;
+    if (!active) {
+      throw new Error('Cannot resume navigation: no active session.');
+    }
+    assertValidTransition(active.status, 'NAVIGATING');
 
-      const updated: NavigationSession = {
-        ...prev,
-        status: 'NAVIGATING',
-        paused: false,
-      };
+    const updated: NavigationSession = {
+      ...active,
+      status: 'NAVIGATING',
+      paused: false,
+    };
 
-      syncPersistence(updated);
-      events.emit(NavigationEvents.RESUMED, {
-        session: updated,
-        timestamp: Date.now(),
-      });
-      return updated;
+    setSession(updated);
+    persistNavigationSession(updated);
+    events.emit(NavigationEvents.RESUMED, {
+      session: updated,
+      timestamp: Date.now(),
     });
 
     // Ensure GPS tracking is active on resume
     startGps();
-  }, [events, syncPersistence, startGps]);
+  }, [events, startGps]);
 
+  // Idempotent stopNavigation (Task 3 / MED-4): safe to call repeatedly in IDLE
   const stopNavigation = useCallback(() => {
+    const active = sessionRef.current;
+    if (!active || active.status === 'IDLE') {
+      // Already IDLE - idempotent no-op, never throws
+      return;
+    }
+
+    assertValidTransition(active.status, 'IDLE');
+
     stopGps();
     voiceService.stop().catch(() => {});
     rerouteManagerRef.current.cancelInFlight();
 
-    setSession((prev) => {
-      if (!prev) {
-        return null;
-      }
-      assertValidTransition(prev.status, 'IDLE');
+    const updated: NavigationSession = {
+      ...active,
+      status: 'IDLE',
+      paused: false,
+    };
 
-      const updated: NavigationSession = {
-        ...prev,
-        status: 'IDLE',
-        paused: false,
-      };
+    // Record to history
+    navigationHistoryService
+      .recordSession(active, 'CANCELLED', rerouteManagerRef.current.getRerouteHistory())
+      .catch(() => {});
 
-      // Record to history
-      navigationHistoryService
-        .recordSession(prev, 'CANCELLED', rerouteManagerRef.current.getRerouteHistory())
-        .catch(() => {});
+    persistNavigationSession(null);
+    setSession(null);
 
-      syncPersistence(null);
-      events.emit(NavigationEvents.CANCELLED, {
-        session: updated,
-        timestamp: Date.now(),
-      });
-      return null;
+    events.emit(NavigationEvents.CANCELLED, {
+      session: updated,
+      timestamp: Date.now(),
     });
-  }, [events, syncPersistence, stopGps]);
+  }, [events, stopGps]);
 
   const completeNavigation = useCallback(() => {
+    const active = sessionRef.current;
+    if (!active) {
+      throw new Error('Cannot complete navigation: no active session.');
+    }
+    assertValidTransition(active.status, 'COMPLETED');
+
     stopGps();
     voiceService.stop().catch(() => {});
 
-    setSession((prev) => {
-      if (!prev) {
-        throw new Error('Cannot complete navigation: no active session.');
-      }
-      assertValidTransition(prev.status, 'COMPLETED');
+    const updated: NavigationSession = {
+      ...active,
+      status: 'COMPLETED',
+      completed: true,
+      paused: false,
+    };
 
-      const updated: NavigationSession = {
-        ...prev,
-        status: 'COMPLETED',
-        completed: true,
-        paused: false,
-      };
+    // Record to history
+    navigationHistoryService
+      .recordSession(active, 'COMPLETED', rerouteManagerRef.current.getRerouteHistory())
+      .catch(() => {});
 
-      // Record to history
-      navigationHistoryService
-        .recordSession(prev, 'COMPLETED', rerouteManagerRef.current.getRerouteHistory())
-        .catch(() => {});
+    persistNavigationSession(null);
+    setSession(updated);
 
-      syncPersistence(null);
-      events.emit(NavigationEvents.COMPLETED, {
-        session: updated,
-        timestamp: Date.now(),
-      });
-      return updated;
+    events.emit(NavigationEvents.COMPLETED, {
+      session: updated,
+      timestamp: Date.now(),
     });
-  }, [events, syncPersistence, stopGps]);
+  }, [events, stopGps]);
 
+  // Transitions through FSM rather than bypassing directly (Task 3 / MED-4)
   const resetNavigation = useCallback(() => {
+    const active = sessionRef.current;
+    if (active && active.status !== 'IDLE') {
+      assertValidTransition(active.status, 'IDLE');
+    }
+
     stopGps();
     voiceService.stop().catch(() => {});
     rerouteManagerRef.current.cancelInFlight();
-    syncPersistence(null);
+    persistNavigationSession(null);
     setSession(null);
-  }, [syncPersistence, stopGps]);
+  }, [stopGps]);
 
   const toggleMute = useCallback(async (): Promise<boolean> => {
     const muted = await voiceService.toggleMute();
@@ -625,68 +551,92 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   const currentRoute: NavigationRoute | null = session ? session.route : null;
   const currentProgress: NavigationProgress | null = session ? session.progress : null;
 
-  const value: NavigationContextValue = useMemo(
+  // 1. Focused Actions Context Value (Stable callbacks - NEVER triggers re-renders)
+  const actionsValue: NavigationActionsContextValue = useMemo(
+    () => ({
+      initSession,
+      startNavigation,
+      pauseNavigation,
+      resumeNavigation,
+      stopNavigation,
+      resetNavigation,
+      completeNavigation,
+      triggerReroute: manualTriggerReroute,
+      toggleMute,
+    }),
+    [
+      initSession,
+      startNavigation,
+      pauseNavigation,
+      resumeNavigation,
+      stopNavigation,
+      resetNavigation,
+      completeNavigation,
+      manualTriggerReroute,
+      toggleMute,
+    ]
+  );
+
+  // 2. Focused Navigation State Context Value (Low-frequency updates)
+  const stateValue: NavigationStateContextValue = useMemo(
     () => ({
       session,
       state: currentState,
       route: currentRoute,
       progress: currentProgress,
-      events,
       isRestoring,
-      location,
-      heading,
-      speed,
-      gpsHealth,
-      gpsError,
-      isGpsTracking,
-      offRouteStatus,
-      rerouteStatus,
-      latestComparison,
-      arrivalStage,
-      isMuted,
-      toggleMute,
-      triggerReroute: manualTriggerReroute,
-      initSession,
-      startNavigation,
-      pauseNavigation,
-      resumeNavigation,
-      stopNavigation,
-      resetNavigation,
-      completeNavigation,
+      events,
     }),
-    [
-      session,
-      currentState,
-      currentRoute,
-      currentProgress,
-      events,
-      isRestoring,
+    [session, currentState, currentRoute, currentProgress, isRestoring, events]
+  );
+
+  // 3. Focused Telemetry Context Value (High-frequency GPS updates)
+  const telemetryValue: NavigationTelemetryContextValue = useMemo(
+    () => ({
       location,
       heading,
       speed,
       gpsHealth,
       gpsError,
       isGpsTracking,
+    }),
+    [location, heading, speed, gpsHealth, gpsError, isGpsTracking]
+  );
+
+  // 4. Focused Diagnostics Context Value (Status updates)
+  const diagnosticsValue: NavigationDiagnosticsContextValue = useMemo(
+    () => ({
       offRouteStatus,
       rerouteStatus,
       latestComparison,
       arrivalStage,
       isMuted,
-      toggleMute,
-      manualTriggerReroute,
-      initSession,
-      startNavigation,
-      pauseNavigation,
-      resumeNavigation,
-      stopNavigation,
-      resetNavigation,
-      completeNavigation,
-    ]
+    }),
+    [offRouteStatus, rerouteStatus, latestComparison, arrivalStage, isMuted]
+  );
+
+  // 5. Composite Context Value (For full backward compatibility)
+  const compositeValue: NavigationContextValue = useMemo(
+    () => ({
+      ...actionsValue,
+      ...stateValue,
+      ...telemetryValue,
+      ...diagnosticsValue,
+    }),
+    [actionsValue, stateValue, telemetryValue, diagnosticsValue]
   );
 
   return (
-    <NavigationContext.Provider value={value}>
-      {children}
-    </NavigationContext.Provider>
+    <NavigationActionsContext.Provider value={actionsValue}>
+      <NavigationStateContext.Provider value={stateValue}>
+        <NavigationDiagnosticsContext.Provider value={diagnosticsValue}>
+          <NavigationTelemetryContext.Provider value={telemetryValue}>
+            <NavigationContext.Provider value={compositeValue}>
+              {children}
+            </NavigationContext.Provider>
+          </NavigationTelemetryContext.Provider>
+        </NavigationDiagnosticsContext.Provider>
+      </NavigationStateContext.Provider>
+    </NavigationActionsContext.Provider>
   );
 }

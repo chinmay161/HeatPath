@@ -1,59 +1,21 @@
-import { createContext } from 'react';
-import type { ScoredRoute } from '../../hooks/useFindRoutes';
-import type { NavigationEventEmitter } from '../events';
-import type {
-  GPSHealth,
-  Heading,
-  LocationSample,
-  SpeedEstimate,
-} from '../location/types';
-import type {
-  NavigationProgress,
-  NavigationRoute,
-  NavigationSession,
-  NavigationState,
-} from '../models';
+/**
+ * NavigationContext.tsx
+ *
+ * Composite navigation context for backward compatibility.
+ * Combines NavigationStateContext, NavigationTelemetryContext,
+ * NavigationActionsContext, and NavigationDiagnosticsContext.
+ */
 
-export interface NavigationContextValue {
-  readonly session: NavigationSession | null;
-  readonly state: NavigationState;
-  readonly route: NavigationRoute | null;
-  readonly progress: NavigationProgress | null;
-  readonly events: NavigationEventEmitter;
-  readonly isRestoring: boolean;
-  // Live GPS tracking fields (Phase 5.2)
-  readonly location: LocationSample | null;
-  readonly heading: Heading;
-  readonly speed: SpeedEstimate;
-  readonly gpsHealth: GPSHealth;
-  readonly gpsError: string | null;
-  // Intelligent Navigation fields (Phase 5.4)
-  readonly offRouteStatus: 'ON_ROUTE' | 'OFF_ROUTE_POTENTIAL' | 'OFF_ROUTE_CONFIRMED';
-  readonly rerouteStatus: 'IDLE' | 'DETECTING' | 'REQUESTING' | 'COMPARING' | 'RECOVERED' | 'FAILED';
-  readonly latestComparison: {
-    readonly scoreDeltaPct: number;
-    readonly shadeDeltaPct: number;
-    readonly durationDeltaMin: number;
-    readonly distanceDeltaM: number;
-    readonly isCooler: boolean;
-    readonly summaryText: string;
-  } | null;
-  readonly arrivalStage: 'EN_ROUTE' | 'APPROACHING' | 'ARRIVED' | 'COMPLETED';
-  readonly isMuted: boolean;
-  readonly toggleMute: () => Promise<boolean>;
-  readonly triggerReroute: () => Promise<void>;
-  // Methods
-  readonly initSession: (
-    route: ScoredRoute,
-    destinationName: string,
-    title?: string
-  ) => NavigationSession;
-  readonly startNavigation: () => void;
-  readonly pauseNavigation: () => void;
-  readonly resumeNavigation: () => void;
-  readonly stopNavigation: () => void;
-  readonly resetNavigation: () => void;
-  readonly completeNavigation: () => void;
-}
+import { createContext } from 'react';
+import type { NavigationStateContextValue } from './NavigationStateContext';
+import type { NavigationTelemetryContextValue } from './NavigationTelemetryContext';
+import type { NavigationActionsContextValue } from './NavigationActionsContext';
+import type { NavigationDiagnosticsContextValue } from './NavigationDiagnosticsContext';
+
+export interface NavigationContextValue
+  extends NavigationStateContextValue,
+    NavigationTelemetryContextValue,
+    NavigationActionsContextValue,
+    NavigationDiagnosticsContextValue {}
 
 export const NavigationContext = createContext<NavigationContextValue | null>(null);
