@@ -36,6 +36,26 @@ else:
     cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.vercel\.app$"
     cors_credentials = True
 
+import re
+from starlette.types import ASGIApp, Scope, Receive, Send
+
+
+class NormalizePathMiddleware:
+    """
+    Normalizes consecutive slashes in the URL path (e.g., //preferences/ -> /preferences/).
+    Prevents 404s when frontend environment variables inadvertently include a trailing slash.
+    """
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] == "http":
+            scope["path"] = re.sub(r"/+", "/", scope["path"])
+            if "raw_path" in scope:
+                scope["raw_path"] = re.sub(rb"/+", b"/", scope["raw_path"])
+        await self.app(scope, receive, send)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -44,6 +64,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(NormalizePathMiddleware)
 
 app.include_router(conditions.router)
 app.include_router(routes.router)

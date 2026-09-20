@@ -1,7 +1,8 @@
 import { Platform } from 'react-native';
 
 // Android emulator routes localhost through 10.0.2.2.
-const apiBaseFromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
+const rawApiBase = process.env.EXPO_PUBLIC_API_URL?.trim();
+const apiBaseFromEnv = rawApiBase ? rawApiBase.replace(/\/+$/, '') : undefined;
 
 export const API_BASE =
   apiBaseFromEnv ||

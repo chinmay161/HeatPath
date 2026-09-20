@@ -33,7 +33,7 @@ export async function defaultRouteFetcher(
   endLon: number,
   signal?: AbortSignal
 ): Promise<RoutesResult> {
-  const apiBase = process.env.EXPO_PUBLIC_API_URL?.trim() || 'http://localhost:8000';
+  const apiBase = (process.env.EXPO_PUBLIC_API_URL?.trim() || 'http://localhost:8000').replace(/\/+$/, '');
   const response = await fetch(`${apiBase}/find-routes/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

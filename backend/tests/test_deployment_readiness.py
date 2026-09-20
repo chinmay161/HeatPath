@@ -114,3 +114,16 @@ async def test_health_check_endpoint():
         assert "database" in data
         assert "cache" in data
         assert "postgis" in data
+
+
+@pytest.mark.asyncio
+async def test_consecutive_slash_normalization():
+    """Verify that requests with double slashes (e.g. //preferences/) are normalized and succeed."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        req = client.build_request("GET", "http://test//preferences/")
+        resp = await client.send(req)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "heat_sensitivity" in data
+
