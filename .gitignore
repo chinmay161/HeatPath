@@ -38,4 +38,7 @@ mobile/dist/
 *.db
 backend/data/*.db
 
-
+# Deployment and credentials docs
+DEPLOYMENT.md
+deployment.md
+[Dd][Ee][Pp][Ll][Oo][Yy]*.md

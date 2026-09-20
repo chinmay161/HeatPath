@@ -11,6 +11,21 @@ logger = logging.getLogger(__name__)
 
 _pool: asyncpg.Pool = None
 
+def resolve_ssl_mode(dsn: str) -> str:
+    """
+    Resolve SSL mode for asyncpg connection pool.
+    Neon and cloud PostgreSQL instances strictly require SSL.
+    Local development environments typically run without SSL.
+    """
+    lower = dsn.lower()
+    if "sslmode=disable" in lower:
+        return "disable"
+    if "sslmode=require" in lower or "neon.tech" in lower or "render.com" in lower or "supabase.co" in lower:
+        return "require"
+    if any(h in lower for h in ["localhost", "127.0.0.1", "172.", "192.168."]):
+        return "disable"
+    return "require"
+
 async def get_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
@@ -18,12 +33,13 @@ async def get_pool() -> asyncpg.Pool:
             "POSTGIS_DSN", 
             "postgresql://heatpath_app:heatpath_secure_pass_2026@127.0.0.1:5433/heatpath_osm"
         )
-        logger.info(f"Initializing PostGIS connection pool with DSN: {dsn}")
+        ssl_mode = resolve_ssl_mode(dsn)
+        logger.info(f"Initializing PostGIS connection pool with DSN: {dsn} (ssl={ssl_mode})")
         _pool = await asyncpg.create_pool(
             dsn=dsn,
             min_size=2,
             max_size=10,
-            ssl='disable'
+            ssl=ssl_mode
         )
     return _pool
 
@@ -110,16 +126,15 @@ async def fetch_shade_features_postgis(lat: float, lon: float, radius_m: int = 6
 
     try:
         async with pool.acquire() as conn:
-            # Run all queries concurrently
-            results = await asyncio.gather(
-                conn.fetch(query_trees, lon, lat, radius_m),
-                conn.fetch(query_buildings, lon, lat, radius_m),
-                conn.fetch(query_forests, lon, lat, radius_m),
-                conn.fetch(query_lines, lon, lat, radius_m),
-                conn.fetch(query_polygons_lines, lon, lat, radius_m),
-                conn.fetch(query_shelters_point, lon, lat, radius_m),
-                conn.fetch(query_shelters_polygon, lon, lat, radius_m),
-            )
+            results = [
+                await conn.fetch(query_trees, lon, lat, radius_m),
+                await conn.fetch(query_buildings, lon, lat, radius_m),
+                await conn.fetch(query_forests, lon, lat, radius_m),
+                await conn.fetch(query_lines, lon, lat, radius_m),
+                await conn.fetch(query_polygons_lines, lon, lat, radius_m),
+                await conn.fetch(query_shelters_point, lon, lat, radius_m),
+                await conn.fetch(query_shelters_polygon, lon, lat, radius_m),
+            ]
         
         features = []
         

@@ -1,6 +1,7 @@
 """
 Main FastAPI application module.
 """
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
@@ -9,20 +10,37 @@ from app.routers import conditions, routes, preferences, find_routes, heat_zones
 app = FastAPI(title="HeatPath API", version="0.1.0")
 
 # CORS middleware configuration
+base_origins = [
+    "http://localhost:8081",
+    "http://localhost:8082",
+    "http://localhost:19006",
+    "http://localhost:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:8081",
+    "http://127.0.0.1:8082",
+    "http://127.0.0.1:8000",
+]
+
+configured_origins = [
+    origin.strip()
+    for origin in config.ALLOWED_ORIGINS.split(",")
+    if origin.strip()
+]
+
+if "*" in configured_origins:
+    cors_origins = ["*"]
+    cors_origin_regex = None
+    cors_credentials = False
+else:
+    cors_origins = list(dict.fromkeys(base_origins + configured_origins))
+    cors_origin_regex = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.vercel\.app$"
+    cors_credentials = True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8081",
-        "http://localhost:8082",
-        "http://localhost:19006",
-        "http://localhost:8000",
-        "http://localhost:3000",
-        "http://127.0.0.1:8081",
-        "http://127.0.0.1:8082",
-        "http://127.0.0.1:8000",
-    ],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
+    allow_credentials=cors_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -54,7 +72,7 @@ async def health_check():
 
     postgis_status = "healthy"
     try:
-        pool = await get_pool()
+        pool = await asyncio.wait_for(get_pool(), timeout=2.0)
         if pool is None:
             postgis_status = "unavailable"
     except Exception:

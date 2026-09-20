@@ -43,7 +43,7 @@ async def main():
         print(f"Missing tiles: {len(missing_keys)}")
         return
 
-    logger.info(f"Starting cache warmup. Total grid tiles: {total_count}, already cached: {len(existing_db_keys)}, missing to fetch: {len(missing_keys)}")
+    logger.info(f"Starting cache warmup. Total grid tiles: {total_count}, already cached: {len(existing_keys)}, missing to fetch: {len(missing_keys)}")
 
     done = 0
     total_to_fetch = len(missing_keys)
