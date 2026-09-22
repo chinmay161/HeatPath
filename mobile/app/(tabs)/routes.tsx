@@ -20,6 +20,7 @@ import Icon from '../../components/Icon';
 import { colors, fonts } from '../../theme/colors';
 import { scoreToColor, scoreToLabel } from '../../utils/scoreToColor';
 import { useNavigation } from '../../navigation';
+import { usePreferences } from '../../hooks/usePreferences';
 
 // ─── API → display mapping ────────────────────────────────────────────────────
 
@@ -28,7 +29,11 @@ const ROUTE_META = [
   { title: 'Alternate', sub: 'less shade',                icon: 'routes', iconBg: '#E1ECFB', iconColor: colors.coolBlue },
 ];
 
-function apiRouteToRoute(r: ScoredRoute, idx: number): Route {
+function apiRouteToRoute(
+  r: ScoredRoute,
+  idx: number,
+  formatTempFn?: (tempC: number | null | undefined, options?: { includeUnit?: boolean }) => string,
+): Route {
   const sev = scoreToLabel(r.overall_score);
   const totalDist = r.distance_m ?? r.segment_distances_m.reduce((a, b) => a + b, 0) ?? 1;
   const walkMin = r.duration_min ?? Math.max(1, Math.round(totalDist / 100));
@@ -57,7 +62,7 @@ function apiRouteToRoute(r: ScoredRoute, idx: number): Route {
     iconColor: meta.iconColor,
     severity: sev,
     min: `${walkMin} min`,
-    feels: `${Math.round(r.feels_like_c)}°`,
+    feels: formatTempFn ? formatTempFn(r.feels_like_c, { includeUnit: false }) : `${Math.round(r.feels_like_c)}°`,
     feelsColor: scoreToColor(r.overall_score),
     shade: `${Math.round(r.avg_shade_pct)}%`,
     bar,
@@ -88,8 +93,10 @@ export default function RoutesScreen() {
   const loading = preloadedData ? false : fallback.loading;
   const error = preloadedData ? null : fallback.error;
 
+  const { preferences, formatTemp, isFahrenheit } = usePreferences();
+
   // Map API routes to display format; fall back to empty while loading/error
-  const displayRoutes: Route[] = data?.routes.map(apiRouteToRoute) ?? [];
+  const displayRoutes: Route[] = data?.routes.map((r, i) => apiRouteToRoute(r, i, formatTemp)) ?? [];
   const [selectedIdx, setSelectedIdx] = useState(0);
   const cur = displayRoutes[selectedIdx] ?? displayRoutes[0];
 
@@ -108,7 +115,8 @@ export default function RoutesScreen() {
     if (displayRoutes.length >= 2) {
       const r1 = data!.routes[0];
       const r2 = data!.routes[1];
-      const tempDiff  = Math.round(r2.feels_like_c - r1.feels_like_c);
+      const rawDiff = r2.feels_like_c - r1.feels_like_c;
+      const tempDiff = isFahrenheit ? Math.round((rawDiff * 9) / 5) : Math.round(rawDiff);
       if (isDesktop) return 'Tap a route to preview it on the map.';
       return `The coolest route keeps you in ${Math.round(r1.avg_shade_pct)}% shade${tempDiff > 0 ? ` — ${tempDiff}° cooler than the alternate` : ''}.`;
     }
@@ -316,6 +324,7 @@ export default function RoutesScreen() {
 // ─── Route details & environmental breakdown ──────────────────────────────────
 
 function RouteDetailsBreakdown({ route }: { route: ScoredRoute }) {
+  const { formatTemp } = usePreferences();
   const warnings = route.warnings ?? [];
   const distStr = route.distance_m
     ? route.distance_m < 1000
@@ -360,7 +369,7 @@ function RouteDetailsBreakdown({ route }: { route: ScoredRoute }) {
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Perceived Heat</Text>
           <Text style={styles.statValue}>
-            {Math.round(route.feels_like_c)}°C
+            {formatTemp(route.feels_like_c)}
           </Text>
         </View>
         <View style={styles.statCell}>

@@ -57,9 +57,13 @@ export function usePreferences() {
         // 2. Refresh from backend
         getPreferences()
           .then((remote) => {
-            setPreferences(remote);
-            broadcast(remote);
-            AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(remote)).catch(() => {});
+            const currentUnits = memoryPreferences?.units;
+            const finalPrefs = (currentUnits && remote.units === 'celsius' && currentUnits !== 'celsius')
+              ? { ...remote, units: currentUnits }
+              : remote;
+            setPreferences(finalPrefs);
+            broadcast(finalPrefs);
+            AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(finalPrefs)).catch(() => {});
             setError(null);
           })
           .catch((err) => {
@@ -78,17 +82,23 @@ export function usePreferences() {
   const savePreferences = useCallback(async (updates: Partial<UserPreferences>) => {
     setSaving(true);
     setError(null);
+    const merged = { ...preferences, ...updates };
+    setPreferences(merged);
+    broadcast(merged);
+    await AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(merged)).catch(() => {});
+
     try {
-      const merged = { ...preferences, ...updates };
-      // Send to backend first (Backend is Single Source of Truth)
       const updated = await apiUpdatePreferences(merged);
-      setPreferences(updated);
-      broadcast(updated);
-      await AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(updated));
-      return updated;
+      if (updated) {
+        setPreferences(updated);
+        broadcast(updated);
+        await AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(updated)).catch(() => {});
+        return updated;
+      }
+      return merged;
     } catch (e: any) {
-      setError(e.message || 'Failed to update preferences');
-      throw e;
+      console.warn('[usePreferences] Backend sync failed, keeping local preference:', e?.message);
+      return merged;
     } finally {
       setSaving(false);
     }
@@ -112,13 +122,25 @@ export function usePreferences() {
     await savePreferences({ favorite_routes: updatedList });
   }, [preferences, savePreferences]);
 
-  const formatTemp = useCallback((tempC: number | null | undefined): string => {
-    if (tempC == null) return '—';
+  const isFahrenheit = preferences.units === 'fahrenheit';
+  const unitSymbol = isFahrenheit ? '°F' : '°C';
+
+  const convertTemp = useCallback((tempC: number | null | undefined): number | null => {
+    if (tempC == null) return null;
     if (preferences.units === 'fahrenheit') {
-      const f = Math.round((tempC * 9) / 5 + 32);
-      return `${f}°F`;
+      return Math.round((tempC * 9) / 5 + 32);
     }
-    return `${Math.round(tempC)}°C`;
+    return Math.round(tempC);
+  }, [preferences.units]);
+
+  const formatTemp = useCallback((tempC: number | null | undefined, options?: { includeUnit?: boolean }): string => {
+    if (tempC == null) return '—';
+    const isF = preferences.units === 'fahrenheit';
+    const val = isF ? Math.round((tempC * 9) / 5 + 32) : Math.round(tempC);
+    if (options?.includeUnit === false) {
+      return `${val}°`;
+    }
+    return `${val}°${isF ? 'F' : 'C'}`;
   }, [preferences.units]);
 
   return {
@@ -130,5 +152,8 @@ export function usePreferences() {
     addFavoriteRoute,
     removeFavoriteRoute,
     formatTemp,
+    convertTemp,
+    isFahrenheit,
+    unitSymbol,
   };
 }

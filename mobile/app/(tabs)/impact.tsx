@@ -8,6 +8,7 @@ import { MascotBadge, Mascot } from '../../components/Mascot';
 import { Button } from '../../components/ui';
 import Icon from '../../components/Icon';
 import { colors, fonts } from '../../theme/colors';
+import { usePreferences } from '../../hooks/usePreferences';
 
 // ─── Walk-in-progress param shape ────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ export default function ImpactScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<WalkParams>();
   const { walks, stats, recordWalk, loading } = useWalkHistory();
+  const { preferences, formatTemp } = usePreferences();
 
   const [walkJustRecorded, setWalkJustRecorded] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -155,7 +157,7 @@ export default function ImpactScreen() {
             {params.routeTitle} route{'\n'}to {params.destName}
           </Text>
           <Text style={{ fontFamily: fonts.ui, fontSize: 13, color: colors.slateMuted, marginTop: 2 }}>
-            {fmtDistance(distanceM)} · {fmtDuration(distanceM)} · feels {feelLikeC.toFixed(0)}°C · {shadePct}% shade
+            {fmtDistance(distanceM)} · {fmtDuration(distanceM)} · feels {formatTemp(feelLikeC)} · {shadePct}% shade
           </Text>
           {heatHoursAvoided > 0 && (
             <View style={styles.avoidedPill}>

@@ -84,13 +84,7 @@ export default function HomeScreen() {
     useNearbyCoolSpots(location?.lat ?? null, location?.lon ?? null);
 
   const { recents } = useRecentSearches();
-  const { preferences } = usePreferences();
-
-  const isFahrenheit = preferences.units === 'fahrenheit';
-  const toDisplayTemp = (c: number | null) => {
-    if (c == null) return null;
-    return isFahrenheit ? Math.round((c * 9) / 5 + 32) : Math.round(c);
-  };
+  const { preferences, convertTemp } = usePreferences();
 
   const locationText = locationLabel ?? (location
     ? 'Your location'
@@ -103,8 +97,8 @@ export default function HomeScreen() {
   const hasError  = !isLoading && (locError != null || condError != null);
 
   // Display values: real from API where available, null otherwise
-  const feelsLike  = cond && cond.heat_index != null ? toDisplayTemp(cond.heat_index)    : null;
-  const realTemp   = cond && cond.temperature_c != null ? toDisplayTemp(cond.temperature_c) : null;
+  const feelsLike  = cond && cond.heat_index != null ? convertTemp(cond.heat_index)    : null;
+  const realTemp   = cond && cond.temperature_c != null ? convertTemp(cond.temperature_c) : null;
   const humidity   = cond && cond.humidity_pct != null ? Math.round(cond.humidity_pct)  : null;
   const sevLabel   = cond?.severity ?? null;
   const aqiIndex   = cond?.aqi_index ?? null;
@@ -309,7 +303,7 @@ export default function HomeScreen() {
         <View style={{ flexDirection: 'row', gap: 9 }}>
           <QuickLink onPress={onCoolspots} icon="park" bg="#E6F4E2" color={colors.forest} label="Cool spots" />
           <QuickLink onPress={onBestTimePress} icon="clock" bg="#E1ECFB" color={colors.coolBlue} label="Best time" />
-          <QuickLink onPress={onHeatmap} icon="heatmap" bg="#FCEEDD" color={colors.high} label="Heat map" />
+          <QuickLink onPress={onHeatmap} icon="heatmap" bg="#FCEEDD" color={colors.high} label="Heat Map" />
           <QuickLink onPress={onSearch} icon="routes" bg="#E6F4E2" color={colors.forest} label="Routes" />
         </View>
 

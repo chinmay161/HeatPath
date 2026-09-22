@@ -86,7 +86,7 @@ export function RouteStats({
         <View style={styles.gridItem}>
           <Text style={styles.gridLabel}>Comfort Score</Text>
           <Text style={[styles.gridValue, { color: scoreColor }]}>
-            {scoreVal != null ? `${scoreVal}/100` : '—'}
+            {scoreVal != null ? `${scoreVal}%` : '—'}
           </Text>
         </View>
       </View>

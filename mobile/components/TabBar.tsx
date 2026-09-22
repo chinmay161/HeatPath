@@ -7,7 +7,7 @@ import { colors, fonts } from '../theme/colors';
 const TABS = [
   { key: 'home', label: 'Home', icon: 'home' },
   { key: 'routes', label: 'Routes', icon: 'routes' },
-  { key: 'map', label: 'Map', icon: 'heatmap' },
+  { key: 'map', label: 'Heat Map', icon: 'heatmap' },
   { key: 'impact', label: 'Impact', icon: 'chart' },
   { key: 'profile', label: 'Profile', icon: 'user' },
 ] as const;

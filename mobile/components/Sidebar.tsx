@@ -8,7 +8,7 @@ import { useUserProfile } from '../hooks/useUserProfile';
 const NAV_ITEMS = [
   { key: 'home', label: 'Home', icon: 'home' },
   { key: 'routes', label: 'Routes', icon: 'routes' },
-  { key: 'map', label: 'Heat map', icon: 'heatmap' },
+  { key: 'map', label: 'Heat Map', icon: 'heatmap' },
   { key: 'impact', label: 'Impact', icon: 'chart' },
   { key: 'profile', label: 'Profile', icon: 'user' },
 ] as const;

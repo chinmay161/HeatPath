@@ -10,6 +10,7 @@ import { HeatZoneMap } from '../../components/HeatZoneMap';
 import { DataQualityNote } from '../../components/DataQualityNote';
 import Icon from '../../components/Icon';
 import * as Location from 'expo-location';
+import { usePreferences } from '../../hooks/usePreferences';
 import {
   getHeatZones,
   type HeatZonePoint,
@@ -73,6 +74,7 @@ function errorCopy(error: string | null): string | null {
 
 export default function MapScreen() {
   const { isDesktop } = useResponsiveLayout();
+  const { preferences, convertTemp } = usePreferences();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -229,7 +231,9 @@ const HEAT_MAP_RESOLUTION = 12;
     grid.filter(p => p.source !== 'overpass').length > grid.length / 2;
   const comfort = averageComfort(grid);
   const comfortPct = comfort == null ? '--' : `${Math.round(comfort * 100)}%`;
-  const heatIndex = conditions?.heat_index == null ? '--' : `${Math.round(conditions.heat_index)}°`;
+  const rawHeatIndex = conditions?.heat_index;
+  const displayHeatIndex = rawHeatIndex == null ? null : convertTemp(rawHeatIndex);
+  const heatIndex = displayHeatIndex == null ? '--' : `${displayHeatIndex}°`;
   const aqi = conditions?.aqi == null ? '--' : String(Math.round(conditions.aqi));
 
   const Advisory = (
@@ -399,7 +403,7 @@ const HEAT_MAP_RESOLUTION = 12;
               {mapLocationText}
             </Text>
             <Text style={{ fontFamily: fonts.display, fontSize: 18, color: colors.slateText }}>
-              City heat map
+              Heat Map
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -457,7 +461,7 @@ const HEAT_MAP_RESOLUTION = 12;
             {mapLocationText}
           </Text>
           <Text style={{ fontFamily: fonts.display, fontSize: 19, color: colors.slateText }}>
-            City heat map
+            Heat Map
           </Text>
         </View>
         <TouchableOpacity

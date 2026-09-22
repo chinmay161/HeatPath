@@ -44,7 +44,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="routes" options={{ title: 'Routes' }} />
-      <Tabs.Screen name="map" options={{ title: 'Map' }} />
+      <Tabs.Screen name="map" options={{ title: 'Heat Map' }} />
       <Tabs.Screen name="impact" options={{ title: 'Impact' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
       {/* Sub-flows — navigable but not visible as tabs */}
