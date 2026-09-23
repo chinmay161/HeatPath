@@ -143,3 +143,60 @@ test('Networking: apiFetch automatically attaches identity headers and merges ca
     globalThis.fetch = originalFetch;
   }
 });
+
+test('Cross-Browser Isolation: Chrome, Firefox, and Edge maintain independent guest identities and storage', async () => {
+  // Simulate 3 distinct browsers with separate, isolated local storage partitions
+  class BrowserLocalStorage {
+    private store = new Map<string, string>();
+    async getItem(k: string): Promise<string | null> {
+      return this.store.get(k) ?? null;
+    }
+    async setItem(k: string, v: string): Promise<void> {
+      this.store.set(k, String(v));
+    }
+    async removeItem(k: string): Promise<void> {
+      this.store.delete(k);
+    }
+  }
+
+  const chromeStorage = new BrowserLocalStorage();
+  const firefoxStorage = new BrowserLocalStorage();
+  const edgeStorage = new BrowserLocalStorage();
+
+  // Helper simulating launch of IdentityProvider in a specific browser storage partition
+  const launchInBrowser = async (storage: BrowserLocalStorage) => {
+    const existing = await storage.getItem(STORAGE_KEY_GUEST_ID);
+    if (existing && isValidGuestId(existing)) {
+      return existing;
+    }
+    const newId = `${IDENTITY_PREFIX_GUEST}${generateUUID()}`;
+    await storage.setItem(STORAGE_KEY_GUEST_ID, newId);
+    return newId;
+  };
+
+  // 1. Launch in Chrome
+  const chromeGuestId = await launchInBrowser(chromeStorage);
+  // 2. Launch in Firefox
+  const firefoxGuestId = await launchInBrowser(firefoxStorage);
+  // 3. Launch in Edge
+  const edgeGuestId = await launchInBrowser(edgeStorage);
+
+  // Assert all 3 browser guest identities are distinct
+  assert.notEqual(chromeGuestId, firefoxGuestId, 'Chrome and Firefox must have different guest IDs');
+  assert.notEqual(firefoxGuestId, edgeGuestId, 'Firefox and Edge must have different guest IDs');
+  assert.notEqual(chromeGuestId, edgeGuestId, 'Chrome and Edge must have different guest IDs');
+
+  assert.ok(isValidGuestId(chromeGuestId));
+  assert.ok(isValidGuestId(firefoxGuestId));
+  assert.ok(isValidGuestId(edgeGuestId));
+
+  // Assert restarting browser reloads the identical guest ID
+  const reloadedChrome = await launchInBrowser(chromeStorage);
+  const reloadedFirefox = await launchInBrowser(firefoxStorage);
+  const reloadedEdge = await launchInBrowser(edgeStorage);
+
+  assert.equal(reloadedChrome, chromeGuestId);
+  assert.equal(reloadedFirefox, firefoxGuestId);
+  assert.equal(reloadedEdge, edgeGuestId);
+});
+

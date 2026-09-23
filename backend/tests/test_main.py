@@ -96,13 +96,15 @@ def test_score_route(httpx_mock, monkeypatch):
 def test_update_preferences():
     """Test that preferences endpoint saves and returns settings."""
     payload = {"heat_sensitivity": 8, "aqi_sensitivity": 3}
-    response = client.post("/preferences/", json=payload)
+    guest_headers = {"X-Guest-ID": "guest|550e8400-e29b-41d4-a716-446655440000"}
+    response = client.post("/preferences/", json=payload, headers=guest_headers)
     assert response.status_code == 200
     assert response.json()["status"] == "success"
 
 def test_get_preferences():
     """Test that GET /preferences returns current settings."""
-    response = client.get("/preferences/")
+    guest_headers = {"X-Guest-ID": "guest|550e8400-e29b-41d4-a716-446655440000"}
+    response = client.get("/preferences/", headers=guest_headers)
     assert response.status_code == 200
     data = response.json()
     assert "heat_sensitivity" in data
