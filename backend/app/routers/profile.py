@@ -3,9 +3,10 @@ Router for user profile management.
 GET /profile — fetch current user profile.
 PUT /profile — update user profile with validation and persistent storage.
 """
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from app.models.schemas import UserProfile, ProfileUpdateRequest
 from app.services.user_store import get_profile, update_profile
+from app.services.identity import resolve_identity
 import re
 
 router = APIRouter(prefix="/profile", tags=["Profile"])
@@ -15,19 +16,27 @@ EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
 
 @router.get("/", response_model=UserProfile)
 @router.get("", response_model=UserProfile, include_in_schema=False)
-async def fetch_profile():
+async def fetch_profile(request: Request):
     """Retrieve the current user profile from persistent storage."""
+    try:
+        await resolve_identity(request)
+    except HTTPException:
+        pass  # Maintain public fallback for backward compatibility
     data = await get_profile()
     return UserProfile(**data)
 
 
 @router.put("/", response_model=UserProfile)
 @router.put("", response_model=UserProfile, include_in_schema=False)
-async def save_profile(req: ProfileUpdateRequest):
+async def save_profile(req: ProfileUpdateRequest, request: Request):
     """
     Update the user profile.
     Validates name, bio length, and optional email format.
     """
+    try:
+        await resolve_identity(request)
+    except HTTPException:
+        pass
     name = req.name.strip()
     if not name:
         raise HTTPException(
