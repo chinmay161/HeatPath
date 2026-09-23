@@ -65,16 +65,22 @@ async def _cache_delete(key: str) -> bool:
         return False
 
 
+from app.services.preferences_store import get_preferences_store
+
 _db_pool: Optional[asyncpg.Pool] = None
 _db_initialized: bool = False
 
-# Synchronous fallback memory cache for non-async startup contexts
-_cached_preferences: Dict[str, Any] = DEFAULT_PREFERENCES.copy()
+# Synchronous fallback memory cache keyed by user_id
+_user_cached_preferences: Dict[str, Dict[str, Any]] = {"1": DEFAULT_PREFERENCES.copy()}
+_cached_preferences: Dict[str, Any] = _user_cached_preferences["1"]
 
 
-def get_preferences_cached() -> Dict[str, Any]:
+def get_preferences_cached(user_id: Any = 1) -> Dict[str, Any]:
     """Return in-memory cached preferences for immediate synchronous access."""
-    return _cached_preferences.copy()
+    uid = str(user_id)
+    if uid not in _user_cached_preferences:
+        _user_cached_preferences[uid] = DEFAULT_PREFERENCES.copy()
+    return _user_cached_preferences[uid].copy()
 
 
 async def get_db_pool() -> asyncpg.Pool:
@@ -210,7 +216,11 @@ async def reset_db() -> None:
                  DEFAULT_PREFERENCES["theme"])
 
     global _cached_preferences
-    _cached_preferences = DEFAULT_PREFERENCES.copy()
+    _user_cached_preferences.clear()
+    _user_cached_preferences["1"] = DEFAULT_PREFERENCES.copy()
+    _cached_preferences = _user_cached_preferences["1"]
+
+    await get_preferences_store().reset()
 
     # Invalidate Redis cache
     await _cache_delete("user:1:profile")
@@ -333,13 +343,18 @@ async def update_profile(data: Dict[str, Any], user_id: int = 1) -> Dict[str, An
         return fallback_profile
 
 
-async def get_preferences(user_id: int = 1) -> Dict[str, Any]:
-    """Retrieve user preferences and normalized favorite routes from PostgreSQL, with Redis cache read-through and in-memory fallback."""
-    cache_key = f"user:{user_id}:preferences"
+async def get_preferences(user_id: Any = 1) -> Dict[str, Any]:
+    """Retrieve user preferences from user-scoped store or PostgreSQL, with Redis cache and in-memory fallback."""
+    if isinstance(user_id, str) and not user_id.isdigit():
+        return await get_preferences_store().get(user_id)
+
+    int_user_id = int(user_id)
+    cache_key = f"user:{int_user_id}:preferences"
     cached = await _cache_get(cache_key)
     if isinstance(cached, dict) and "heat_sensitivity" in cached:
         global _cached_preferences
-        _cached_preferences = cached.copy()
+        _user_cached_preferences[str(int_user_id)] = cached.copy()
+        _cached_preferences = _user_cached_preferences[str(int_user_id)]
         return cached
 
     try:
@@ -405,9 +420,13 @@ async def get_preferences(user_id: int = 1) -> Dict[str, Any]:
         return _cached_preferences.copy()
 
 
-async def update_preferences(data: Dict[str, Any], user_id: int = 1) -> Dict[str, Any]:
-    """Update user preferences and normalized favorite routes in PostgreSQL within an atomic transaction, invalidating Redis cache."""
-    current = await get_preferences(user_id)
+async def update_preferences(data: Dict[str, Any], user_id: Any = 1) -> Dict[str, Any]:
+    """Update user preferences and normalized favorite routes."""
+    if isinstance(user_id, str) and not user_id.isdigit():
+        return await get_preferences_store().update(user_id, data)
+
+    int_user_id = int(user_id)
+    current = await get_preferences(int_user_id)
 
     heat_sensitivity = int(data.get("heat_sensitivity", current["heat_sensitivity"]))
     aqi_sensitivity = int(data.get("aqi_sensitivity", current["aqi_sensitivity"]))
