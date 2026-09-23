@@ -7,7 +7,18 @@ import {
   type FavoriteRoute,
 } from '../config/api';
 
-const PREFERENCES_KEY = 'heatpath_user_preferences_cache';
+import { identityProvider } from '../services/identity';
+
+const PREFERENCES_KEY_BASE = 'heatpath_user_preferences_cache';
+
+async function getStorageKey(): Promise<string> {
+  try {
+    const userId = await identityProvider.getUserId();
+    return `${PREFERENCES_KEY_BASE}_${userId}`;
+  } catch {
+    return PREFERENCES_KEY_BASE;
+  }
+}
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
   heat_sensitivity: 5,
@@ -43,36 +54,38 @@ export function usePreferences() {
     listeners.add(listener);
 
     // 1. Instant load from local storage
-    AsyncStorage.getItem(PREFERENCES_KEY)
-      .then((raw) => {
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            setPreferences(parsed);
-            memoryPreferences = parsed;
-          } catch {}
-        }
-      })
-      .finally(() => {
-        // 2. Refresh from backend
-        getPreferences()
-          .then((remote) => {
-            const currentUnits = memoryPreferences?.units;
-            const finalPrefs = (currentUnits && remote.units === 'celsius' && currentUnits !== 'celsius')
-              ? { ...remote, units: currentUnits }
-              : remote;
-            setPreferences(finalPrefs);
-            broadcast(finalPrefs);
-            AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(finalPrefs)).catch(() => {});
-            setError(null);
-          })
-          .catch((err) => {
-            if (!memoryPreferences) {
-              setError(err.message || 'Could not load preferences');
-            }
-          })
-          .finally(() => setLoading(false));
-      });
+    getStorageKey().then((storageKey) => {
+      AsyncStorage.getItem(storageKey)
+        .then((raw) => {
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              setPreferences(parsed);
+              memoryPreferences = parsed;
+            } catch {}
+          }
+        })
+        .finally(() => {
+          // 2. Refresh from backend
+          getPreferences()
+            .then((remote) => {
+              const currentUnits = memoryPreferences?.units;
+              const finalPrefs = (currentUnits && remote.units === 'celsius' && currentUnits !== 'celsius')
+                ? { ...remote, units: currentUnits }
+                : remote;
+              setPreferences(finalPrefs);
+              broadcast(finalPrefs);
+              AsyncStorage.setItem(storageKey, JSON.stringify(finalPrefs)).catch(() => {});
+              setError(null);
+            })
+            .catch((err) => {
+              if (!memoryPreferences) {
+                setError(err.message || 'Could not load preferences');
+              }
+            })
+            .finally(() => setLoading(false));
+        });
+    });
 
     return () => {
       listeners.delete(listener);
@@ -85,14 +98,15 @@ export function usePreferences() {
     const merged = { ...preferences, ...updates };
     setPreferences(merged);
     broadcast(merged);
-    await AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(merged)).catch(() => {});
+    const storageKey = await getStorageKey();
+    await AsyncStorage.setItem(storageKey, JSON.stringify(merged)).catch(() => {});
 
     try {
       const updated = await apiUpdatePreferences(merged);
       if (updated) {
         setPreferences(updated);
         broadcast(updated);
-        await AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify(updated)).catch(() => {});
+        await AsyncStorage.setItem(storageKey, JSON.stringify(updated)).catch(() => {});
         return updated;
       }
       return merged;

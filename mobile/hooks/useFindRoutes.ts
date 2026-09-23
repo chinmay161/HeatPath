@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { API_BASE } from '../config/api';
+import { apiFetch } from '../config/api';
 
 export type ConfidenceReport = {
   value: number;
@@ -66,7 +66,7 @@ export async function findRoutes(
   endLon: number,
   signal?: AbortSignal,
 ): Promise<RoutesResult> {
-  const response = await fetch(`${API_BASE}/find-routes/`, {
+  const response = await apiFetch('/find-routes/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,

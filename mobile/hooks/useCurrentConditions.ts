@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { API_BASE } from '../config/api';
+import { apiFetch } from '../config/api';
 
 export type Severity = 'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME';
 
@@ -39,7 +39,7 @@ export function useCurrentConditions(lat: number | null, lon: number | null): St
     let cancelled = false;
     setState(prev => ({ ...prev, loading: true, error: null }));
 
-    fetch(`${API_BASE}/conditions/?lat=${lat}&lon=${lon}`)
+    apiFetch(`/conditions/?lat=${lat}&lon=${lon}`)
       .then(r => {
         if (!r.ok) throw new Error(`Server error ${r.status}`);
         return r.json() as Promise<Conditions>;

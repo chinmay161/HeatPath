@@ -6,6 +6,7 @@
  * immutability, network failure resilience, and dynamic environmental rescoring.
  */
 
+import { apiFetch } from '../../config/api';
 import type { RoutesResult, ScoredRoute } from '../../hooks/useFindRoutes';
 import type { LocationSample } from '../location/types';
 import type { NavigationCoordinate, NavigationRoute, NavigationSession } from '../models';
@@ -33,8 +34,7 @@ export async function defaultRouteFetcher(
   endLon: number,
   signal?: AbortSignal
 ): Promise<RoutesResult> {
-  const apiBase = (process.env.EXPO_PUBLIC_API_URL?.trim() || 'http://localhost:8000').replace(/\/+$/, '');
-  const response = await fetch(`${apiBase}/find-routes/`, {
+  const response = await apiFetch('/find-routes/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,

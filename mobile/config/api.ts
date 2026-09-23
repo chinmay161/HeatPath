@@ -1,4 +1,12 @@
-import { Platform } from 'react-native';
+import { identityProvider } from '../services/identity';
+
+function getIsAndroid(): boolean {
+  try {
+    return require('react-native').Platform?.OS === 'android';
+  } catch {
+    return false;
+  }
+}
 
 // Android emulator routes localhost through 10.0.2.2.
 const rawApiBase = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -8,10 +16,31 @@ export const API_BASE =
   apiBaseFromEnv ||
   (() => {
     console.warn('[api] EXPO_PUBLIC_API_URL not set, using emulator default');
-    return Platform.OS === 'android'
+    return getIsAndroid()
       ? 'http://10.0.2.2:8000'
       : 'http://localhost:8000';
   })();
+
+/**
+ * Centralized API fetch client that automatically attaches user identity headers
+ * (X-Guest-ID for guests, Authorization Bearer for Auth0 users).
+ */
+export async function apiFetch(pathOrUrl: string, init?: RequestInit): Promise<Response> {
+  const url = pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')
+    ? pathOrUrl
+    : `${API_BASE}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`;
+
+  const identityHeaders = await identityProvider.getIdentityHeaders();
+  const mergedHeaders: Record<string, string> = {
+    ...identityHeaders,
+    ...((init?.headers as Record<string, string>) || {}),
+  };
+
+  return fetch(url, {
+    ...init,
+    headers: mergedHeaders,
+  });
+}
 
 export type HeatZonesBounds = {
   north: number;
@@ -55,7 +84,7 @@ export async function getHeatZones(
   const url =
     `${API_BASE}/heat-zones?north=${north}&south=${south}` +
     `&east=${east}&west=${west}&resolution=${resolution}`;
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Heat zones fetch failed: ${err}`);
@@ -73,7 +102,7 @@ export type UserProfile = {
 };
 
 export async function getProfile(): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/profile/`);
+  const res = await apiFetch('/profile/');
   if (!res.ok) {
     throw new Error(`Profile fetch failed: ${res.status}`);
   }
@@ -81,7 +110,7 @@ export async function getProfile(): Promise<UserProfile> {
 }
 
 export async function updateProfile(data: Partial<UserProfile> & { name: string }): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/profile/`, {
+  const res = await apiFetch('/profile/', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -115,7 +144,7 @@ export type UserPreferences = {
 };
 
 export async function getPreferences(): Promise<UserPreferences> {
-  const res = await fetch(`${API_BASE}/preferences/`);
+  const res = await apiFetch('/preferences/');
   if (!res.ok) {
     throw new Error(`Preferences fetch failed: ${res.status}`);
   }
@@ -123,7 +152,7 @@ export async function getPreferences(): Promise<UserPreferences> {
 }
 
 export async function updatePreferences(data: Partial<UserPreferences>): Promise<UserPreferences> {
-  const res = await fetch(`${API_BASE}/preferences/`, {
+  const res = await apiFetch('/preferences/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -159,7 +188,7 @@ export type HourlyForecastResponse = {
 };
 
 export async function getHourlyForecast(lat: number, lon: number): Promise<HourlyForecastResponse> {
-  const res = await fetch(`${API_BASE}/forecast/hourly?lat=${lat}&lon=${lon}`);
+  const res = await apiFetch(`/forecast/hourly?lat=${lat}&lon=${lon}`);
   if (!res.ok) {
     throw new Error(`Forecast fetch failed: ${res.status}`);
   }
@@ -194,8 +223,8 @@ export async function getCoolSpots(
   radiusM: number = 1500,
   category: string = 'all',
 ): Promise<CoolSpotsResponse> {
-  const url = `${API_BASE}/cool-spots?lat=${lat}&lon=${lon}&radius_m=${radiusM}&category=${encodeURIComponent(category)}`;
-  const res = await fetch(url);
+  const url = `/cool-spots?lat=${lat}&lon=${lon}&radius_m=${radiusM}&category=${encodeURIComponent(category)}`;
+  const res = await apiFetch(url);
   if (!res.ok) {
     throw new Error(`Cool spots fetch failed: ${res.status}`);
   }

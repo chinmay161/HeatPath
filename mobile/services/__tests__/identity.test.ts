@@ -113,3 +113,33 @@ test('Guest Identity: clear removes identity from both memory and storage', asyn
   assert.notEqual(id2, id1, 'New guest ID must be generated after clearing');
   assert.ok(isValidGuestId(id2));
 });
+
+test('Networking: apiFetch automatically attaches identity headers and merges caller headers', async () => {
+  await AsyncStorage.clear();
+  const { apiFetch, API_BASE } = await import('../../config/api');
+  const { identityProvider } = await import('../identity');
+  await identityProvider.clear();
+
+  const originalFetch = globalThis.fetch;
+  let interceptedUrl: string | null = null;
+  let interceptedHeaders: any = null;
+
+  globalThis.fetch = (async (url: any, init: any) => {
+    interceptedUrl = String(url);
+    interceptedHeaders = init?.headers;
+    return new Response(JSON.stringify({ status: 'ok' }), { status: 200 });
+  }) as any;
+
+  try {
+    const res = await apiFetch('/test-endpoint', {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assert.equal(res.status, 200);
+    assert.equal(interceptedUrl, `${API_BASE}/test-endpoint`);
+    assert.ok(interceptedHeaders[HEADER_GUEST_ID], 'Must automatically include X-Guest-ID');
+    assert.ok(isValidGuestId(interceptedHeaders[HEADER_GUEST_ID]));
+    assert.equal(interceptedHeaders['Content-Type'], 'application/json', 'Must preserve caller headers');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
