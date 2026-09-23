@@ -2,7 +2,7 @@
  * Cross-Platform Identity Service
  *
  * Implements guest identity generation, persistence in AsyncStorage, and an IdentityProvider
- * abstraction designed for seamless future Auth0 integration across Web, iOS, and Android.
+ * abstraction with full Auth0 authentication integration across Web, iOS, and Android.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +15,7 @@ import {
   STORAGE_KEY_AUTH_TOKEN,
   UUID_V4_REGEX,
 } from '../config/identityConstants';
+import { auth0Service, type Auth0Session } from './auth0';
 
 export interface UserIdentity {
   readonly type: 'guest' | 'authenticated';
@@ -30,6 +31,9 @@ export interface IIdentityProvider {
   setGuestId(id: string): Promise<void>;
   getAuthToken(): Promise<string | null>;
   setAuthToken(token: string | null): Promise<void>;
+  login(): Promise<Auth0Session>;
+  logout(): Promise<void>;
+  restoreSession(): Promise<Auth0Session | null>;
   clear(): Promise<void>;
 }
 
@@ -125,9 +129,39 @@ export class IdentityProvider implements IIdentityProvider {
   }
 
   /**
+   * Restores authenticated session on launch.
+   */
+  async restoreSession(): Promise<Auth0Session | null> {
+    return auth0Service.restoreSession();
+  }
+
+  /**
+   * Performs Auth0 interactive login.
+   */
+  async login(): Promise<Auth0Session> {
+    return auth0Service.login();
+  }
+
+  /**
+   * Performs Auth0 logout and returns to guest mode.
+   */
+  async logout(): Promise<void> {
+    await auth0Service.logout();
+    this.memoryAuthToken = null;
+    await AsyncStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+  }
+
+  /**
    * Retrieves the current authentication token (Auth0 JWT), if configured.
    */
   async getAuthToken(): Promise<string | null> {
+    // 1. Check Auth0 active session first
+    const activeToken = await auth0Service.getValidAccessToken();
+    if (activeToken) {
+      return activeToken;
+    }
+
+    // 2. Check explicit token override in memory / storage
     if (this.memoryAuthToken !== null) {
       return this.memoryAuthToken;
     }
@@ -137,7 +171,7 @@ export class IdentityProvider implements IIdentityProvider {
   }
 
   /**
-   * Sets or clears the authentication token.
+   * Sets or clears the authentication token manually.
    */
   async setAuthToken(token: string | null): Promise<void> {
     this.memoryAuthToken = token;
@@ -145,6 +179,7 @@ export class IdentityProvider implements IIdentityProvider {
       await AsyncStorage.setItem(STORAGE_KEY_AUTH_TOKEN, token);
     } else {
       await AsyncStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+      await auth0Service.clearSession();
     }
   }
 
@@ -162,22 +197,26 @@ export class IdentityProvider implements IIdentityProvider {
   async getCurrentIdentity(): Promise<UserIdentity> {
     const token = await this.getAuthToken();
     if (token) {
-      // Future Auth0 token resolution placeholder
-      let sub = 'authenticated-user';
-      try {
-        const parts = token.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(
-            typeof atob === 'function'
-              ? atob(parts[1])
-              : Buffer.from(parts[1], 'base64').toString('utf-8')
-          );
-          if (payload.sub) {
-            sub = payload.sub;
+      const session = auth0Service.getSession();
+      let sub = session?.user?.sub || 'authenticated-user';
+
+      if (!session) {
+        // Attempt to parse sub claim from JWT payload
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(
+              typeof atob === 'function'
+                ? atob(parts[1])
+                : Buffer.from(parts[1], 'base64').toString('utf-8')
+            );
+            if (payload.sub) {
+              sub = payload.sub;
+            }
           }
+        } catch {
+          // Fallback to placeholder if token is opaque or mock
         }
-      } catch {
-        // Fallback to placeholder sub if not decodable
       }
 
       const normalizedUserId = sub.startsWith(IDENTITY_PREFIX_AUTH0) ? sub : `${IDENTITY_PREFIX_AUTH0}${sub}`;
@@ -215,6 +254,7 @@ export class IdentityProvider implements IIdentityProvider {
     this.memoryGuestId = null;
     this.memoryAuthToken = null;
     this.initPromise = null;
+    await auth0Service.clearSession();
     await AsyncStorage.multiRemove([STORAGE_KEY_GUEST_ID, STORAGE_KEY_AUTH_TOKEN]);
   }
 }
@@ -229,3 +269,6 @@ export const getIdentityHeaders = () => identityProvider.getIdentityHeaders();
 export const getUserId = () => identityProvider.getUserId();
 export const setAuthToken = (token: string | null) => identityProvider.setAuthToken(token);
 export const clearIdentity = () => identityProvider.clear();
+export const login = () => identityProvider.login();
+export const logout = () => identityProvider.logout();
+export const restoreSession = () => identityProvider.restoreSession();

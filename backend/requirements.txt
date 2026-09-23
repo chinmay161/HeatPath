@@ -8,3 +8,4 @@ pytest-httpx==0.30.0
 pytest-asyncio==0.23.6
 asyncpg==0.29.0
 redis==8.1.0
+pyjwt[crypto]>=2.8.0

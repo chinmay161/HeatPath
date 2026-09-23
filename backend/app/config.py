@@ -42,4 +42,10 @@ class Config:
     SCORE_VERSION = os.getenv("SCORE_VERSION", "v1.3")
     SCORING_MIN_CONFIDENCE_THRESHOLD = float(os.getenv("SCORING_MIN_CONFIDENCE_THRESHOLD", "0.40"))
 
+    # Auth0 Authentication Configuration
+    AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN", "")
+    AUTH0_AUDIENCE = os.getenv("AUTH0_AUDIENCE", "")
+    AUTH0_ISSUER = os.getenv("AUTH0_ISSUER", "")
+    AUTH0_ALGORITHMS = [algo.strip() for algo in os.getenv("AUTH0_ALGORITHMS", "RS256").split(",") if algo.strip()]
+
 config = Config()
