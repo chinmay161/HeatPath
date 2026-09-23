@@ -4,7 +4,7 @@
 Router for finding and scoring candidate routes.
 """
 import asyncio
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from app.models.schemas import (
     RouteRequest, ScoredRoutesResponse, ScoredRoute,
     ConditionsSummary, Location
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/find-routes", tags=["Routes"])
 
 
 @router.post("/", response_model=ScoredRoutesResponse)
-async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
+async def find_routes(request: RouteRequest, http_request: Request) -> ScoredRoutesResponse:
     """
     Find and score multiple candidate pedestrian routes.
     Capped at 2 routes for speed.
@@ -55,8 +55,12 @@ async def find_routes(request: RouteRequest) -> ScoredRoutesResponse:
 
     heat_index     = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
     aqi_val        = raw_aqi.get("value") if isinstance(raw_aqi, dict) else raw_aqi
-    aqi_normalised = min(float(aqi_val) / 300.0, 1.0) if aqi_val is not None else 0.0
-    user_prefs     = await store_get_preferences()
+    try:
+        from app.services.identity import resolve_identity
+        user_id = await resolve_identity(http_request)
+        user_prefs = await store_get_preferences(user_id)
+    except Exception:
+        user_prefs = await store_get_preferences()
     avoid_crowds   = user_prefs.get("avoid_crowds", False)
 
     walking_speed_pref = user_prefs.get("walking_speed", "normal")
