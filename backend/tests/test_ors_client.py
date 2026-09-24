@@ -118,6 +118,10 @@ def test_find_routes_endpoint_integration(httpx_mock, monkeypatch):
         lambda lat, lon: {"elevation": 60.0, "azimuth": 180.0, "is_night": False},
     )
     monkeypatch.setattr(solar, "get_current_elevation", lambda lat, lon: 60.0)
+    import app.services.osm_shade as osm_shade
+    async def mock_postgis_empty(*args, **kwargs):
+        return [], "postgis_empty"
+    monkeypatch.setattr(osm_shade, "fetch_shade_features_postgis", mock_postgis_empty)
 
     # Mock ORS Directions Response
     mock_geojson = {

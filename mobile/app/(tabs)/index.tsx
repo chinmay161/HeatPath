@@ -21,6 +21,13 @@ import { useNearbyCoolSpots, type CoolSpot } from '../../hooks/useNearbyCoolSpot
 import { useRecentSearches, type RecentSearch } from '../../hooks/useRecentSearches';
 import { usePreferences } from '../../hooks/usePreferences';
 import { HourlyComfortCard } from '../../components/HourlyComfortCard';
+import { useAuth } from '../../hooks/useAuth';
+import { AuthPromptModal } from '../../components/AuthPromptModal';
+import {
+  canShowWelcomePrompt,
+  markWelcomePromptSeen,
+  logAuthPromptEvent,
+} from '../../services/authPrompts';
 
 
 
@@ -85,6 +92,38 @@ export default function HomeScreen() {
 
   const { recents } = useRecentSearches();
   const { preferences, convertTemp } = usePreferences();
+  const { isAuthenticated, login, isSigningIn } = useAuth();
+  const [welcomePromptVisible, setWelcomePromptVisible] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    canShowWelcomePrompt({ isAuthenticated }).then((canShow) => {
+      if (mounted && canShow) {
+        setWelcomePromptVisible(true);
+        logAuthPromptEvent('auth_prompt_welcome_shown');
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [isAuthenticated]);
+
+  const handleWelcomeDismiss = async () => {
+    setWelcomePromptVisible(false);
+    await markWelcomePromptSeen();
+    logAuthPromptEvent('auth_prompt_welcome_continue_guest');
+  };
+
+  const handleWelcomeSignIn = async () => {
+    logAuthPromptEvent('auth_prompt_welcome_sign_in');
+    await markWelcomePromptSeen();
+    try {
+      await login();
+      setWelcomePromptVisible(false);
+    } catch {
+      // Handled via AuthContext
+    }
+  };
 
   const locationText = locationLabel ?? (location
     ? 'Your location'
@@ -265,6 +304,13 @@ export default function HomeScreen() {
             />
           </View>
         </ScrollView>
+        <AuthPromptModal
+          visible={welcomePromptVisible}
+          variant="welcome"
+          onDismiss={handleWelcomeDismiss}
+          onSignIn={handleWelcomeSignIn}
+          isSigningIn={isSigningIn}
+        />
       </View>
     );
   }
@@ -310,6 +356,13 @@ export default function HomeScreen() {
         {BestTime}
       </ScrollView>
 
+      <AuthPromptModal
+        visible={welcomePromptVisible}
+        variant="welcome"
+        onDismiss={handleWelcomeDismiss}
+        onSignIn={handleWelcomeSignIn}
+        isSigningIn={isSigningIn}
+      />
     </View>
   );
 }

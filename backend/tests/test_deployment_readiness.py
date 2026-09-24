@@ -121,7 +121,11 @@ async def test_consecutive_slash_normalization():
     """Verify that requests with double slashes (e.g. //preferences/) are normalized and succeed."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        req = client.build_request("GET", "http://test//preferences/")
+        req = client.build_request(
+            "GET",
+            "http://test//preferences/",
+            headers={"x-guest-id": "guest|550e8400-e29b-41d4-a716-446655440000"},
+        )
         resp = await client.send(req)
         assert resp.status_code == 200
         data = resp.json()

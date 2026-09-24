@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,13 @@ import { colors, fonts } from '../../theme/colors';
 import { scoreToColor, scoreToLabel } from '../../utils/scoreToColor';
 import { useNavigation } from '../../navigation';
 import { usePreferences } from '../../hooks/usePreferences';
+import { useAuth } from '../../hooks/useAuth';
+import { AuthPromptModal } from '../../components/AuthPromptModal';
+import {
+  canShowRoutePrompt,
+  markRoutePromptSeen,
+  logAuthPromptEvent,
+} from '../../services/authPrompts';
 
 // ─── API → display mapping ────────────────────────────────────────────────────
 
@@ -100,7 +107,51 @@ export default function RoutesScreen() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const cur = displayRoutes[selectedIdx] ?? displayRoutes[0];
 
-  const { initSession } = useNavigation();
+  const { initSession, state: navState, session } = useNavigation();
+  const { isAuthenticated, login, isSigningIn } = useAuth();
+  const [routePromptVisible, setRoutePromptVisible] = useState(false);
+
+  const isNavigationActive = navState !== 'IDLE';
+  const isRerouting =
+    session?.reroute_status != null &&
+    session.reroute_status !== 'IDLE' &&
+    session.reroute_status !== 'FAILED';
+
+  useEffect(() => {
+    let mounted = true;
+    if (data?.routes && data.routes.length > 0) {
+      canShowRoutePrompt({
+        isAuthenticated,
+        isNavigationActive,
+        isRerouting,
+      }).then((canShow) => {
+        if (mounted && canShow) {
+          setRoutePromptVisible(true);
+          logAuthPromptEvent('auth_prompt_route_shown');
+        }
+      });
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [data?.routes, isAuthenticated, isNavigationActive, isRerouting]);
+
+  const handleRouteDismiss = async () => {
+    setRoutePromptVisible(false);
+    await markRoutePromptSeen();
+    logAuthPromptEvent('auth_prompt_route_maybe_later');
+  };
+
+  const handleRouteSignIn = async () => {
+    logAuthPromptEvent('auth_prompt_route_sign_in');
+    await markRoutePromptSeen();
+    try {
+      await login();
+      setRoutePromptVisible(false);
+    } catch {
+      // Handled via AuthContext
+    }
+  };
 
   const onBack = () => router.back();
   const onStart = () => {
@@ -265,6 +316,13 @@ export default function RoutesScreen() {
             </Button>
           </ScrollView>
         </View>
+        <AuthPromptModal
+          visible={routePromptVisible}
+          variant="first_route"
+          onDismiss={handleRouteDismiss}
+          onSignIn={handleRouteSignIn}
+          isSigningIn={isSigningIn}
+        />
       </View>
     );
   }
@@ -317,6 +375,14 @@ export default function RoutesScreen() {
           Start the {cur.title} route →
         </Button>
       </View>
+
+      <AuthPromptModal
+        visible={routePromptVisible}
+        variant="first_route"
+        onDismiss={handleRouteDismiss}
+        onSignIn={handleRouteSignIn}
+        isSigningIn={isSigningIn}
+      />
     </View>
   );
 }

@@ -10,6 +10,7 @@ import {
   type Auth0User,
   type AuthErrorCode,
 } from '../services/auth0';
+import { recordAuthenticationSuccess } from '../services/authPrompts';
 
 export type MigrationStatus = 'idle' | 'migrating' | 'success' | 'error' | 'skipped';
 
@@ -84,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(restored);
         setUser(restored.user);
         setIsAuthenticated(true);
+        recordAuthenticationSuccess().catch(() => {});
         const resolvedIdentity = await identityProvider.getCurrentIdentity();
         setIdentity(resolvedIdentity);
         setUserId(resolvedIdentity.userId);
@@ -152,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(newSession);
         setUser(newSession.user);
         setIsAuthenticated(true);
+        recordAuthenticationSuccess().catch(() => {});
 
         const newIdentity = await identityProvider.getCurrentIdentity();
         setIdentity(newIdentity);

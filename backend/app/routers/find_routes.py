@@ -55,6 +55,7 @@ async def find_routes(request: RouteRequest, http_request: Request) -> ScoredRou
 
     heat_index     = compute_heat_index(weather["temperature_c"], weather["humidity_pct"])
     aqi_val        = raw_aqi.get("value") if isinstance(raw_aqi, dict) else raw_aqi
+    aqi_normalised = min(float(aqi_val) / 300.0, 1.0) if aqi_val is not None else 0.0
     try:
         from app.services.identity import resolve_identity
         user_id = await resolve_identity(http_request)

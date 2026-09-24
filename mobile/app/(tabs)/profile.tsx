@@ -22,6 +22,8 @@ import { Mascot } from '../../components/Mascot';
 import { Button } from '../../components/ui';
 import Icon from '../../components/Icon';
 import { colors, fonts, radius } from '../../theme/colors';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { resetAuthPrompts } from '../../services/authPrompts';
 
 export const AVATAR_OPTIONS = [
   { id: 'tree', emoji: '🌳', label: 'Forest Scout', bg: '#D8F3DC', color: '#1B4332' },
@@ -377,6 +379,9 @@ export default function ProfileScreen() {
 
         {/* User Routing Preferences Card */}
         <PreferencesSection />
+
+        {/* Developer & Onboarding Reset */}
+        <DeveloperResetSection />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -897,6 +902,49 @@ function PreferencesSection() {
           ))
         )}
       </View>
+    </View>
+  );
+}
+
+// ─── Developer & Diagnostics Section ──────────────────────────────────────────
+
+function DeveloperResetSection() {
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const handleReset = async () => {
+    try {
+      await AsyncStorage.removeItem('heatpath_onboarded');
+      await resetAuthPrompts();
+      setMsg('Onboarding and prompts have been reset.');
+      setTimeout(() => setMsg(null), 3500);
+    } catch {
+      setMsg('Failed to reset.');
+    }
+  };
+
+  return (
+    <View style={styles.card}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={styles.cardSectionTitle}>Developer & Testing</Text>
+        <Text style={{ fontFamily: fonts.ui, fontSize: 12, color: colors.muted2 }}>Diagnostics</Text>
+      </View>
+      <Text style={styles.accountDesc}>
+        Reset onboarding and authentication prompts to test the new user experience from scratch.
+      </Text>
+      {msg && (
+        <View style={styles.infoBox}>
+          <Icon name="check" size={14} stroke={colors.forest} />
+          <Text style={styles.infoText}>{msg}</Text>
+        </View>
+      )}
+      <TouchableOpacity
+        onPress={handleReset}
+        style={[styles.retryBtn, { marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Reset onboarding and prompts"
+      >
+        <Text style={styles.retryBtnText}>Reset Onboarding & Prompts</Text>
+      </TouchableOpacity>
     </View>
   );
 }

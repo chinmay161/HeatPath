@@ -73,6 +73,8 @@ _db_initialized: bool = False
 # Synchronous fallback memory cache keyed by user_id
 _user_cached_preferences: Dict[str, Dict[str, Any]] = {"1": DEFAULT_PREFERENCES.copy()}
 _cached_preferences: Dict[str, Any] = _user_cached_preferences["1"]
+_user_cached_profile: Dict[str, Dict[str, Any]] = {"1": DEFAULT_PROFILE.copy()}
+_cached_profile: Dict[str, Any] = _user_cached_profile["1"]
 
 
 def get_preferences_cached(user_id: Any = 1) -> Dict[str, Any]:
@@ -215,10 +217,14 @@ async def reset_db() -> None:
                  DEFAULT_PREFERENCES["accessibility"], DEFAULT_PREFERENCES["units"],
                  DEFAULT_PREFERENCES["theme"])
 
-    global _cached_preferences
+    global _cached_preferences, _cached_profile
     _user_cached_preferences.clear()
     _user_cached_preferences["1"] = DEFAULT_PREFERENCES.copy()
     _cached_preferences = _user_cached_preferences["1"]
+
+    _user_cached_profile.clear()
+    _user_cached_profile["1"] = DEFAULT_PROFILE.copy()
+    _cached_profile = _user_cached_profile["1"]
 
     await get_preferences_store().reset()
 
@@ -292,6 +298,9 @@ async def get_profile(user_id: int = 1) -> Dict[str, Any]:
         return result
     except Exception as e:
         logger.warning(f"[user_store] get_profile database query failed: {e}. Using fallback defaults.")
+        uid = str(user_id)
+        if uid in _user_cached_profile:
+            return _user_cached_profile[uid].copy()
         return DEFAULT_PROFILE.copy()
 
 
@@ -327,6 +336,8 @@ async def update_profile(data: Dict[str, Any], user_id: int = 1) -> Dict[str, An
             "created_at": _format_timestamp(row["created_at"]),
             "updated_at": _format_timestamp(row["updated_at"]),
         }
+        uid = str(user_id)
+        _user_cached_profile[uid] = result.copy()
         await _cache_delete(f"user:{user_id}:profile")
         return result
     except Exception as e:
@@ -339,6 +350,8 @@ async def update_profile(data: Dict[str, Any], user_id: int = 1) -> Dict[str, An
             "created_at": current.get("created_at"),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        uid = str(user_id)
+        _user_cached_profile[uid] = fallback_profile.copy()
         await _cache_set(f"user:{user_id}:profile", fallback_profile)
         return fallback_profile
 
