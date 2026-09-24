@@ -18,10 +18,21 @@ EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
 @router.get("", response_model=UserProfile, include_in_schema=False)
 async def fetch_profile(request: Request):
     """Retrieve the current user profile from persistent storage."""
+    user_id = None
     try:
-        await resolve_identity(request)
+        user_id = await resolve_identity(request)
     except HTTPException:
         pass  # Maintain public fallback for backward compatibility
+
+    if user_id and str(user_id).startswith("guest|"):
+        from app.services.user_store import DEFAULT_PROFILE
+        return UserProfile(
+            name="Guest",
+            email=None,
+            bio=DEFAULT_PROFILE.get("bio", "Urban walker seeking shady streets and cool breezes."),
+            avatar_id=DEFAULT_PROFILE.get("avatar_id", "tree"),
+        )
+
     data = await get_profile()
     return UserProfile(**data)
 

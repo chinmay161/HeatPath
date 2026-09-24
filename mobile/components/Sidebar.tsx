@@ -26,11 +26,11 @@ export function AppSidebar({ active, onNav }: AppSidebarProps) {
 
   const displayName = isAuthenticated
     ? (user?.name || (profile.name && profile.name !== 'Alex River' && profile.name !== 'Guest' ? profile.name : 'Urban Walker'))
-    : ((profile.name && profile.name !== 'Alex River') ? profile.name : 'Guest');
+    : 'Guest';
 
   const statusSubtitle = isAuthenticated
     ? (user?.email || 'Cloud Synced')
-    : (profile.bio || 'Pedestrian profile');
+    : 'Guest Account';
 
   return (
     <View style={[styles.sidebar, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>

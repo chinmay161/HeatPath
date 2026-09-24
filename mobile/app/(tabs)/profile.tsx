@@ -42,15 +42,15 @@ export default function ProfileScreen() {
   const { isAuthenticated, user } = useAuth();
 
   // Effective display name and email:
-  // When guest: defaults to "Guest", email is null / not set (never placeholder like Alex River)
+  // When guest: strictly defaults to "Guest", email is null (never retains signed-out Auth0 personal info)
   // When authenticated: uses Auth0 user name/email or custom saved profile
   const effectiveDisplayName = isAuthenticated
     ? (user?.name || (profile.name && profile.name !== 'Alex River' && profile.name !== 'Guest' ? profile.name : 'Urban Walker'))
-    : ((profile.name && profile.name !== 'Alex River') ? profile.name : 'Guest');
+    : 'Guest';
 
   const effectiveEmail = isAuthenticated
     ? (user?.email || (profile.email && profile.email !== 'alex.river@example.com' ? profile.email : null))
-    : ((profile.email && profile.email !== 'alex.river@example.com') ? profile.email : null);
+    : null;
 
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(effectiveDisplayName);

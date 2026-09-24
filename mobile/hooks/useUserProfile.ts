@@ -86,8 +86,11 @@ export function useUserProfile() {
     reloadProfile();
 
     // Re-fetch profile immediately whenever identity changes (login, logout)
-    const unsubIdentity = identityProvider.subscribe(() => {
+    const unsubIdentity = identityProvider.subscribe((newIdentity) => {
       cachedMemoryProfile = null;
+      if (newIdentity.type === 'guest') {
+        broadcast(DEFAULT_PROFILE);
+      }
       reloadProfile();
     });
 
