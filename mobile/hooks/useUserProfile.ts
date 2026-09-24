@@ -1,8 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getProfile, updateProfile, type UserProfile } from '../config/api';
+import { identityProvider } from '../services/identity';
 
 const PROFILE_KEY = 'heatpath_user_profile_cache';
+
+async function getProfileStorageKey(): Promise<string> {
+  try {
+    const userId = await identityProvider.getUserId();
+    return `${PROFILE_KEY}_${userId}`;
+  } catch {
+    return PROFILE_KEY;
+  }
+}
 
 const DEFAULT_PROFILE: UserProfile = {
   name: 'Alex River',
@@ -28,45 +38,53 @@ export function useUserProfile() {
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const reloadProfile = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const storageKey = await getProfileStorageKey();
+      const raw = await AsyncStorage.getItem(storageKey);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setProfile(parsed);
+          broadcast(parsed);
+        } catch {}
+      }
+
+      const remote = await getProfile();
+      setProfile(remote);
+      broadcast(remote);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(remote)).catch(() => {});
+    } catch (e: any) {
+      if (!cachedMemoryProfile) {
+        setError(e.message || 'Failed to reload profile');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const listener: Listener = (newProfile) => {
       setProfile(newProfile);
     };
     listeners.add(listener);
 
-    // 1. First load from AsyncStorage for instantaneous display
-    AsyncStorage.getItem(PROFILE_KEY)
-      .then((raw) => {
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            setProfile(parsed);
-            cachedMemoryProfile = parsed;
-          } catch {}
-        }
-      })
-      .finally(() => {
-        // 2. Fetch fresh from backend
-        getProfile()
-          .then((remote) => {
-            setProfile(remote);
-            broadcast(remote);
-            AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(remote)).catch(() => {});
-            setError(null);
-          })
-          .catch((err) => {
-            // If offline, we already loaded from AsyncStorage, so don't completely blank out
-            if (!cachedMemoryProfile) {
-              setError(err.message || 'Could not load profile');
-            }
-          })
-          .finally(() => setLoading(false));
-      });
+    // Initial load
+    reloadProfile();
+
+    // Re-fetch profile immediately whenever identity changes (login, logout)
+    const unsubIdentity = identityProvider.subscribe(() => {
+      cachedMemoryProfile = null;
+      reloadProfile();
+    });
 
     return () => {
       listeners.delete(listener);
+      unsubIdentity();
     };
-  }, []);
+  }, [reloadProfile]);
 
   const saveProfile = useCallback(async (data: Partial<UserProfile> & { name: string }) => {
     setSaving(true);
@@ -75,28 +93,14 @@ export function useUserProfile() {
       const updated = await updateProfile(data);
       setProfile(updated);
       broadcast(updated);
-      await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
+      const storageKey = await getProfileStorageKey();
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updated)).catch(() => {});
       return updated;
     } catch (e: any) {
       setError(e.message || 'Failed to save profile');
       throw e;
     } finally {
       setSaving(false);
-    }
-  }, []);
-
-  const reloadProfile = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const remote = await getProfile();
-      setProfile(remote);
-      broadcast(remote);
-      await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(remote));
-    } catch (e: any) {
-      setError(e.message || 'Failed to reload profile');
-    } finally {
-      setLoading(false);
     }
   }, []);
 

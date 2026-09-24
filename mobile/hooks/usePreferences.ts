@@ -47,50 +47,60 @@ export function usePreferences() {
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const reloadPreferences = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const storageKey = await getStorageKey();
+      const raw = await AsyncStorage.getItem(storageKey);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setPreferences(parsed);
+          broadcast(parsed);
+        } catch {}
+      } else {
+        setPreferences(DEFAULT_PREFERENCES);
+        broadcast(DEFAULT_PREFERENCES);
+      }
+
+      const remote = await getPreferences();
+      const currentUnits = memoryPreferences?.units;
+      const finalPrefs = (currentUnits && remote.units === 'celsius' && currentUnits !== 'celsius')
+        ? { ...remote, units: currentUnits }
+        : remote;
+      setPreferences(finalPrefs);
+      broadcast(finalPrefs);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(finalPrefs)).catch(() => {});
+    } catch (err: any) {
+      if (!memoryPreferences) {
+        setError(err.message || 'Could not load preferences');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const listener: Listener = (newPrefs) => {
       setPreferences(newPrefs);
     };
     listeners.add(listener);
 
-    // 1. Instant load from local storage
-    getStorageKey().then((storageKey) => {
-      AsyncStorage.getItem(storageKey)
-        .then((raw) => {
-          if (raw) {
-            try {
-              const parsed = JSON.parse(raw);
-              setPreferences(parsed);
-              memoryPreferences = parsed;
-            } catch {}
-          }
-        })
-        .finally(() => {
-          // 2. Refresh from backend
-          getPreferences()
-            .then((remote) => {
-              const currentUnits = memoryPreferences?.units;
-              const finalPrefs = (currentUnits && remote.units === 'celsius' && currentUnits !== 'celsius')
-                ? { ...remote, units: currentUnits }
-                : remote;
-              setPreferences(finalPrefs);
-              broadcast(finalPrefs);
-              AsyncStorage.setItem(storageKey, JSON.stringify(finalPrefs)).catch(() => {});
-              setError(null);
-            })
-            .catch((err) => {
-              if (!memoryPreferences) {
-                setError(err.message || 'Could not load preferences');
-              }
-            })
-            .finally(() => setLoading(false));
-        });
+    // Initial load
+    reloadPreferences();
+
+    // Re-fetch preferences immediately whenever identity changes (login, logout)
+    const unsubIdentity = identityProvider.subscribe(() => {
+      memoryPreferences = null;
+      reloadPreferences();
     });
 
     return () => {
       listeners.delete(listener);
+      unsubIdentity();
     };
-  }, []);
+  }, [reloadPreferences]);
 
   const savePreferences = useCallback(async (updates: Partial<UserPreferences>) => {
     setSaving(true);
@@ -163,6 +173,7 @@ export function usePreferences() {
     saving,
     error,
     savePreferences,
+    reloadPreferences,
     addFavoriteRoute,
     removeFavoriteRoute,
     formatTemp,

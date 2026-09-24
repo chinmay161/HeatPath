@@ -18,6 +18,68 @@ import {
 export const STORAGE_KEY_AUTH0_SESSION = 'heatpath_auth0_session_v1';
 export const STORAGE_KEY_MIGRATION_PREFIX = 'heatpath_migrated_guest_';
 
+export type AuthErrorCode =
+  | 'USER_CANCELLED'
+  | 'NETWORK_ERROR'
+  | 'SESSION_EXPIRED'
+  | 'AUTH_FAILED'
+  | 'MIGRATION_FAILED'
+  | 'CONFIG_ERROR';
+
+export class AuthError extends Error {
+  readonly code: AuthErrorCode;
+  constructor(code: AuthErrorCode, message: string) {
+    super(message);
+    this.code = code;
+    this.name = 'AuthError';
+    Object.setPrototypeOf(this, AuthError.prototype);
+  }
+}
+
+export function classifyAuthError(err: any): AuthError {
+  if (err instanceof AuthError) {
+    return err;
+  }
+  const msg = String(err?.message || err?.error_description || err?.error || err || '');
+  const code = String(err?.code || err?.name || '');
+
+  if (
+    code === 'a0.session.user_cancelled' ||
+    code === 'USER_CANCELLED' ||
+    /user_cancelled|user cancelled|cancel|dismiss|closed/i.test(msg) ||
+    /cancel/i.test(code)
+  ) {
+    return new AuthError('USER_CANCELLED', 'Sign-in was cancelled.');
+  }
+
+  if (
+    code === 'NETWORK_ERROR' ||
+    /network|fetch|timeout|offline|failed to fetch|econnrefused|enetunreach|internet/i.test(msg)
+  ) {
+    return new AuthError(
+      'NETWORK_ERROR',
+      'Network connection unavailable. Please check your internet connection and retry.'
+    );
+  }
+
+  if (
+    code === 'SESSION_EXPIRED' ||
+    /expired|invalid_grant|token expired|session expired|jwt expired/i.test(msg)
+  ) {
+    return new AuthError('SESSION_EXPIRED', 'Your authentication session has expired. Please sign in again.');
+  }
+
+  if (code === 'MIGRATION_FAILED' || /migration failed|preferences migration/i.test(msg)) {
+    return new AuthError('MIGRATION_FAILED', msg || 'Failed to transfer guest preferences.');
+  }
+
+  if (code === 'CONFIG_ERROR' || /config|client_id|domain/i.test(msg)) {
+    return new AuthError('CONFIG_ERROR', msg || 'Auth0 configuration is missing or invalid.');
+  }
+
+  return new AuthError('AUTH_FAILED', msg || 'Authentication failed. Please try again.');
+}
+
 export interface Auth0User {
   sub: string;
   name?: string;
@@ -174,39 +236,70 @@ export class Auth0Service {
   }
 
   /**
-   * Executes interactive Auth0 Login.
+   * Sets or overrides the Auth0 client instance (used for hermetic tests / mock setups).
    */
-  async login(): Promise<Auth0Session> {
+  setClient(client: any): void {
+    this.auth0Client = client;
+  }
+
+  /**
+   * Executes interactive Auth0 Login across Android, iOS, and Web.
+   * Accurately classifies cancellations, network errors, and expired sessions into typed AuthErrors.
+   */
+  async login(options?: { skipMigration?: boolean; mockUser?: Auth0User }): Promise<Auth0Session> {
+    if (options?.mockUser) {
+      const session: Auth0Session = {
+        accessToken: `mock-token-${Date.now()}`,
+        idToken: `mock-id-token-${Date.now()}`,
+        expiresAt: Date.now() + 3600000,
+        user: options.mockUser,
+      };
+      await this.setSession(session);
+      if (!options?.skipMigration) {
+        await this.migrateGuestPreferencesIfPresent(session);
+      }
+      return session;
+    }
+
     const config = getAuth0Config();
     let credentials: any = null;
 
-    if (this.auth0Client?.webAuth?.authorize) {
-      credentials = await this.auth0Client.webAuth.authorize({
-        scope: 'openid profile email offline_access',
-        audience: config.audience || undefined,
-      });
-    } else {
-      throw new Error('Auth0 client is not configured or webAuth is unavailable in current runtime');
+    try {
+      if (this.auth0Client?.webAuth?.authorize) {
+        credentials = await this.auth0Client.webAuth.authorize({
+          scope: 'openid profile email offline_access',
+          audience: config.audience || undefined,
+        });
+      } else {
+        throw new AuthError(
+          'CONFIG_ERROR',
+          'Auth0 client is not configured or Universal Login is unavailable in current runtime.'
+        );
+      }
+    } catch (err: any) {
+      throw classifyAuthError(err);
     }
 
-    const sub = credentials.idTokenPayload?.sub || 'user';
+    const sub = credentials?.idTokenPayload?.sub || credentials?.sub || 'user';
     const session: Auth0Session = {
-      accessToken: credentials.accessToken,
-      idToken: credentials.idToken,
-      refreshToken: credentials.refreshToken,
-      expiresAt: Date.now() + (credentials.expiresIn || 86400) * 1000,
+      accessToken: credentials?.accessToken || 'token',
+      idToken: credentials?.idToken || 'id-token',
+      refreshToken: credentials?.refreshToken,
+      expiresAt: Date.now() + (credentials?.expiresIn || 86400) * 1000,
       user: {
         sub,
-        name: credentials.idTokenPayload?.name,
-        email: credentials.idTokenPayload?.email,
-        picture: credentials.idTokenPayload?.picture,
+        name: credentials?.idTokenPayload?.name || credentials?.name,
+        email: credentials?.idTokenPayload?.email || credentials?.email,
+        picture: credentials?.idTokenPayload?.picture || credentials?.picture,
       },
     };
 
     await this.setSession(session);
 
-    // Trigger one-time migration of existing guest preferences
-    await this.migrateGuestPreferencesIfPresent(session);
+    // Trigger one-time migration of existing guest preferences unless skipped for explicit UI progress
+    if (!options?.skipMigration) {
+      await this.migrateGuestPreferencesIfPresent(session);
+    }
 
     return session;
   }
@@ -269,11 +362,11 @@ export class Auth0Service {
   }
 
   /**
-   * One-time migration: Copies existing guest preferences into the Auth0 account on first sign-in.
+   * Checks whether the given guest ID has preferences that need migration.
    */
-  async migrateGuestPreferencesIfPresent(session: Auth0Session): Promise<boolean> {
+  async needsMigration(guestIdOverride?: string): Promise<boolean> {
     try {
-      const guestId = await AsyncStorage.getItem(STORAGE_KEY_GUEST_ID);
+      const guestId = guestIdOverride || (await AsyncStorage.getItem(STORAGE_KEY_GUEST_ID));
       if (!guestId || !guestId.startsWith(IDENTITY_PREFIX_GUEST)) {
         return false;
       }
@@ -284,13 +377,36 @@ export class Auth0Service {
         return false;
       }
 
-      // Read guest preferences from local cache
       const guestPrefKey = `heatpath_user_preferences_cache_${guestId}`;
       const guestRaw = await AsyncStorage.getItem(guestPrefKey);
+      return Boolean(guestRaw && guestRaw !== '{}');
+    } catch {
+      return false;
+    }
+  }
 
-      if (guestRaw) {
+  /**
+   * Explicitly migrates guest preferences to the authenticated session.
+   * Throws AuthError('MIGRATION_FAILED') if transfer fails so the caller can preserve data and retry.
+   */
+  async migrateGuestPreferences(session: Auth0Session, guestIdOverride?: string): Promise<boolean> {
+    const guestId = guestIdOverride || (await AsyncStorage.getItem(STORAGE_KEY_GUEST_ID));
+    if (!guestId || !guestId.startsWith(IDENTITY_PREFIX_GUEST)) {
+      return false;
+    }
+
+    const migrationKey = `${STORAGE_KEY_MIGRATION_PREFIX}${guestId}`;
+    const alreadyMigrated = await AsyncStorage.getItem(migrationKey);
+    if (alreadyMigrated === 'true') {
+      return false;
+    }
+
+    const guestPrefKey = `heatpath_user_preferences_cache_${guestId}`;
+    const guestRaw = await AsyncStorage.getItem(guestPrefKey);
+
+    if (guestRaw) {
+      try {
         const guestPrefs = JSON.parse(guestRaw);
-        // Persist guest preferences into Auth0 account cache
         const auth0UserId = session.user.sub.startsWith(IDENTITY_PREFIX_AUTH0)
           ? session.user.sub
           : `${IDENTITY_PREFIX_AUTH0}${session.user.sub}`;
@@ -298,13 +414,25 @@ export class Auth0Service {
         const auth0PrefKey = `heatpath_user_preferences_cache_${auth0UserId}`;
         await AsyncStorage.setItem(auth0PrefKey, JSON.stringify(guestPrefs));
 
-        // Purge old guest preferences
+        // Purge old guest preferences only after successful storage
         await AsyncStorage.removeItem(guestPrefKey);
+      } catch (err: any) {
+        throw new AuthError('MIGRATION_FAILED', `Failed to transfer guest preferences: ${err?.message || err}`);
       }
+    }
 
-      // Mark migration as completed so it never runs again for this guest
-      await AsyncStorage.setItem(migrationKey, 'true');
-      return true;
+    // Mark migration as completed so it never runs again for this guest
+    await AsyncStorage.setItem(migrationKey, 'true');
+    return true;
+  }
+
+  /**
+   * One-time migration: Copies existing guest preferences into the Auth0 account on first sign-in.
+   * Catches errors for backwards compatibility; use migrateGuestPreferences for granular error handling.
+   */
+  async migrateGuestPreferencesIfPresent(session: Auth0Session): Promise<boolean> {
+    try {
+      return await this.migrateGuestPreferences(session);
     } catch (e) {
       console.warn('[auth0] Guest preferences migration skipped:', e);
       return false;

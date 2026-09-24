@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { usePreferences } from '../../hooks/usePreferences';
 import { useWalkHistory } from '../../hooks/useWalkHistory';
+import { useAuth } from '../../hooks/useAuth';
 import { Mascot } from '../../components/Mascot';
 import { Button } from '../../components/ui';
 import Icon from '../../components/Icon';
@@ -35,6 +37,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { profile, loading, saving, error, saveProfile, reloadProfile } = useUserProfile();
   const { stats } = useWalkHistory();
+  const { user } = useAuth();
 
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(profile.name);
@@ -188,13 +191,24 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Adaptive Account & Authentication Section */}
+        <AccountSection />
+
         {/* Avatar Hero Card */}
         <View style={styles.heroCard}>
-          <View style={[styles.avatarBadge, { backgroundColor: selectedAvatar.bg }]}>
-            <Text style={styles.avatarEmoji}>{selectedAvatar.emoji}</Text>
-          </View>
+          {user?.picture ? (
+            <Image
+              source={{ uri: user.picture }}
+              style={styles.heroAvatarImg}
+              accessibilityLabel="User avatar"
+            />
+          ) : (
+            <View style={[styles.avatarBadge, { backgroundColor: selectedAvatar.bg }]}>
+              <Text style={styles.avatarEmoji}>{selectedAvatar.emoji}</Text>
+            </View>
+          )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroName}>{profile.name}</Text>
+            <Text style={styles.heroName}>{profile.name || user?.name || 'Urban Walker'}</Text>
             <Text style={styles.heroBadgeTitle}>{selectedAvatar.label}</Text>
             {profile.bio ? (
               <Text style={styles.heroBio} numberOfLines={2}>
@@ -354,6 +368,280 @@ export default function ProfileScreen() {
         <PreferencesSection />
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+// ─── Account Section Component (Adaptive Guest / Authenticated) ─────────────────
+
+function AccountSection() {
+  const {
+    isAuthenticated,
+    user,
+    userId,
+    guestId,
+    session,
+    isSigningIn,
+    isSigningOut,
+    migrationStatus,
+    migrationError,
+    error,
+    errorCode,
+    login,
+    logout,
+    retryMigration,
+    clearError,
+  } = useAuth();
+
+  const handleSignIn = async () => {
+    try {
+      await login();
+    } catch {
+      // Error details captured and presented via AuthContext
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+    } catch {
+      // Handled
+    }
+  };
+
+  // 1. Authenticated Account Management View
+  if (isAuthenticated) {
+    return (
+      <View style={styles.card}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={styles.cardSectionTitle}>Account</Text>
+          <View style={styles.authBadge}>
+            <Icon name="check" size={12} stroke="#0369A1" />
+            <Text style={styles.authBadgeText}>Cloud Synced</Text>
+          </View>
+        </View>
+
+        {/* User Identity Details */}
+        <View style={styles.authProfileRow}>
+          {user?.picture ? (
+            <Image
+              source={{ uri: user.picture }}
+              style={styles.authAvatarImg}
+              accessibilityLabel={`${user?.name || 'User'}'s profile picture`}
+            />
+          ) : (
+            <View style={styles.authAvatarFallback}>
+              <Text style={styles.authAvatarFallbackText}>
+                {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.authDisplayName} numberOfLines={1}>
+              {user?.name || 'HeatPath Explorer'}
+            </Text>
+            <Text style={styles.authEmail} numberOfLines={1}>
+              {user?.email || 'Authenticated User'}
+            </Text>
+            <View style={styles.providerTag}>
+              <Icon name="shield" size={11} stroke={colors.forest} />
+              <Text style={styles.providerTagText}>Auth0 Universal Login</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Detailed Account Attributes */}
+        <View style={{ gap: 12, marginTop: 14 }}>
+          <View style={styles.readRow}>
+            <Text style={styles.readLabel}>Display Name</Text>
+            <Text style={styles.readValue}>{user?.name || 'Not set'}</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.readRow}>
+            <Text style={styles.readLabel}>Email Address</Text>
+            <Text style={styles.readValue}>{user?.email || 'None'}</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.readRow}>
+            <Text style={styles.readLabel}>Provider</Text>
+            <Text style={styles.readValue}>Auth0</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.readRow}>
+            <Text style={styles.readLabel}>User ID</Text>
+            <Text style={[styles.readValue, { fontFamily: fonts.data, fontSize: 12 }]} numberOfLines={1}>
+              {user?.sub || userId}
+            </Text>
+          </View>
+        </View>
+
+        {/* Migration Success Confirmation */}
+        {migrationStatus === 'success' && (
+          <View style={styles.migrationSuccessBanner}>
+            <Icon name="check" size={14} stroke="#16633B" />
+            <Text style={styles.migrationSuccessText}>
+              Guest preferences successfully migrated to your cloud account.
+            </Text>
+          </View>
+        )}
+
+        {/* Migration Failure Banner & Retry */}
+        {migrationStatus === 'error' && (
+          <View style={styles.migrationErrorBox}>
+            <Icon name="warn" size={16} stroke="#991B1B" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.migrationErrorTitle}>Preference migration failed</Text>
+              <Text style={styles.migrationErrorSub}>{migrationError || 'Guest data preserved locally.'}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={retryMigration}
+              style={styles.retryBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Retry guest preference transfer"
+            >
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Sign Out Action Button */}
+        <TouchableOpacity
+          onPress={handleSignOut}
+          disabled={isSigningOut}
+          style={styles.signOutBtn}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+          accessibilityHint="Signs out and returns to guest mode"
+          focusable
+        >
+          {isSigningOut ? (
+            <>
+              <ActivityIndicator color="#991B1B" size="small" />
+              <Text style={styles.signOutBtnText}>Signing out…</Text>
+            </>
+          ) : (
+            <>
+              <Icon name="logout" size={16} stroke="#991B1B" />
+              <Text style={styles.signOutBtnText}>Sign Out</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // 2. Guest Mode Account Card
+  return (
+    <View style={styles.card}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={styles.cardSectionTitle}>Account</Text>
+        <View style={styles.guestBadge}>
+          <View style={styles.guestDot} />
+          <Text style={styles.guestBadgeText}>Continue as Guest</Text>
+        </View>
+      </View>
+
+      <Text style={styles.accountDesc}>
+        You are currently using HeatPath as a guest. Sign in with Auth0 to enable cloud sync, multi-device access, and backup your customized route preferences.
+      </Text>
+
+      {guestId ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+          <Text style={styles.fieldLabel}>ACTIVE GUEST ID:</Text>
+          <Text style={styles.accountSubtleId} numberOfLines={1}>
+            {guestId}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Migration In Progress State */}
+      {migrationStatus === 'migrating' && (
+        <View style={styles.migrationBox}>
+          <ActivityIndicator color={colors.forest} size="small" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.migrationTitle}>Transferring preferences…</Text>
+            <Text style={styles.migrationSub}>Migrating your guest preferences to your cloud account</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Migration Error Banner */}
+      {migrationStatus === 'error' && (
+        <View style={styles.migrationErrorBox}>
+          <Icon name="warn" size={16} stroke="#991B1B" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.migrationErrorTitle}>Preference migration failed</Text>
+            <Text style={styles.migrationErrorSub}>{migrationError || 'Guest data preserved locally.'}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={retryMigration}
+            style={styles.retryBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Retry guest preference transfer"
+          >
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* General Error or Cancellation Banner */}
+      {error && migrationStatus !== 'error' && (
+        <View style={errorCode === 'USER_CANCELLED' ? styles.infoBox : styles.errorBox}>
+          <Icon
+            name={errorCode === 'USER_CANCELLED' ? 'lock' : 'warn'}
+            size={16}
+            stroke={errorCode === 'USER_CANCELLED' ? colors.muted : '#991B1B'}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={errorCode === 'USER_CANCELLED' ? styles.infoText : styles.errorTextMsg}>
+              {error}
+            </Text>
+          </View>
+          {errorCode !== 'USER_CANCELLED' ? (
+            <TouchableOpacity
+              onPress={handleSignIn}
+              style={styles.retryBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Retry sign in"
+            >
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={clearError}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss cancellation notice"
+            >
+              <Icon name="close" size={14} stroke={colors.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Primary Action Button: Sign in with Auth0 */}
+      <TouchableOpacity
+        onPress={handleSignIn}
+        disabled={isSigningIn}
+        style={[styles.auth0Btn, isSigningIn && styles.auth0BtnDisabled]}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Sign in with Auth0"
+        accessibilityHint="Launches Auth0 Universal Login to enable cloud sync"
+        focusable
+      >
+        {isSigningIn ? (
+          <>
+            <ActivityIndicator color="#fff" size="small" />
+            <Text style={styles.auth0BtnText}>Connecting to Auth0…</Text>
+          </>
+        ) : (
+          <>
+            <Icon name="shield" size={18} stroke="#fff" />
+            <Text style={styles.auth0BtnText}>Sign in with Auth0</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -1017,5 +1305,277 @@ const styles = StyleSheet.create({
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  heroAvatarImg: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  guestBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: '#E6F4E2',
+    borderWidth: 1,
+    borderColor: '#CDE89B',
+  },
+  guestDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.forest,
+  },
+  guestBadgeText: {
+    fontFamily: fonts.uiBold,
+    fontSize: 12,
+    color: colors.forest,
+  },
+  accountDesc: {
+    fontFamily: fonts.ui,
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: colors.muted,
+    marginTop: 10,
+  },
+  accountSubtleId: {
+    fontFamily: fonts.data,
+    fontSize: 11,
+    color: colors.muted2,
+    backgroundColor: '#F5F7F4',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  auth0Btn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.forest,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginTop: 16,
+    ...(Platform.OS === 'web'
+      ? { cursor: 'pointer' }
+      : { shadowColor: '#16633B', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 3 }),
+  } as any,
+  auth0BtnDisabled: {
+    opacity: 0.7,
+  },
+  auth0BtnText: {
+    fontFamily: fonts.uiBold,
+    fontSize: 14.5,
+    color: '#fff',
+    letterSpacing: 0.2,
+  },
+  authBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  authBadgeText: {
+    fontFamily: fonts.uiBold,
+    fontSize: 12,
+    color: '#0369A1',
+  },
+  authProfileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 14,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2EA',
+  },
+  authAvatarImg: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: colors.forest,
+    backgroundColor: '#E6F4E2',
+  },
+  authAvatarFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E6F4E2',
+    borderWidth: 2,
+    borderColor: colors.forest,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authAvatarFallbackText: {
+    fontFamily: fonts.display,
+    fontSize: 22,
+    color: colors.forest,
+  },
+  authDisplayName: {
+    fontFamily: fonts.uiBold,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  authEmail: {
+    fontFamily: fonts.ui,
+    fontSize: 13,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  providerTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 5,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+  },
+  providerTagText: {
+    fontFamily: fonts.uiSemiBold,
+    fontSize: 11,
+    color: colors.forest,
+  },
+  migrationBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: radius.md,
+    padding: 12,
+    marginTop: 12,
+  },
+  migrationTitle: {
+    fontFamily: fonts.uiBold,
+    fontSize: 13,
+    color: '#16633B',
+  },
+  migrationSub: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  migrationSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: radius.sm,
+    padding: 10,
+    marginTop: 12,
+  },
+  migrationSuccessText: {
+    fontFamily: fonts.uiSemiBold,
+    fontSize: 12.5,
+    color: '#16633B',
+    flex: 1,
+  },
+  migrationErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: radius.md,
+    padding: 12,
+    marginTop: 12,
+  },
+  migrationErrorTitle: {
+    fontFamily: fonts.uiBold,
+    fontSize: 13,
+    color: '#991B1B',
+  },
+  migrationErrorSub: {
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: '#7F1D1D',
+    marginTop: 2,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: radius.md,
+    padding: 12,
+    marginTop: 12,
+  },
+  errorTextMsg: {
+    fontFamily: fonts.uiSemiBold,
+    fontSize: 12.5,
+    color: '#991B1B',
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: radius.md,
+    padding: 12,
+    marginTop: 12,
+  },
+  infoText: {
+    fontFamily: fonts.ui,
+    fontSize: 12.5,
+    color: colors.muted,
+  },
+  retryBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#fff',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  retryBtnText: {
+    fontFamily: fonts.uiBold,
+    fontSize: 12,
+    color: colors.ink,
+  },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 16,
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
+  } as any,
+  signOutBtnText: {
+    fontFamily: fonts.uiBold,
+    fontSize: 13.5,
+    color: '#B91C1C',
   },
 });

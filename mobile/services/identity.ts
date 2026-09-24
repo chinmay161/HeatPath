@@ -79,10 +79,37 @@ export function isValidGuestId(id: string): boolean {
  * IdentityProvider manages identity resolution and header generation.
  * AsyncStorage serves as the durable source of truth, backed by a write-through in-memory cache.
  */
+export type IdentityChangeListener = (identity: UserIdentity) => void;
+
 export class IdentityProvider implements IIdentityProvider {
   private memoryGuestId: string | null = null;
   private memoryAuthToken: string | null = null;
   private initPromise: Promise<string> | null = null;
+  private listeners: Set<IdentityChangeListener> = new Set();
+
+  /**
+   * Subscribes a listener to identity changes (e.g. login, logout, clear).
+   * Returns an unsubscribe function.
+   */
+  subscribe(listener: IdentityChangeListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * Broadcasts an identity change to all registered subscribers.
+   */
+  notify(identity: UserIdentity): void {
+    this.listeners.forEach((listener) => {
+      try {
+        listener(identity);
+      } catch (err) {
+        console.error('[identityProvider] Error in listener callback:', err);
+      }
+    });
+  }
 
   /**
    * Retrieves or initializes the persistent Guest ID.
@@ -126,29 +153,41 @@ export class IdentityProvider implements IIdentityProvider {
     }
     this.memoryGuestId = id;
     await AsyncStorage.setItem(STORAGE_KEY_GUEST_ID, id);
+    const identity = await this.getCurrentIdentity();
+    this.notify(identity);
   }
 
   /**
    * Restores authenticated session on launch.
    */
   async restoreSession(): Promise<Auth0Session | null> {
-    return auth0Service.restoreSession();
+    const session = await auth0Service.restoreSession();
+    if (session) {
+      const identity = await this.getCurrentIdentity();
+      this.notify(identity);
+    }
+    return session;
   }
 
   /**
-   * Performs Auth0 interactive login.
+   * Performs Auth0 interactive login across Android, iOS, and Web.
    */
-  async login(): Promise<Auth0Session> {
-    return auth0Service.login();
+  async login(options?: { skipMigration?: boolean; mockUser?: any }): Promise<Auth0Session> {
+    const session = await auth0Service.login(options);
+    const newIdentity = await this.getCurrentIdentity();
+    this.notify(newIdentity);
+    return session;
   }
 
   /**
-   * Performs Auth0 logout and returns to guest mode.
+   * Performs Auth0 logout and returns seamlessly to guest mode without app restart.
    */
   async logout(): Promise<void> {
     await auth0Service.logout();
     this.memoryAuthToken = null;
     await AsyncStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
+    const guestIdentity = await this.getCurrentIdentity();
+    this.notify(guestIdentity);
   }
 
   /**
@@ -181,6 +220,8 @@ export class IdentityProvider implements IIdentityProvider {
       await AsyncStorage.removeItem(STORAGE_KEY_AUTH_TOKEN);
       await auth0Service.clearSession();
     }
+    const identity = await this.getCurrentIdentity();
+    this.notify(identity);
   }
 
   /**
@@ -269,6 +310,7 @@ export const getIdentityHeaders = () => identityProvider.getIdentityHeaders();
 export const getUserId = () => identityProvider.getUserId();
 export const setAuthToken = (token: string | null) => identityProvider.setAuthToken(token);
 export const clearIdentity = () => identityProvider.clear();
-export const login = () => identityProvider.login();
+export const login = (options?: { skipMigration?: boolean; mockUser?: any }) => identityProvider.login(options);
 export const logout = () => identityProvider.logout();
 export const restoreSession = () => identityProvider.restoreSession();
+export const subscribeToIdentity = (listener: IdentityChangeListener) => identityProvider.subscribe(listener);
