@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './Icon';
 import { colors, fonts, radius } from '../theme/colors';
 import { useUserProfile } from '../hooks/useUserProfile';
+import { useAuth } from '../context/AuthContext';
 
 const NAV_ITEMS = [
   { key: 'home', label: 'Home', icon: 'home' },
@@ -21,7 +22,15 @@ interface AppSidebarProps {
 export function AppSidebar({ active, onNav }: AppSidebarProps) {
   const insets = useSafeAreaInsets();
   const { profile } = useUserProfile();
+  const { isAuthenticated, user } = useAuth();
 
+  const displayName = isAuthenticated
+    ? (user?.name || (profile.name && profile.name !== 'Alex River' && profile.name !== 'Guest' ? profile.name : 'Urban Walker'))
+    : ((profile.name && profile.name !== 'Alex River') ? profile.name : 'Guest');
+
+  const statusSubtitle = isAuthenticated
+    ? (user?.email || 'Cloud Synced')
+    : (profile.bio || 'Pedestrian profile');
 
   return (
     <View style={[styles.sidebar, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
@@ -68,12 +77,20 @@ export function AppSidebar({ active, onNav }: AppSidebarProps) {
         accessibilityLabel="View profile"
       >
         <View style={styles.meAvatar}>
-          <Icon name="user" size={18} stroke={colors.forest} width={2} />
+          {isAuthenticated && user?.picture ? (
+            <Image
+              source={{ uri: user.picture }}
+              style={styles.avatarImg}
+              accessibilityLabel={`${displayName}'s avatar`}
+            />
+          ) : (
+            <Icon name="user" size={18} stroke={colors.forest} width={2} />
+          )}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.meName} numberOfLines={1}>{profile.name || 'Your Profile'}</Text>
+          <Text style={styles.meName} numberOfLines={1}>{displayName}</Text>
           <Text style={styles.meMeta} numberOfLines={1}>
-            {profile.bio || 'Pedestrian profile'}
+            {statusSubtitle}
           </Text>
         </View>
       </TouchableOpacity>
@@ -156,6 +173,11 @@ const styles = StyleSheet.create({
     borderColor: colors.forest,
     backgroundColor: '#F4FAF2',
   },
+  avatarImg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
   meAvatar: {
     width: 36,
     height: 36,
@@ -163,6 +185,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E6F4E2',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   meName: {
     fontFamily: fonts.uiBold,

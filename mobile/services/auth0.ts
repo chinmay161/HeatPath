@@ -110,6 +110,21 @@ export function getAuth0Config(): Auth0Config {
   };
 }
 
+export function decodeJwtPayload(token: string): any {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json =
+      typeof atob !== 'undefined'
+        ? atob(base64)
+        : Buffer.from(base64, 'base64').toString('utf8');
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 export class Auth0Service {
   private currentSession: Auth0Session | null = null;
   private isRestoring = false;
@@ -129,6 +144,8 @@ export class Auth0Service {
         this.auth0Client = new Auth0({
           domain: config.domain,
           clientId: config.clientId,
+          cacheLocation: 'localstorage',
+          useRefreshTokens: true,
         });
       } catch {
         // Non-native / test runner environment fallback
@@ -138,7 +155,10 @@ export class Auth0Service {
   }
 
   /**
-   * Restores authenticated session on application startup.
+   * Restores authenticated session on application startup:
+   * 1. On Web: handles the Universal Login redirect callback (?code=...&state=...) if returning from Auth0.
+   * 2. Re-hydrates from persistent AsyncStorage.
+   * 3. On Web: falls back to silent token retrieval via Auth0 session cookies/localStorage.
    */
   async restoreSession(): Promise<Auth0Session | null> {
     if (this.currentSession) {
@@ -150,33 +170,143 @@ export class Auth0Service {
 
     this.restorePromise = (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY_AUTH0_SESSION);
-        if (!raw) {
-          return null;
-        }
+        // 1. Web Redirect Callback Check:
+        // On web, Auth0 redirects back to http://localhost:8081/?code=...&state=...
+        // We must exchange this code via handleRedirectCallback() and persist the session.
+        if (typeof window !== 'undefined' && window.location?.search) {
+          const search = window.location.search;
+          const hasCodeOrState = search.includes('code=') || search.includes('state=');
+          const hasError = search.includes('error=');
 
-        const session: Auth0Session = JSON.parse(raw);
-        const now = Date.now();
+          if (hasCodeOrState && !hasError && this.auth0Client?.webAuth?.handleRedirectCallback) {
+            try {
+              await this.auth0Client.webAuth.handleRedirectCallback();
 
-        // If session is still valid (with 60-second leeway), reuse it
-        if (session.expiresAt > now + 60000) {
-          this.currentSession = session;
-          return session;
-        }
+              let credentials: any = null;
+              try {
+                credentials = await this.auth0Client.credentialsManager?.getCredentials();
+              } catch (credErr) {
+                console.warn('[auth0] Error getting credentials after redirect:', credErr);
+              }
 
-        // If expired but refresh token exists, perform silent refresh
-        if (session.refreshToken) {
-          try {
-            const refreshed = await this.refreshToken(session.refreshToken);
-            return refreshed;
-          } catch {
-            await this.clearSession();
-            return null;
+              let webUser: any = null;
+              try {
+                if (this.auth0Client.webAuth.getWebUser) {
+                  webUser = await this.auth0Client.webAuth.getWebUser();
+                } else if (this.auth0Client.client?.getUser) {
+                  webUser = await this.auth0Client.client.getUser();
+                }
+              } catch (userErr) {
+                console.warn('[auth0] Error getting user after redirect:', userErr);
+              }
+
+              // Clean query parameters from URL so refreshes don't re-trigger code exchange
+              if (window.history?.replaceState) {
+                const cleanUrl = window.location.pathname + (window.location.hash || '');
+                window.history.replaceState({}, document.title, cleanUrl);
+              }
+
+              const idToken = credentials?.idToken || '';
+              const decodedClaims = idToken ? decodeJwtPayload(idToken) : null;
+              const sub =
+                webUser?.sub ||
+                credentials?.idTokenPayload?.sub ||
+                decodedClaims?.sub ||
+                'user';
+
+              const session: Auth0Session = {
+                accessToken: credentials?.accessToken || 'token',
+                idToken: idToken || 'id-token',
+                refreshToken: credentials?.refreshToken,
+                expiresAt: credentials?.expiresAt
+                  ? credentials.expiresAt * 1000
+                  : Date.now() + 86400000,
+                user: {
+                  sub,
+                  name: webUser?.name || decodedClaims?.name,
+                  email: webUser?.email || decodedClaims?.email,
+                  picture: webUser?.picture || decodedClaims?.picture,
+                },
+              };
+
+              await this.setSession(session);
+              await this.migrateGuestPreferencesIfPresent(session);
+              this.currentSession = session;
+              return session;
+            } catch (redirectErr) {
+              console.warn('[auth0] handleRedirectCallback failed:', redirectErr);
+            }
           }
         }
 
-        // Token expired without refresh token
-        await this.clearSession();
+        // 2. Persistent storage restore
+        const raw = await AsyncStorage.getItem(STORAGE_KEY_AUTH0_SESSION);
+        if (raw) {
+          const session: Auth0Session = JSON.parse(raw);
+          const now = Date.now();
+
+          // If session is still valid (with 60-second leeway), reuse it
+          if (session.expiresAt > now + 60000) {
+            this.currentSession = session;
+            return session;
+          }
+
+          // If expired but refresh token exists, perform silent refresh
+          if (session.refreshToken) {
+            try {
+              const refreshed = await this.refreshToken(session.refreshToken);
+              return refreshed;
+            } catch {
+              await this.clearSession();
+              return null;
+            }
+          }
+
+          // Token expired without refresh token
+          await this.clearSession();
+          return null;
+        }
+
+        // 3. Web silent token check (for existing Auth0 browser session / cookies)
+        if (typeof window !== 'undefined' && this.auth0Client?.credentialsManager?.getCredentials) {
+          try {
+            const creds = await this.auth0Client.credentialsManager.getCredentials();
+            if (creds?.accessToken) {
+              let webUser: any = null;
+              try {
+                if (this.auth0Client.webAuth?.getWebUser) {
+                  webUser = await this.auth0Client.webAuth.getWebUser();
+                } else if (this.auth0Client.client?.getUser) {
+                  webUser = await this.auth0Client.client.getUser();
+                }
+              } catch {}
+
+              const idToken = creds.idToken || '';
+              const decodedClaims = idToken ? decodeJwtPayload(idToken) : null;
+              const sub = webUser?.sub || decodedClaims?.sub || 'user';
+
+              const session: Auth0Session = {
+                accessToken: creds.accessToken,
+                idToken: idToken || 'id-token',
+                refreshToken: creds.refreshToken,
+                expiresAt: creds.expiresAt ? creds.expiresAt * 1000 : Date.now() + 86400000,
+                user: {
+                  sub,
+                  name: webUser?.name || decodedClaims?.name,
+                  email: webUser?.email || decodedClaims?.email,
+                  picture: webUser?.picture || decodedClaims?.picture,
+                },
+              };
+
+              await this.setSession(session);
+              this.currentSession = session;
+              return session;
+            }
+          } catch {
+            // Not signed in on web
+          }
+        }
+
         return null;
       } catch {
         await this.clearSession();

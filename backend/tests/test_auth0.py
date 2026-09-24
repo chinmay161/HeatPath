@@ -39,10 +39,13 @@ def create_test_jwt(
         "iat": now,
         "exp": now + exp_offset,
     }
-    if aud:
-        payload["aud"] = aud
-    if iss:
-        payload["iss"] = iss
+    target_aud = aud if aud is not None else (config.AUTH0_AUDIENCE or "https://api.heatpath.com")
+    target_iss = iss if iss is not None else (config.AUTH0_ISSUER or (f"https://{config.AUTH0_DOMAIN}/" if config.AUTH0_DOMAIN else "https://heatpath.auth0.com/"))
+
+    if target_aud:
+        payload["aud"] = target_aud
+    if target_iss:
+        payload["iss"] = target_iss
 
     return jwt.encode(payload, private_key, algorithm="RS256")
 
@@ -114,7 +117,14 @@ def test_verify_auth0_token_missing_sub(rsa_key_pair):
     """Verify token without sub claim raises 401."""
     private_key, public_key = rsa_key_pair
     now = int(time.time())
-    payload = {"iat": now, "exp": now + 3600}
+    target_aud = config.AUTH0_AUDIENCE or "https://api.heatpath.com"
+    target_iss = config.AUTH0_ISSUER or (f"https://{config.AUTH0_DOMAIN}/" if config.AUTH0_DOMAIN else "https://heatpath.auth0.com/")
+    payload = {
+        "iat": now,
+        "exp": now + 3600,
+        "aud": target_aud,
+        "iss": target_iss,
+    }
     token = jwt.encode(payload, private_key, algorithm="RS256")
 
     with pytest.raises(HTTPException) as exc_info:
