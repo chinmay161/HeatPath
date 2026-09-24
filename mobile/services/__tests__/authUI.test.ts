@@ -60,6 +60,24 @@ test('Auth UI: Guest account initial state and headers', async () => {
   assert.equal(identity.headers[HEADER_AUTHORIZATION], undefined, 'Guest must NOT emit Authorization header');
 });
 
+test('Auth UI: Guest profile defaults to Guest and null email (no Alex River placeholder)', () => {
+  const { DEFAULT_PROFILE, normalizeProfile } = require('../../hooks/useUserProfile');
+  assert.equal(DEFAULT_PROFILE.name, 'Guest', 'Default guest name must be Guest');
+  assert.equal(DEFAULT_PROFILE.email, null, 'Default guest email must be null');
+
+  // Normalization converts legacy placeholder Alex River to Guest
+  const legacy = { name: 'Alex River', email: 'alex.river@example.com' };
+  const normalized = normalizeProfile(legacy);
+  assert.equal(normalized.name, 'Guest', 'Placeholder Alex River must normalize to Guest');
+  assert.equal(normalized.email, null, 'Placeholder email must normalize to null');
+
+  // Custom user name is preserved
+  const custom = { name: 'Sarah Shade', email: 'sarah@example.com' };
+  const normalizedCustom = normalizeProfile(custom);
+  assert.equal(normalizedCustom.name, 'Sarah Shade');
+  assert.equal(normalizedCustom.email, 'sarah@example.com');
+});
+
 test('Auth UI: Session restoration on app startup (seamless restoration)', async () => {
   await AsyncStorage.clear();
   const auth0 = new Auth0Service();

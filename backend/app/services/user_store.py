@@ -15,8 +15,8 @@ from app.services.postgis_shade import resolve_ssl_mode
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROFILE = {
-    "name": "Alex River",
-    "email": "alex.river@example.com",
+    "name": "Guest",
+    "email": None,
     "bio": "Urban walker seeking shady streets and cool breezes.",
     "avatar_id": "tree",
 }
@@ -129,8 +129,8 @@ async def init_db() -> None:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
-                    name VARCHAR(255) NOT NULL DEFAULT 'Alex River',
-                    email VARCHAR(255) DEFAULT 'alex.river@example.com',
+                    name VARCHAR(255) NOT NULL DEFAULT 'Guest',
+                    email VARCHAR(255) DEFAULT NULL,
                     bio TEXT DEFAULT 'Urban walker seeking shady streets and cool breezes.',
                     avatar_id VARCHAR(50) NOT NULL DEFAULT 'tree',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

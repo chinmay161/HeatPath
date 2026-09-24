@@ -37,11 +37,22 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { profile, loading, saving, error, saveProfile, reloadProfile } = useUserProfile();
   const { stats } = useWalkHistory();
-  const { user } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+
+  // Effective display name and email:
+  // When guest: defaults to "Guest", email is null / not set (never placeholder like Alex River)
+  // When authenticated: uses Auth0 user name/email or custom saved profile
+  const effectiveDisplayName = isAuthenticated
+    ? (user?.name || (profile.name && profile.name !== 'Alex River' && profile.name !== 'Guest' ? profile.name : 'Urban Walker'))
+    : ((profile.name && profile.name !== 'Alex River') ? profile.name : 'Guest');
+
+  const effectiveEmail = isAuthenticated
+    ? (user?.email || (profile.email && profile.email !== 'alex.river@example.com' ? profile.email : null))
+    : ((profile.email && profile.email !== 'alex.river@example.com') ? profile.email : null);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(profile.name);
-  const [email, setEmail] = useState(profile.email || '');
+  const [name, setName] = useState(effectiveDisplayName);
+  const [email, setEmail] = useState(effectiveEmail || '');
   const [bio, setBio] = useState(profile.bio || '');
   const [avatarId, setAvatarId] = useState(profile.avatar_id || 'tree');
 
@@ -50,11 +61,11 @@ export default function ProfileScreen() {
 
   // Sync form state when profile updates
   useEffect(() => {
-    setName(profile.name);
-    setEmail(profile.email || '');
+    setName(effectiveDisplayName);
+    setEmail(effectiveEmail || '');
     setBio(profile.bio || '');
     setAvatarId(profile.avatar_id || 'tree');
-  }, [profile]);
+  }, [profile, effectiveDisplayName, effectiveEmail]);
 
   const selectedAvatar = AVATAR_OPTIONS.find(a => a.id === avatarId) || AVATAR_OPTIONS[0];
 
@@ -95,8 +106,8 @@ export default function ProfileScreen() {
   };
 
   const handleCancel = () => {
-    setName(profile.name);
-    setEmail(profile.email || '');
+    setName(effectiveDisplayName);
+    setEmail(effectiveEmail || '');
     setBio(profile.bio || '');
     setAvatarId(profile.avatar_id || 'tree');
     setValidationError(null);
@@ -208,7 +219,7 @@ export default function ProfileScreen() {
             </View>
           )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroName}>{profile.name || user?.name || 'Urban Walker'}</Text>
+            <Text style={styles.heroName}>{effectiveDisplayName}</Text>
             <Text style={styles.heroBadgeTitle}>{selectedAvatar.label}</Text>
             {profile.bio ? (
               <Text style={styles.heroBio} numberOfLines={2}>
@@ -325,12 +336,12 @@ export default function ProfileScreen() {
             <View style={{ gap: 14, marginTop: 10 }}>
               <View style={styles.readRow}>
                 <Text style={styles.readLabel}>Display Name</Text>
-                <Text style={styles.readValue}>{profile.name || 'Not set'}</Text>
+                <Text style={styles.readValue}>{effectiveDisplayName}</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.readRow}>
                 <Text style={styles.readLabel}>Email</Text>
-                <Text style={styles.readValue}>{profile.email || 'None'}</Text>
+                <Text style={styles.readValue}>{effectiveEmail || 'None'}</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.readRow}>

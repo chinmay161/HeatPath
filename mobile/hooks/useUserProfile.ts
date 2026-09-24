@@ -14,12 +14,23 @@ async function getProfileStorageKey(): Promise<string> {
   }
 }
 
-const DEFAULT_PROFILE: UserProfile = {
-  name: 'Alex River',
-  email: 'alex.river@example.com',
+export const DEFAULT_PROFILE: UserProfile = {
+  name: 'Guest',
+  email: null,
   bio: 'Urban walker seeking shady streets and cool breezes.',
   avatar_id: 'tree',
 };
+
+export function normalizeProfile(p: any): UserProfile {
+  const rawName = typeof p?.name === 'string' ? p.name.trim() : '';
+  const rawEmail = typeof p?.email === 'string' ? p.email.trim() : '';
+  return {
+    name: (!rawName || rawName === 'Alex River') ? 'Guest' : rawName,
+    email: (!rawEmail || rawEmail === 'alex.river@example.com') ? null : rawEmail,
+    bio: p?.bio || DEFAULT_PROFILE.bio,
+    avatar_id: p?.avatar_id || 'tree',
+  };
+}
 
 // Simple in-memory listeners for cross-component re-renders
 type Listener = (profile: UserProfile) => void;
@@ -46,13 +57,13 @@ export function useUserProfile() {
       const raw = await AsyncStorage.getItem(storageKey);
       if (raw) {
         try {
-          const parsed = JSON.parse(raw);
+          const parsed = normalizeProfile(JSON.parse(raw));
           setProfile(parsed);
           broadcast(parsed);
         } catch {}
       }
 
-      const remote = await getProfile();
+      const remote = normalizeProfile(await getProfile());
       setProfile(remote);
       broadcast(remote);
       await AsyncStorage.setItem(storageKey, JSON.stringify(remote)).catch(() => {});
