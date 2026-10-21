@@ -84,7 +84,7 @@ async def ping():
     return {"status": "ok"}
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
     """
     Health check endpoint exposing database, cache, postgis, and operational metrics status.
