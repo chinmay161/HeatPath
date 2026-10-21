@@ -26,6 +26,7 @@ import { colors } from '../theme/colors';
 import { OnboardingFlow } from '../components/OnboardingFlow';
 import { NavigationProvider } from '../navigation';
 import { AuthProvider } from '../context/AuthContext';
+import { warmUpServer } from '../config/api';
 
 const ONBOARDED_KEY = 'heatpath_onboarded';
 
@@ -46,6 +47,11 @@ export default function RootLayout() {
   // null = still checking, false = needs onboarding, true = already onboarded
   // Check runs in parallel with font loading — whichever finishes last unblocks the UI.
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
+
+  // Start waking the server while fonts, onboarding or home load
+  useEffect(() => {
+    warmUpServer();
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDED_KEY).then(val => setOnboarded(val != null));

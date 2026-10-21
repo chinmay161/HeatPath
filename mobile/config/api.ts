@@ -88,6 +88,36 @@ export async function apiFetch(pathOrUrl: string, init?: ApiFetchInit): Promise<
   }
 }
 
+// A Render free-tier cold start takes ~50 s; keep the ping open long enough to see it through
+const WARM_UP_TIMEOUT_MS = 60_000;
+
+let warmUpStarted = false;
+
+/**
+ * Fire-and-forget GET /ping so a sleeping server starts waking while the app loads.
+ * Runs at most once per app session and never throws. Uses plain fetch with no
+ * identity headers, so on web it is a simple request with no CORS preflight.
+ */
+export function warmUpServer(): void {
+  if (warmUpStarted) return;
+  warmUpStarted = true;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WARM_UP_TIMEOUT_MS);
+  try {
+    fetch(`${API_BASE}/ping`, { method: 'GET', signal: controller.signal })
+      .catch(() => {})
+      .finally(() => clearTimeout(timer));
+  } catch {
+    clearTimeout(timer);
+  }
+}
+
+/** Test hook: allow warmUpServer to run again. */
+export function resetWarmUpForTests(): void {
+  warmUpStarted = false;
+}
+
 /**
  * apiFetch plus JSON parsing. Rejects with a classified ApiError for any failure:
  * network/timeout, HTTP error status, or a 200 whose body reports status:"unavailable".
