@@ -76,6 +76,12 @@ app.include_router(forecast.router)
 app.include_router(cool_spots.router)
 
 
+@app.api_route("/ping", methods=["GET", "HEAD"])
+async def ping():
+    """
+    Lightweight liveness probe for uptime monitors. Performs no DB, cache, or network calls.
+    """
+    return {"status": "ok"}
 
 
 @app.get("/health")
