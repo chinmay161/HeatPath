@@ -10,7 +10,7 @@ import asyncpg
 
 from app.config import config
 from app.services.cache import get_cache
-from app.services.postgis_shade import resolve_ssl_mode
+from app.services.postgis_shade import resolve_ssl_mode, get_postgis_dsn, describe_dsn
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +85,26 @@ def get_preferences_cached(user_id: Any = 1) -> Dict[str, Any]:
     return _user_cached_preferences[uid].copy()
 
 
+class DatabaseDisabledError(RuntimeError):
+    """Raised when POSTGIS_DSN is unset; callers fall back to in-memory state."""
+
+
+def _log_db_fallback(operation: str, e: Exception, action: str) -> None:
+    """Log a database failure; stays quiet when the database is intentionally disabled."""
+    if isinstance(e, DatabaseDisabledError):
+        return
+    logger.warning(f"[user_store] {operation} database operation failed: {e}. {action}")
+
+
 async def get_db_pool() -> asyncpg.Pool:
-    """Acquire or initialize the PostgreSQL connection pool for the current event loop."""
+    """
+    Acquire or initialize the PostgreSQL connection pool for the current event loop.
+    Raises DatabaseDisabledError (without attempting a connection) when POSTGIS_DSN is unset.
+    """
     global _db_pool
+    dsn = get_postgis_dsn()
+    if dsn is None:
+        raise DatabaseDisabledError("POSTGIS_DSN is not set; user database disabled")
     current_loop = asyncio.get_running_loop()
     if _db_pool is None or getattr(_db_pool, "_loop", None) is not current_loop or _db_pool._loop.is_closed():
         if _db_pool is not None and getattr(_db_pool, "_loop", None) is not None and not _db_pool._loop.is_closed():
@@ -95,9 +112,8 @@ async def get_db_pool() -> asyncpg.Pool:
                 await _db_pool.close()
             except Exception:
                 pass
-        dsn = config.POSTGIS_DSN
         ssl_mode = resolve_ssl_mode(dsn)
-        logger.info(f"Initializing user_store PostgreSQL pool with DSN: {dsn} (ssl={ssl_mode})")
+        logger.info(f"Initializing user_store PostgreSQL pool ({describe_dsn(dsn)}, ssl={ssl_mode})")
         _db_pool = await asyncpg.create_pool(
             dsn=dsn,
             min_size=2,
@@ -193,7 +209,7 @@ async def init_db() -> None:
 
         _db_initialized = True
     except Exception as e:
-        logger.warning(f"[user_store] Failed to initialize PostgreSQL tables: {e}. Falling back to in-memory store.")
+        _log_db_fallback("init_db", e, "Falling back to in-memory store.")
 
 
 async def reset_db() -> None:
@@ -297,7 +313,7 @@ async def get_profile(user_id: int = 1) -> Dict[str, Any]:
         await _cache_set(cache_key, result)
         return result
     except Exception as e:
-        logger.warning(f"[user_store] get_profile database query failed: {e}. Using fallback defaults.")
+        _log_db_fallback("get_profile", e, "Using fallback defaults.")
         uid = str(user_id)
         if uid in _user_cached_profile:
             return _user_cached_profile[uid].copy()
@@ -341,7 +357,7 @@ async def update_profile(data: Dict[str, Any], user_id: int = 1) -> Dict[str, An
         await _cache_delete(f"user:{user_id}:profile")
         return result
     except Exception as e:
-        logger.warning(f"[user_store] update_profile database write failed: {e}. Updating in-memory cache.")
+        _log_db_fallback("update_profile", e, "Updating in-memory cache.")
         fallback_profile = {
             "name": name,
             "email": email,
@@ -429,7 +445,7 @@ async def get_preferences(user_id: Any = 1) -> Dict[str, Any]:
         await _cache_set(cache_key, result)
         return result
     except Exception as e:
-        logger.warning(f"[user_store] get_preferences database query failed: {e}. Using cached/default preferences.")
+        _log_db_fallback("get_preferences", e, "Using cached/default preferences.")
         return _cached_preferences.copy()
 
 
@@ -498,7 +514,7 @@ async def update_preferences(data: Dict[str, Any], user_id: Any = 1) -> Dict[str
         await _cache_delete(f"user:{user_id}:preferences")
         return await get_preferences(user_id)
     except Exception as e:
-        logger.warning(f"[user_store] update_preferences database write failed: {e}. Updating in-memory cache.")
+        _log_db_fallback("update_preferences", e, "Updating in-memory cache.")
         global _cached_preferences
         _cached_preferences = {
             "heat_sensitivity": heat_sensitivity,

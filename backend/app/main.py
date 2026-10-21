@@ -90,25 +90,29 @@ async def health_check():
     Health check endpoint exposing database, cache, postgis, and operational metrics status.
     """
     from app.services.cache import get_cache
-    from app.services.postgis_shade import get_pool
+    from app.services import postgis_shade
     from app.services.metrics import metrics
 
     cache = await get_cache()
     cache_healthy = await cache.health_check()
     cache_backend_name = cache.name
 
-    postgis_status = "healthy"
-    try:
-        pool = await asyncio.wait_for(get_pool(), timeout=2.0)
-        if pool is None:
-            postgis_status = "unavailable"
-    except Exception:
-        postgis_status = "unhealthy"
+    if not postgis_shade.is_postgis_enabled():
+        # POSTGIS_DSN unset: database intentionally disabled, app runs on fallbacks
+        postgis_status = "disabled"
+    else:
+        postgis_status = "healthy"
+        try:
+            pool = await asyncio.wait_for(postgis_shade.get_pool(), timeout=2.0)
+            if pool is None:
+                postgis_status = "unavailable"
+        except Exception:
+            postgis_status = "unhealthy"
 
     return {
         "status": "ok",
         "env": config.ENV,
-        "database": "healthy" if postgis_status == "healthy" else "degraded",
+        "database": postgis_status if postgis_status in ("healthy", "disabled") else "degraded",
         "cache": "healthy" if cache_healthy else "degraded",
         "cache_backend": cache_backend_name,
         "postgis": postgis_status,

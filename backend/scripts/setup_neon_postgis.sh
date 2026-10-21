@@ -52,7 +52,7 @@ print(f'export PGPORT=\"{url.port or 5432}\"')
 print('export PGSSLMODE=\"require\"')
 " "$TARGET_DSN")
 
-echo "[setup] Connecting to Neon host: ${PGHOST}:${PGPORT} (database: ${PGDATABASE}, user: ${PGUSER})"
+echo "[setup] Connecting to Neon host: ${PGHOST}:${PGPORT} (database: ${PGDATABASE})"
 
 # Test connection
 echo "[setup] Testing Neon connection..."
@@ -136,5 +136,5 @@ SELECT pg_size_pretty(pg_database_size(current_database())) as total_db_size;
 echo "=================================================================="
 echo " Setup complete! Your Neon PostGIS database is ready for HeatPath."
 echo " Set POSTGIS_DSN in your Render environment variables:"
-echo " POSTGIS_DSN=${TARGET_DSN}"
+echo " POSTGIS_DSN=<the connection string you passed to this script>"
 echo "=================================================================="

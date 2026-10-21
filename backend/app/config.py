@@ -12,7 +12,8 @@ class Config:
     ENV = os.getenv("ENV", "development")
     API_KEY_PLACEHOLDER = os.getenv("API_KEY_PLACEHOLDER", "")
     ORS_API_KEY = os.getenv("ORS_API_KEY", "")
-    POSTGIS_DSN = os.getenv("POSTGIS_DSN", "postgresql://heatpath_app:heatpath_secure_pass_2026@127.0.0.1:5433/heatpath_osm")
+    # No default: when unset, PostGIS and the user database are disabled (fallbacks only).
+    POSTGIS_DSN = os.getenv("POSTGIS_DSN", "").strip()
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "")
 
     # Redis Cache Configuration

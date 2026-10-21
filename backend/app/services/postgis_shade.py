@@ -1,15 +1,57 @@
-import os
 import logging
 import asyncio
 import asyncpg
-from dotenv import load_dotenv
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from urllib.parse import urlsplit
 
-load_dotenv()
+from app.config import config
 
 logger = logging.getLogger(__name__)
 
 _pool: asyncpg.Pool = None
+_disabled_warning_logged = False
+
+
+def get_postgis_dsn() -> Optional[str]:
+    """
+    Return the configured POSTGIS_DSN, or None when it is unset.
+    When unset, PostGIS and the user database are disabled: no connection is
+    attempted and callers use their fallbacks. A single warning is logged.
+    """
+    global _disabled_warning_logged
+    dsn = (config.POSTGIS_DSN or "").strip()
+    if dsn:
+        return dsn
+    if not _disabled_warning_logged:
+        logger.warning(
+            "POSTGIS_DSN is not set: PostGIS shade lookups and the user database are disabled; "
+            "using Overpass and in-memory fallbacks."
+        )
+        _disabled_warning_logged = True
+    return None
+
+
+def describe_dsn(dsn: str) -> str:
+    """
+    Return a log-safe description of a DSN: host and database name only.
+    Never includes the user or password.
+    """
+    try:
+        parsed = urlsplit(dsn)
+        if parsed.scheme not in ("postgres", "postgresql"):
+            # Keyword-style or malformed DSNs could carry credentials anywhere; log nothing from them
+            return "host=unknown-host db=unknown-db"
+        host = parsed.hostname or "unknown-host"
+        port = f":{parsed.port}" if parsed.port else ""
+        database = parsed.path.lstrip("/") or "unknown-db"
+        return f"host={host}{port} db={database}"
+    except ValueError:
+        return "host=unknown-host db=unknown-db"
+
+
+def is_postgis_enabled() -> bool:
+    """True when a POSTGIS_DSN is configured."""
+    return get_postgis_dsn() is not None
 
 def resolve_ssl_mode(dsn: str) -> str:
     """
@@ -26,15 +68,15 @@ def resolve_ssl_mode(dsn: str) -> str:
         return "disable"
     return "require"
 
-async def get_pool() -> asyncpg.Pool:
+async def get_pool() -> Optional[asyncpg.Pool]:
+    """Return the PostGIS pool, or None when POSTGIS_DSN is unset (PostGIS disabled)."""
     global _pool
     if _pool is None:
-        dsn = os.environ.get(
-            "POSTGIS_DSN", 
-            "postgresql://heatpath_app:heatpath_secure_pass_2026@127.0.0.1:5433/heatpath_osm"
-        )
+        dsn = get_postgis_dsn()
+        if dsn is None:
+            return None
         ssl_mode = resolve_ssl_mode(dsn)
-        logger.info(f"Initializing PostGIS connection pool with DSN: {dsn} (ssl={ssl_mode})")
+        logger.info(f"Initializing PostGIS connection pool ({describe_dsn(dsn)}, ssl={ssl_mode})")
         _pool = await asyncpg.create_pool(
             dsn=dsn,
             min_size=2,
@@ -53,6 +95,9 @@ async def fetch_shade_features_postgis(lat: float, lon: float, radius_m: int = 6
     except Exception as e:
         logger.warning(f"Failed to connect to PostGIS pool: {e}")
         return [], "postgis_error"
+
+    if pool is None:
+        return [], "postgis_disabled"
 
     # PostGIS queries use WGS84 geography ST_DWithin.
     # $1 = lon, $2 = lat, $3 = radius_m.
