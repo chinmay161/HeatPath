@@ -13,6 +13,7 @@ import { usePreferences } from '../hooks/usePreferences';
 import { type HourlyForecastItem } from '../config/api';
 import Icon from './Icon';
 import { colors, fonts, radius } from '../theme/colors';
+import { cachedForecastNote, getForecastBadge, getForecastNotice } from '../utils/forecastStatus';
 
 type Props = {
   lat: number | null;
@@ -53,12 +54,16 @@ function severityColor(sev: HourlyForecastItem['severity']): string {
 }
 
 export function HourlyComfortCard({ lat, lon }: Props) {
-  const { data, loading, error, isUnavailable, refetch } = useHourlyForecast(lat, lon);
+  const { data, loading, failure, waking, isCached, cachedAt, refetch } = useHourlyForecast(lat, lon);
   const { preferences, formatTemp } = usePreferences();
   const [selectedIdx, setSelectedIdx] = useState<number>(0);
 
   const hours = data?.hours || [];
   const selectedHour = hours[selectedIdx] || hours[0];
+
+  const notice = getForecastNotice({ loading, waking, failure });
+  const badge = getForecastBadge({ loading, waking, failure, hasHours: hours.length > 0, isCached, cachedAt });
+  const badgeDot = { live: '#4ade80', updating: '#4ade80', saved: '#fbbf24', down: '#f87171' }[badge.tone];
 
   // Best time recommendation calculation
   const bestHours = hours.filter(h => h.is_best_time);
@@ -75,41 +80,43 @@ export function HourlyComfortCard({ lat, lon }: Props) {
           <Text style={styles.cardSubtitle}>24-hour temperature & comfort projection</Text>
         </View>
         <View style={styles.badgeLive}>
-          <View style={[styles.dot, { backgroundColor: isUnavailable ? '#f87171' : '#4ade80' }]} />
-          <Text style={styles.badgeLiveText}>
-            {isUnavailable ? 'Unavailable' : loading ? 'Updating…' : 'Live · 24h'}
-          </Text>
+          <View style={[styles.dot, { backgroundColor: badgeDot }]} />
+          <Text style={styles.badgeLiveText}>{badge.text}</Text>
         </View>
       </View>
 
-      {/* Loading state */}
+      {/* Loading state (including waking the server) */}
       {loading && hours.length === 0 && (
         <View style={styles.stateContainer}>
           <ActivityIndicator color={colors.lime} size="small" />
-          <Text style={styles.stateText}>Analyzing hourly heat & solar conditions…</Text>
+          <Text style={styles.stateText}>{notice?.text ?? 'Analyzing hourly heat & solar conditions…'}</Text>
         </View>
       )}
 
-      {/* Unavailable state */}
-      {isUnavailable && (
+      {/* Failure with nothing saved to show */}
+      {!loading && notice && hours.length === 0 && (
         <View style={styles.stateContainer}>
           <Icon name="clock" size={24} stroke="#fca5a5" />
-          <Text style={styles.errorText}>Weather forecast provider temporarily unreachable</Text>
-          <Text style={styles.errorSub}>Patho relies on live forecast models. Retrying in 60s.</Text>
-          <TouchableOpacity onPress={refetch} style={styles.retryBtn} activeOpacity={0.8}>
-            <Text style={styles.retryText}>Retry now</Text>
-          </TouchableOpacity>
+          <Text style={styles.errorText}>{notice.text}</Text>
+          {notice.showRetry && (
+            <TouchableOpacity onPress={refetch} style={styles.retryBtn} activeOpacity={0.8}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
-      {/* Error state */}
-      {error && !isUnavailable && hours.length === 0 && (
-        <View style={styles.stateContainer}>
-          <Icon name="clock" size={24} stroke="#fca5a5" />
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={refetch} style={styles.retryBtn} activeOpacity={0.8}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
+      {/* Saved forecast shown because the live one could not load */}
+      {isCached && notice && hours.length > 0 && (
+        <View style={styles.cachedNote}>
+          <Text style={styles.cachedNoteText}>
+            {cachedForecastNote(cachedAt)} {notice.text}
+          </Text>
+          {notice.showRetry && (
+            <TouchableOpacity onPress={refetch} style={styles.cachedRetryBtn} activeOpacity={0.8}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -270,13 +277,6 @@ const styles = StyleSheet.create({
     color: '#fca5a5',
     textAlign: 'center',
   },
-  errorSub: {
-    fontFamily: fonts.ui,
-    fontSize: 12,
-    color: '#9fb7a6',
-    textAlign: 'center',
-    maxWidth: 280,
-  },
   retryBtn: {
     marginTop: 8,
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -288,6 +288,31 @@ const styles = StyleSheet.create({
     fontFamily: fonts.uiBold,
     fontSize: 12,
     color: '#E8F0EA',
+  },
+  cachedNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(251,191,36,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cachedNoteText: {
+    flex: 1,
+    fontFamily: fonts.ui,
+    fontSize: 12,
+    color: '#f5deb0',
+    lineHeight: 16,
+  },
+  cachedRetryBtn: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexShrink: 0,
   },
   bestTimeBanner: {
     flexDirection: 'row',
