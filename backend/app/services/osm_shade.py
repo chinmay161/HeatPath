@@ -376,6 +376,8 @@ async def fetch_shade_for_tile(tile_key_str: str) -> dict:
     elif source == "postgis_error":
         logger.warning(f"[shade] PostGIS query failed at {tile_lat},{tile_lon}, falling back to Overpass")
         features, source = await fetch_shade_features(tile_lat, tile_lon, radius_m=60)
+    elif source == "postgis_disabled":
+        features, source = await fetch_shade_features(tile_lat, tile_lon, radius_m=60)
 
     if source in ("postgis", "overpass"):
         if features:
