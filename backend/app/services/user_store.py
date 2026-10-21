@@ -11,6 +11,7 @@ import asyncpg
 from app.config import config
 from app.services.cache import get_cache
 from app.services.postgis_shade import resolve_ssl_mode, get_postgis_dsn, describe_dsn
+from app.services.db_backoff import ConnectBackoff, DatabaseUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ async def _cache_delete(key: str) -> bool:
 from app.services.preferences_store import get_preferences_store
 
 _db_pool: Optional[asyncpg.Pool] = None
+_db_pool_backoff = ConnectBackoff("user_store PostgreSQL pool")
 _db_initialized: bool = False
 
 # Synchronous fallback memory cache keyed by user_id
@@ -90,8 +92,11 @@ class DatabaseDisabledError(RuntimeError):
 
 
 def _log_db_fallback(operation: str, e: Exception, action: str) -> None:
-    """Log a database failure; stays quiet when the database is intentionally disabled."""
-    if isinstance(e, DatabaseDisabledError):
+    """
+    Log a database failure; stays quiet when the database is intentionally disabled
+    or cooling down after a failed connect (the backoff logs that once).
+    """
+    if isinstance(e, (DatabaseDisabledError, DatabaseUnavailableError)):
         return
     logger.warning(f"[user_store] {operation} database operation failed: {e}. {action}")
 
@@ -99,7 +104,8 @@ def _log_db_fallback(operation: str, e: Exception, action: str) -> None:
 async def get_db_pool() -> asyncpg.Pool:
     """
     Acquire or initialize the PostgreSQL connection pool for the current event loop.
-    Raises DatabaseDisabledError (without attempting a connection) when POSTGIS_DSN is unset.
+    Raises DatabaseDisabledError (without attempting a connection) when POSTGIS_DSN is unset,
+    and DatabaseUnavailableError while cooling down after a failed connect.
     """
     global _db_pool
     dsn = get_postgis_dsn()
@@ -112,14 +118,20 @@ async def get_db_pool() -> asyncpg.Pool:
                 await _db_pool.close()
             except Exception:
                 pass
+        _db_pool_backoff.check()
         ssl_mode = resolve_ssl_mode(dsn)
         logger.info(f"Initializing user_store PostgreSQL pool ({describe_dsn(dsn)}, ssl={ssl_mode})")
-        _db_pool = await asyncpg.create_pool(
-            dsn=dsn,
-            min_size=2,
-            max_size=10,
-            ssl=ssl_mode,
-        )
+        try:
+            _db_pool = await asyncpg.create_pool(
+                dsn=dsn,
+                min_size=2,
+                max_size=10,
+                ssl=ssl_mode,
+            )
+        except Exception as e:
+            _db_pool_backoff.record_failure(e)
+            raise
+        _db_pool_backoff.record_success()
     return _db_pool
 
 

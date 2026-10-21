@@ -5,10 +5,12 @@ from typing import List, Dict, Any, Optional
 from urllib.parse import urlsplit
 
 from app.config import config
+from app.services.db_backoff import ConnectBackoff, DatabaseUnavailableError
 
 logger = logging.getLogger(__name__)
 
 _pool: asyncpg.Pool = None
+_pool_backoff = ConnectBackoff("PostGIS pool")
 _disabled_warning_logged = False
 
 
@@ -69,20 +71,29 @@ def resolve_ssl_mode(dsn: str) -> str:
     return "require"
 
 async def get_pool() -> Optional[asyncpg.Pool]:
-    """Return the PostGIS pool, or None when POSTGIS_DSN is unset (PostGIS disabled)."""
+    """
+    Return the PostGIS pool, or None when POSTGIS_DSN is unset (PostGIS disabled).
+    Raises DatabaseUnavailableError without connecting while cooling down after a failed connect.
+    """
     global _pool
     if _pool is None:
         dsn = get_postgis_dsn()
         if dsn is None:
             return None
+        _pool_backoff.check()
         ssl_mode = resolve_ssl_mode(dsn)
         logger.info(f"Initializing PostGIS connection pool ({describe_dsn(dsn)}, ssl={ssl_mode})")
-        _pool = await asyncpg.create_pool(
-            dsn=dsn,
-            min_size=2,
-            max_size=10,
-            ssl=ssl_mode
-        )
+        try:
+            _pool = await asyncpg.create_pool(
+                dsn=dsn,
+                min_size=2,
+                max_size=10,
+                ssl=ssl_mode
+            )
+        except Exception as e:
+            _pool_backoff.record_failure(e)
+            raise
+        _pool_backoff.record_success()
     return _pool
 
 async def fetch_shade_features_postgis(lat: float, lon: float, radius_m: int = 60) -> tuple[List[Dict[str, Any]], str]:
@@ -92,6 +103,9 @@ async def fetch_shade_features_postgis(lat: float, lon: float, radius_m: int = 6
     """
     try:
         pool = await get_pool()
+    except DatabaseUnavailableError:
+        # Cooling down after a failed connect; already logged once by the backoff
+        return [], "postgis_unavailable"
     except Exception as e:
         logger.warning(f"Failed to connect to PostGIS pool: {e}")
         return [], "postgis_error"
