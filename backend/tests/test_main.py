@@ -27,6 +27,7 @@ def test_health_check():
     assert response.json()["status"] == "ok"
     assert "env" in response.json()
 
+@pytest.mark.live
 def test_get_conditions_live():
     """Test that conditions endpoint returns real data."""
     response = client.get("/conditions/?lat=40.7128&lon=-74.0060")
@@ -194,4 +195,4 @@ def test_conditions_available_includes_freshness_metadata(monkeypatch):
     assert data["observed_at"] == "2026-09-08T16:00:00Z"
     assert data["age_seconds"] == 45
     assert data["temperature_c"] == 31.5
-
+

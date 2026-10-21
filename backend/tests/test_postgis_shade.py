@@ -209,8 +209,8 @@ async def test_fetch_shade_for_tile_uses_postgis_when_available(
 
 # Live integration test, skipped by default
 @pytest.mark.live
+@pytest.mark.requires_db
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Live integration test, skipped by default")
 async def test_live_postgis_forest_query():
     # Coordinates inside Sanjay Gandhi National Park / Aarey Colony area
     lat, lon = 19.166, 72.894

@@ -7,7 +7,7 @@ and per-user preference persistence.
 import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.services.user_store import reset_db, DEFAULT_PREFERENCES
+from app.services.preferences_store import get_preferences_store, DEFAULT_PREFERENCES
 from app.constants.identity import HEADER_GUEST_ID
 
 TEST_GUEST_ID = "guest|550e8400-e29b-41d4-a716-446655440000"
@@ -15,10 +15,11 @@ GUEST_HEADERS = {HEADER_GUEST_ID: TEST_GUEST_ID}
 
 
 @pytest.fixture(autouse=True)
-async def clean_user_db():
-    await reset_db()
+async def clean_preferences_store():
+    # Guest preferences live in the in-memory store, so no database is needed
+    await get_preferences_store().reset()
     yield
-    await reset_db()
+    await get_preferences_store().reset()
 
 
 @pytest.mark.anyio

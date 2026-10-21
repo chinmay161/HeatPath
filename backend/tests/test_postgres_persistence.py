@@ -19,6 +19,8 @@ from app.services.user_store import (
 import app.services.user_store as user_store_module
 from app.services.cache import get_cache
 
+pytestmark = pytest.mark.requires_db
+
 
 @pytest.fixture(autouse=True)
 async def clean_db():

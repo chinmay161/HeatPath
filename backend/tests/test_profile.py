@@ -7,7 +7,7 @@ from app.main import app
 from app.services.user_store import DEFAULT_PROFILE, reset_db
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 async def clean_user_db():
     await reset_db()
     yield
@@ -15,7 +15,8 @@ async def clean_user_db():
 
 
 @pytest.mark.anyio
-
+@pytest.mark.requires_db
+@pytest.mark.usefixtures("clean_user_db")
 async def test_get_profile_returns_default_initially():
     async with AsyncClient(app=app, base_url="http://test") as client:
         res = await client.get("/profile/")
@@ -27,6 +28,8 @@ async def test_get_profile_returns_default_initially():
 
 
 @pytest.mark.anyio
+@pytest.mark.requires_db
+@pytest.mark.usefixtures("clean_user_db")
 async def test_put_profile_updates_and_persists():
     async with AsyncClient(app=app, base_url="http://test") as client:
         update_payload = {
