@@ -23,6 +23,7 @@ import { usePreferences } from '../../hooks/usePreferences';
 import { HourlyComfortCard } from '../../components/HourlyComfortCard';
 import { useAuth } from '../../hooks/useAuth';
 import { AuthPromptModal } from '../../components/AuthPromptModal';
+import { getConditionsNotice, type ConditionsNotice } from '../../utils/conditionsNotice';
 import {
   canShowWelcomePrompt,
   markWelcomePromptSeen,
@@ -59,7 +60,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { location, locationLabel, loading: locLoading, error: locError } = useUserLocation();
+  const { location, locationLabel, loading: locLoading } = useUserLocation();
 
   // "From" field override — null means use GPS
   const params = useLocalSearchParams<{ fromLat?: string; fromLon?: string; fromName?: string; fromToken?: string }>();
@@ -84,7 +85,7 @@ export default function HomeScreen() {
   const fromLon = fromOverride?.lon ?? location?.lon ?? null;
   const fromLabel = fromOverride?.label ?? locationLabel ?? 'Your location';
 
-  const { data: cond, loading: condLoading, error: condError, failure: condFailure, retry: retryConditions } =
+  const { data: cond, loading: condLoading, failure: condFailure, waking: condWaking, retry: retryConditions } =
     useCurrentConditions(fromLat, fromLon);
 
   const { spots: nearbySpots, loading: spotsLoading } =
@@ -133,9 +134,6 @@ export default function HomeScreen() {
   const dateText = formatDate();
 
   const isLoading = locLoading || condLoading;
-  const hasError  = !isLoading && (locError != null || condError != null);
-  // The server never woke within the retry budget: let the user try again
-  const onRetryConditions = hasError && condFailure === 'waking' ? retryConditions : undefined;
 
   // Display values: real from API where available, null otherwise
   const feelsLike  = cond && cond.heat_index != null ? convertTemp(cond.heat_index)    : null;
@@ -143,6 +141,14 @@ export default function HomeScreen() {
   const humidity   = cond && cond.humidity_pct != null ? Math.round(cond.humidity_pct)  : null;
   const sevLabel   = cond?.severity ?? null;
   const aqiIndex   = cond?.aqi_index ?? null;
+
+  const conditionsNotice = getConditionsNotice({
+    loading: isLoading,
+    waking: condWaking,
+    failure: condFailure,
+    hasLocation: fromLat != null && fromLon != null,
+    hasData: feelsLike != null,
+  });
 
 
   const onSearch = () => {
@@ -230,14 +236,14 @@ export default function HomeScreen() {
         >
           <DesktopConditionsHero
             isLoading={isLoading}
-            hasError={hasError}
+            notice={conditionsNotice}
             feelsLike={feelsLike}
             realTemp={realTemp}
             humidity={humidity}
             sevLabel={sevLabel}
             aqiIndex={aqiIndex}
             onSearch={onSearch}
-            onRetry={onRetryConditions}
+            onRetry={retryConditions}
           />
 
           <View style={{ flexDirection: 'row', gap: 18 }}>
@@ -340,13 +346,13 @@ export default function HomeScreen() {
       >
         <MobileConditionsHero
           isLoading={isLoading}
-          hasError={hasError}
+          notice={conditionsNotice}
           feelsLike={feelsLike}
           realTemp={realTemp}
           humidity={humidity}
           sevLabel={sevLabel}
           aqiIndex={aqiIndex}
-          onRetry={onRetryConditions}
+          onRetry={retryConditions}
         />
         {SearchPanel}
 
@@ -375,7 +381,8 @@ export default function HomeScreen() {
 
 type HeroProps = {
   isLoading: boolean;
-  hasError: boolean;
+  /** Waking, error or location message to show instead of conditions. */
+  notice: ConditionsNotice | null;
   feelsLike: number | null;
   realTemp: number | null;
   humidity: number | null;
@@ -385,28 +392,32 @@ type HeroProps = {
 };
 
 function DesktopConditionsHero({
-  isLoading, hasError, feelsLike, realTemp, humidity, sevLabel, aqiIndex, onSearch, onRetry,
+  isLoading, notice, feelsLike, realTemp, humidity, sevLabel, aqiIndex, onSearch, onRetry,
 }: HeroProps & { onSearch: () => void }) {
-  if (isLoading) {
+  if (isLoading || notice?.kind === 'waking') {
     return (
       <View style={[styles.desktopCondHero, { justifyContent: 'center', gap: 16 }]}>
         <View style={{ width: 64, height: 64, borderRadius: 20, overflow: 'hidden', backgroundColor: '#FFE8D0', position: 'relative' }}>
           <Mascot state="walking" />
         </View>
-        <Text style={{ fontFamily: fonts.display, fontSize: 18, color: '#b5560f' }}>Fetching conditions…</Text>
+        <Text style={{ fontFamily: fonts.display, fontSize: 18, color: '#b5560f', flexShrink: 1 }}>
+          {notice?.text ?? 'Fetching conditions…'}
+        </Text>
       </View>
     );
   }
-  if (hasError || feelsLike == null) {
+  if (notice || feelsLike == null) {
     return (
       <View style={[styles.desktopCondHero, { justifyContent: 'center', gap: 16 }]}>
         <View style={{ width: 64, height: 64, borderRadius: 20, overflow: 'hidden', backgroundColor: '#FFE8D0', position: 'relative' }}>
           <Mascot state="disappointed" />
         </View>
         <Text style={{ fontFamily: fonts.display, fontSize: 18, color: '#b5560f', flexShrink: 1 }}>
-          Could not load conditions — is the backend running?
+          {notice?.text}
         </Text>
-        {onRetry && <Button variant="ghost" onPress={onRetry} style={{ flexShrink: 0 }}>Retry</Button>}
+        {notice?.showRetry && onRetry && (
+          <Button variant="ghost" onPress={onRetry} style={{ flexShrink: 0 }}>Retry</Button>
+        )}
       </View>
     );
   }
@@ -441,28 +452,30 @@ function DesktopConditionsHero({
 }
 
 function MobileConditionsHero({
-  isLoading, hasError, feelsLike, realTemp, humidity, sevLabel, aqiIndex, onRetry,
+  isLoading, notice, feelsLike, realTemp, humidity, sevLabel, aqiIndex, onRetry,
 }: HeroProps) {
-  if (isLoading) {
+  if (isLoading || notice?.kind === 'waking') {
     return (
       <View style={[styles.mobileCondHero, { alignItems: 'center', justifyContent: 'center', minHeight: 120, gap: 12 }]}>
         <ActivityIndicator color={colors.high} />
-        <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 13, color: '#9a6a3c' }}>
-          Fetching conditions…
+        <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 13, color: '#9a6a3c', textAlign: 'center' }}>
+          {notice?.text ?? 'Fetching conditions…'}
         </Text>
       </View>
     );
   }
-  if (hasError || feelsLike == null) {
+  if (notice || feelsLike == null) {
     return (
       <View style={[styles.mobileCondHero, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
         <View style={{ width: 56, height: 56, borderRadius: 16, overflow: 'hidden', backgroundColor: '#FFE8D0', position: 'relative', flexShrink: 0 }}>
           <Mascot state="disappointed" />
         </View>
         <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 13, color: '#9a6a3c', flex: 1 }}>
-          Could not load conditions. Is the backend running?
+          {notice?.text}
         </Text>
-        {onRetry && <Button variant="ghost" onPress={onRetry} style={{ flexShrink: 0 }}>Retry</Button>}
+        {notice?.showRetry && onRetry && (
+          <Button variant="ghost" onPress={onRetry} style={{ flexShrink: 0 }}>Retry</Button>
+        )}
       </View>
     );
   }
