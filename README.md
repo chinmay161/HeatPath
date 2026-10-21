@@ -36,12 +36,13 @@ Navigate to the `backend/` folder:
    Provide valid values for:
    - `ORS_API_KEY` (from OpenRouteService)
    - `WAQI_TOKEN` (from World Air Quality Index)
-   - `POSTGIS_DSN` (e.g., `postgresql://heatpath_app:heatpath_secure_pass_2026@127.0.0.1:5433/heatpath_osm`)
+   - `POSTGIS_DSN` (e.g., `postgresql://heatpath_app:<your-db-password>@127.0.0.1:5433/heatpath_osm`)
 
 4. **Set up PostGIS database (WSL Ubuntu):**
    Ensure you have a Western Zone OSM PBF file at the repository root (`./western-zone-latest.osm.pbf`).
-   Run the setup script inside your WSL command line:
+   Run the setup script inside your WSL command line. It creates the `heatpath_app` database user with the password you export as `HEATPATH_DB_PASSWORD` (use the same password in `POSTGIS_DSN`):
    ```bash
+   export HEATPATH_DB_PASSWORD='<your-db-password>'
    ./backend/scripts/setup_postgis.sh
    ```
    This will clip the coastline, spin up the local PostgreSQL service on port `5433`, import data using `osm2pgsql`, and build spatial GIST indexes.

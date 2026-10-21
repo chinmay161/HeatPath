@@ -799,7 +799,7 @@ The map remains interactive during fetches; loading and error messages are light
 - **Spatial Indexes**: Standard GIST indexes on `way` and functional GIST indexes on `(way::geography)` for point, line, and polygon tables to optimize ST_DWithin geography query scans.
 
 ### Pipeline Fallback Logic & DSN Variables
-- **DSN Variable**: Configured in `.env` and `config.py` as `POSTGIS_DSN=postgresql://heatpath_app:heatpath_secure_pass_2026@127.0.0.1:5433/heatpath_osm`.
+- **DSN Variable**: Configured in `.env` and `config.py` as `POSTGIS_DSN=postgresql://heatpath_app:<your-db-password>@127.0.0.1:5433/heatpath_osm`.
 - **Async Execution**: `asyncpg` is used to maintain a connection pool with loopback SSL disabled (`ssl='disable'`) to avoid timeout issues.
 - **Fallback Flow**:
   1. The API queries local PostGIS using `ST_DWithin` on `way::geography` within a 60m radius of the tile coordinate.

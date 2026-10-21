@@ -7,6 +7,10 @@ REPO_ROOT=$(pwd)
 
 echo "[setup] Repo root resolved to: ${REPO_ROOT}"
 
+# The app user password is never stored in this repo. Export it first, e.g.:
+#   export HEATPATH_DB_PASSWORD='choose-a-strong-password'
+: "${HEATPATH_DB_PASSWORD:?Set HEATPATH_DB_PASSWORD to the password for the heatpath_app database user}"
+
 # Step 1: Verify western-zone-latest.osm.pbf exists
 PBF_FILE="./western-zone-latest.osm.pbf"
 if [ ! -f "$PBF_FILE" ]; then
@@ -37,7 +41,7 @@ sudo -u postgres psql -d heatpath_osm -c "CREATE EXTENSION IF NOT EXISTS hstore;
 
 echo "[setup] Creating app user and setting up permissions..."
 sudo -u postgres psql -c "DROP USER IF EXISTS heatpath_app;"
-sudo -u postgres psql -c "CREATE USER heatpath_app WITH PASSWORD 'heatpath_secure_pass_2026';"
+sudo -u postgres psql -c "CREATE USER heatpath_app WITH PASSWORD '${HEATPATH_DB_PASSWORD}';"
 sudo -u postgres psql -d heatpath_osm -c "GRANT ALL PRIVILEGES ON DATABASE heatpath_osm TO heatpath_app;"
 sudo -u postgres psql -d heatpath_osm -c "GRANT ALL ON SCHEMA public TO heatpath_app;"
 
@@ -47,7 +51,7 @@ sudo -u postgres psql -d heatpath_osm -c "GRANT ALL ON SCHEMA public TO heatpath
 # -E 4326 imports in WGS84 coordinates.
 # --hstore captures all additional tags.
 echo "[setup] Importing OSM data into PostGIS using osm2pgsql..."
-PGPASSWORD='heatpath_secure_pass_2026' osm2pgsql -d heatpath_osm -U heatpath_app -H 127.0.0.1 -P 5433 \
+PGPASSWORD="${HEATPATH_DB_PASSWORD}" osm2pgsql -d heatpath_osm -U heatpath_app -H 127.0.0.1 -P 5433 \
   --create --slim \
   -E 4326 \
   --hstore \
