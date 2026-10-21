@@ -84,7 +84,7 @@ export default function HomeScreen() {
   const fromLon = fromOverride?.lon ?? location?.lon ?? null;
   const fromLabel = fromOverride?.label ?? locationLabel ?? 'Your location';
 
-  const { data: cond, loading: condLoading, error: condError } =
+  const { data: cond, loading: condLoading, error: condError, failure: condFailure, retry: retryConditions } =
     useCurrentConditions(fromLat, fromLon);
 
   const { spots: nearbySpots, loading: spotsLoading } =
@@ -134,6 +134,8 @@ export default function HomeScreen() {
 
   const isLoading = locLoading || condLoading;
   const hasError  = !isLoading && (locError != null || condError != null);
+  // The server never woke within the retry budget: let the user try again
+  const onRetryConditions = hasError && condFailure === 'waking' ? retryConditions : undefined;
 
   // Display values: real from API where available, null otherwise
   const feelsLike  = cond && cond.heat_index != null ? convertTemp(cond.heat_index)    : null;
@@ -235,6 +237,7 @@ export default function HomeScreen() {
             sevLabel={sevLabel}
             aqiIndex={aqiIndex}
             onSearch={onSearch}
+            onRetry={onRetryConditions}
           />
 
           <View style={{ flexDirection: 'row', gap: 18 }}>
@@ -343,6 +346,7 @@ export default function HomeScreen() {
           humidity={humidity}
           sevLabel={sevLabel}
           aqiIndex={aqiIndex}
+          onRetry={onRetryConditions}
         />
         {SearchPanel}
 
@@ -377,10 +381,11 @@ type HeroProps = {
   humidity: number | null;
   sevLabel: string | null;
   aqiIndex: number | null;
+  onRetry?: () => void;
 };
 
 function DesktopConditionsHero({
-  isLoading, hasError, feelsLike, realTemp, humidity, sevLabel, aqiIndex, onSearch,
+  isLoading, hasError, feelsLike, realTemp, humidity, sevLabel, aqiIndex, onSearch, onRetry,
 }: HeroProps & { onSearch: () => void }) {
   if (isLoading) {
     return (
@@ -398,9 +403,10 @@ function DesktopConditionsHero({
         <View style={{ width: 64, height: 64, borderRadius: 20, overflow: 'hidden', backgroundColor: '#FFE8D0', position: 'relative' }}>
           <Mascot state="disappointed" />
         </View>
-        <Text style={{ fontFamily: fonts.display, fontSize: 18, color: '#b5560f' }}>
+        <Text style={{ fontFamily: fonts.display, fontSize: 18, color: '#b5560f', flexShrink: 1 }}>
           Could not load conditions — is the backend running?
         </Text>
+        {onRetry && <Button variant="ghost" onPress={onRetry} style={{ flexShrink: 0 }}>Retry</Button>}
       </View>
     );
   }
@@ -435,7 +441,7 @@ function DesktopConditionsHero({
 }
 
 function MobileConditionsHero({
-  isLoading, hasError, feelsLike, realTemp, humidity, sevLabel, aqiIndex,
+  isLoading, hasError, feelsLike, realTemp, humidity, sevLabel, aqiIndex, onRetry,
 }: HeroProps) {
   if (isLoading) {
     return (
@@ -456,6 +462,7 @@ function MobileConditionsHero({
         <Text style={{ fontFamily: fonts.uiSemiBold, fontSize: 13, color: '#9a6a3c', flex: 1 }}>
           Could not load conditions. Is the backend running?
         </Text>
+        {onRetry && <Button variant="ghost" onPress={onRetry} style={{ flexShrink: 0 }}>Retry</Button>}
       </View>
     );
   }

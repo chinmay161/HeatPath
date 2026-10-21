@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../config/api';
+import { useState, useEffect, useCallback } from 'react';
+import { apiFetchJson, classifyFailure, type ApiFailureClass } from '../config/api';
+import { retryWhileWaking } from '../config/wakeRetry';
 
 export type Severity = 'SAFE' | 'CAUTION' | 'HIGH' | 'EXTREME';
 
@@ -29,26 +30,60 @@ type State = {
   data: Conditions | null;
   loading: boolean;
   error: string | null;
+  /** Why the last load failed, or null on success / while loading. */
+  failure: ApiFailureClass | null;
+  /** True while retrying because the server is still waking up. */
+  waking: boolean;
 };
 
-export function useCurrentConditions(lat: number | null, lon: number | null): State {
-  const [state, setState] = useState<State>({ data: null, loading: false, error: null });
+export type CurrentConditionsResult = State & {
+  /** Start a fresh load (with its own wake-up retry budget). */
+  retry: () => void;
+};
+
+const INITIAL_STATE: State = { data: null, loading: false, error: null, failure: null, waking: false };
+
+export function useCurrentConditions(lat: number | null, lon: number | null): CurrentConditionsResult {
+  const [state, setState] = useState<State>(INITIAL_STATE);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (lat == null || lon == null) return;
-    let cancelled = false;
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    const controller = new AbortController();
+    setState(prev => ({ ...prev, loading: true, error: null, failure: null, waking: false }));
 
-    apiFetch(`/conditions/?lat=${lat}&lon=${lon}`)
-      .then(r => {
-        if (!r.ok) throw new Error(`Server error ${r.status}`);
-        return r.json() as Promise<Conditions>;
+    retryWhileWaking(
+      timeoutMs => apiFetchJson<Conditions>(`/conditions/?lat=${lat}&lon=${lon}`, {
+        signal: controller.signal,
+        timeoutMs,
+      }),
+      {
+        signal: controller.signal,
+        onWaking: () => {
+          if (!controller.signal.aborted) setState(prev => ({ ...prev, waking: true }));
+        },
+      },
+    )
+      .then(data => {
+        if (!controller.signal.aborted) {
+          setState({ data, loading: false, error: null, failure: null, waking: false });
+        }
       })
-      .then(data => { if (!cancelled) setState({ data, loading: false, error: null }); })
-      .catch((e: Error) => { if (!cancelled) setState({ data: null, loading: false, error: e.message }); });
+      .catch((e: Error) => {
+        if (controller.signal.aborted || e?.name === 'AbortError') return;
+        setState({
+          data: null,
+          loading: false,
+          error: e?.message || 'Request failed',
+          failure: classifyFailure(e),
+          waking: false,
+        });
+      });
 
-    return () => { cancelled = true; };
-  }, [lat, lon]);
+    return () => controller.abort();
+  }, [lat, lon, attempt]);
 
-  return state;
+  const retry = useCallback(() => setAttempt(n => n + 1), []);
+
+  return { ...state, retry };
 }
