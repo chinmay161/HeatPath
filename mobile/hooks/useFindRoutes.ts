@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { apiFetch } from '../config/api';
+import { apiFetch, FIND_ROUTES_TIMEOUT_MS } from '../config/api';
 
 export type ConfidenceReport = {
   value: number;
@@ -70,6 +70,7 @@ export async function findRoutes(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,
+    timeoutMs: FIND_ROUTES_TIMEOUT_MS,
     body: JSON.stringify({
       start: { lat: startLat, lon: startLon },
       end:   { lat: endLat,   lon: endLon },

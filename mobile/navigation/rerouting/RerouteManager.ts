@@ -6,7 +6,7 @@
  * immutability, network failure resilience, and dynamic environmental rescoring.
  */
 
-import { apiFetch } from '../../config/api';
+import { apiFetch, FIND_ROUTES_TIMEOUT_MS } from '../../config/api';
 import type { RoutesResult, ScoredRoute } from '../../hooks/useFindRoutes';
 import type { LocationSample } from '../location/types';
 import type { NavigationCoordinate, NavigationRoute, NavigationSession } from '../models';
@@ -38,6 +38,7 @@ export async function defaultRouteFetcher(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,
+    timeoutMs: FIND_ROUTES_TIMEOUT_MS,
     body: JSON.stringify({
       start: { lat: startLat, lon: startLon },
       end: { lat: endLat, lon: endLon },

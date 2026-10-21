@@ -1,4 +1,13 @@
 import { identityProvider } from '../services/identity';
+import {
+  ApiError,
+  DEFAULT_API_TIMEOUT_MS,
+  classifyFailure,
+  classifyResponse,
+  isOnline,
+} from './apiErrors';
+
+export { ApiError, classifyFailure, DEFAULT_API_TIMEOUT_MS, type ApiFailureClass } from './apiErrors';
 
 function getIsAndroid(): boolean {
   try {
@@ -21,26 +30,93 @@ export const API_BASE =
       : 'http://localhost:8000';
   })();
 
+export type ApiFetchInit = RequestInit & {
+  /** Per-attempt timeout; defaults to DEFAULT_API_TIMEOUT_MS. */
+  timeoutMs?: number;
+};
+
 /**
  * Centralized API fetch client that automatically attaches user identity headers
  * (X-Guest-ID for guests, Authorization Bearer for Auth0 users).
+ *
+ * Network errors and timeouts reject with an ApiError classed 'offline' or 'waking'.
+ * Aborts from the caller's own signal still reject with the original AbortError.
+ * HTTP error statuses resolve normally; use apiFetchJson to have them classified.
  */
-export async function apiFetch(pathOrUrl: string, init?: RequestInit): Promise<Response> {
+export async function apiFetch(pathOrUrl: string, init?: ApiFetchInit): Promise<Response> {
   const url = pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')
     ? pathOrUrl
     : `${API_BASE}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`;
 
+  const { timeoutMs = DEFAULT_API_TIMEOUT_MS, signal: callerSignal, ...requestInit } = init ?? {};
+
   const identityHeaders = await identityProvider.getIdentityHeaders();
   const mergedHeaders: Record<string, string> = {
     ...identityHeaders,
-    ...((init?.headers as Record<string, string>) || {}),
+    ...((requestInit.headers as Record<string, string>) || {}),
   };
 
-  return fetch(url, {
-    ...init,
-    headers: mergedHeaders,
-  });
+  // One controller aborts on either the caller's signal or the timeout
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const onCallerAbort = () => controller.abort();
+  if (callerSignal?.aborted) controller.abort();
+  callerSignal?.addEventListener('abort', onCallerAbort);
+
+  try {
+    return await fetch(url, {
+      ...requestInit,
+      headers: mergedHeaders,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (callerSignal?.aborted && !timedOut) throw error;
+    if (!isOnline()) {
+      throw new ApiError('offline', 'No internet connection');
+    }
+    if (timedOut) {
+      throw new ApiError('waking', `Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw new ApiError(classifyFailure(error), (error as Error)?.message || 'Network request failed');
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', onCallerAbort);
+  }
 }
+
+/**
+ * apiFetch plus JSON parsing. Rejects with a classified ApiError for any failure:
+ * network/timeout, HTTP error status, or a 200 whose body reports status:"unavailable".
+ */
+export async function apiFetchJson<T>(pathOrUrl: string, init?: ApiFetchInit): Promise<T> {
+  const res = await apiFetch(pathOrUrl, init);
+  let body: unknown = undefined;
+  let parsed = true;
+  try {
+    body = await res.json();
+  } catch {
+    parsed = false;
+  }
+
+  const kind = classifyResponse(res.status, body);
+  if (kind) {
+    throw new ApiError(kind, `Request failed with status ${res.status}`, { status: res.status, body });
+  }
+  if (!parsed) {
+    throw new ApiError('unknown', 'Response was not valid JSON', { status: res.status });
+  }
+  return body as T;
+}
+
+const HEAT_ZONES_TIMEOUT_MS = 60_000;
+
+// Route search calls OpenRouteService (25 s server timeout) plus shade lookups,
+// so it needs longer than the default per-attempt timeout
+export const FIND_ROUTES_TIMEOUT_MS = 60_000;
 
 export type HeatZonesBounds = {
   north: number;
@@ -84,7 +160,8 @@ export async function getHeatZones(
   const url =
     `${API_BASE}/heat-zones?north=${north}&south=${south}` +
     `&east=${east}&west=${west}&resolution=${resolution}`;
-  const res = await apiFetch(url);
+  // A cold grid can fan out to hundreds of shade-tile lookups, so allow longer than the default
+  const res = await apiFetch(url, { timeoutMs: HEAT_ZONES_TIMEOUT_MS });
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Heat zones fetch failed: ${err}`);
