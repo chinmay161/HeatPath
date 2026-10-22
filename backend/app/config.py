@@ -33,6 +33,10 @@ class Config:
     SCORING_MAX_HEAT_INDEX = float(os.getenv("SCORING_MAX_HEAT_INDEX", "50.0"))  # °C extreme danger threshold
     SCORING_MAX_AQI = float(os.getenv("SCORING_MAX_AQI", "300.0"))  # Hazardous AQI upper bound
 
+    # Hourly forecast "best time to walk" is only picked between these local hours (inclusive)
+    FORECAST_BEST_TIME_START_HOUR = int(os.getenv("FORECAST_BEST_TIME_START_HOUR", "6"))
+    FORECAST_BEST_TIME_END_HOUR = int(os.getenv("FORECAST_BEST_TIME_END_HOUR", "21"))
+
     # Microclimate & Urban Geometry Constants
     # Source: Steadman (1984) / Oke (1987) urban microclimate radiation reduction
     SHADE_COOLING_FACTOR_C = float(os.getenv("SHADE_COOLING_FACTOR_C", "7.0"))
