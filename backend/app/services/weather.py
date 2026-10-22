@@ -13,7 +13,18 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import httpx
 from app.config import config
+from app.services import provider_cache
 from app.services.metrics import metrics
+from app.services.provider_cache import (
+    age_seconds,
+    cache_key,
+    grid_cell,
+    is_fresh,
+    open_meteo_breaker,
+    parse_retry_after,
+    read_entry,
+    write_entry,
+)
 
 logger = logging.getLogger(__name__)
 WAQI_TOKEN = os.getenv("WAQI_TOKEN", "")
@@ -32,78 +43,107 @@ def _classify_error(e: Exception) -> str:
     return "error"
 
 
-async def get_weather(lat: float, lon: float) -> dict:
+def _iso(epoch_seconds: float) -> str:
+    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat()
+
+
+def _trip_on_rate_limit(r: httpx.Response, service: str, lat: float, lon: float) -> None:
+    """A 429 is never retried: open the circuit for Retry-After seconds instead."""
+    retry_after = parse_retry_after(r.headers.get("Retry-After"))
+    logger.warning(
+        "[provider_rate_limited] provider=open-meteo service=%s retry_after=%ds coord=(%.4f,%.4f)",
+        service, retry_after, lat, lon,
+    )
+    open_meteo_breaker.trip(retry_after)
+
+
+def _retry_after_for(provider_status: str) -> int:
+    if provider_status == "rate_limited":
+        return open_meteo_breaker.remaining() or config.OPEN_METEO_RATE_LIMIT_DEFAULT_SECONDS
+    return 60
+
+
+async def _call_open_meteo(url: str, service: str, lat: float, lon: float, parse, max_attempts: int) -> tuple:
     """
-    Returns real-time temperature_c, humidity_pct, feels_like_c from Open-Meteo.
-    Includes data freshness (observed_at, age_seconds) and provider diagnostics.
-    On failure: logs provider failure, records metrics, and returns structured unavailable state.
+    Call Open-Meteo within OPEN_METEO_CALL_BUDGET_SECONDS in total, so the server
+    always answers before the app's per-attempt timeout. Each attempt gets at most
+    OPEN_METEO_ATTEMPT_TIMEOUT_SECONDS (and never more than the budget left); a
+    failed attempt is retried after OPEN_METEO_RETRY_WAIT_SECONDS, up to max_attempts.
+    A 429 is never retried: it opens the circuit breaker instead.
+
+    `parse(json)` returns the value to cache, or None when the response has no usable
+    data. Returns (value or None, provider_status).
     """
     start_time = time.perf_counter()
-    url = (
-        f"https://api.open-meteo.com/v1/forecast"
-        f"?latitude={lat}&longitude={lon}"
-        f"&current=temperature_2m,relative_humidity_2m,apparent_temperature"
-        f"&forecast_days=1"
-    )
+    deadline = time.monotonic() + config.OPEN_METEO_CALL_BUDGET_SECONDS
+    last_error: Optional[Exception] = None
+    provider_status = None
 
-    last_error = None
-    for attempt in range(3):
+    for attempt in range(max_attempts):
+        if open_meteo_breaker.is_open:
+            provider_status = "rate_limited"
+            break
+        if deadline - time.monotonic() <= 0:
+            last_error = last_error or asyncio.TimeoutError("Open-Meteo call budget exhausted")
+            break
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.get(url)
-                if r.status_code == 429:
-                    logger.warning(
-                        "[provider_rate_limited] provider=open-meteo service=weather attempt=%d/3 coord=(%.4f,%.4f)",
-                        attempt + 1, lat, lon
-                    )
-                    last_error = httpx.HTTPStatusError("Rate limited", request=r.request, response=r)
-                    await asyncio.sleep(2 ** attempt)
-                    continue
-                r.raise_for_status()
-                data = r.json()
-                current = data.get("current", {})
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                metrics.record_provider_call("weather", duration_ms, success=True)
-                now_iso = datetime.now(timezone.utc).isoformat()
-                return {
-                    "status": "available",
-                    "provider": "open-meteo",
-                    "provider_status": "healthy",
-                    "observed_at": now_iso,
-                    "age_seconds": 0,
-                    "retry_after": None,
-                    "temperature_c": float(current["temperature_2m"]),
-                    "humidity_pct":  float(current["relative_humidity_2m"]),
-                    "feels_like_c":  float(current["apparent_temperature"]),
-                }
+            async with httpx.AsyncClient() as client:
+                # Sized after the client is built, so its setup time counts against the budget
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError("Open-Meteo call budget exhausted")
+                attempt_timeout = min(config.OPEN_METEO_ATTEMPT_TIMEOUT_SECONDS, remaining)
+                # wait_for bounds the whole attempt; httpx's timeout applies per phase
+                r = await asyncio.wait_for(client.get(url, timeout=attempt_timeout), timeout=attempt_timeout)
+            if r.status_code == 429:
+                _trip_on_rate_limit(r, service, lat, lon)
+                last_error = httpx.HTTPStatusError("Rate limited", request=r.request, response=r)
+                break
+            r.raise_for_status()
+            value = parse(r.json())
+            if value is None:
+                provider_status = "unreachable"
+                break
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            metrics.record_provider_call(service, duration_ms, success=True)
+            return value, "healthy"
         except Exception as e:
             last_error = e
             logger.warning(
-                "[provider_error] provider=open-meteo service=weather attempt=%d/3 reason=%s: %s coord=(%.4f,%.4f)",
-                attempt + 1, type(e).__name__, e, lat, lon
+                "[provider_error] provider=open-meteo service=%s attempt=%d/%d reason=%s: %s coord=(%.4f,%.4f)",
+                service, attempt + 1, max_attempts, type(e).__name__, e, lat, lon
             )
-            if attempt < 2:
-                await asyncio.sleep(2 ** attempt)
-                continue
+            if attempt < max_attempts - 1:
+                wait = min(config.OPEN_METEO_RETRY_WAIT_SECONDS, deadline - time.monotonic())
+                if wait > 0:
+                    await asyncio.sleep(wait)
 
-    # Provider unavailable — record failure metrics and return structured metadata
+    if provider_status is None:
+        provider_status = _classify_error(last_error) if last_error else "unreachable"
     duration_ms = (time.perf_counter() - start_time) * 1000
-    provider_status = _classify_error(last_error) if last_error else "unreachable"
-    metrics.record_provider_call("weather", duration_ms, success=False, failure_type=provider_status)
-
+    metrics.record_provider_call(service, duration_ms, success=False, failure_type=provider_status)
     logger.warning(
-        "[provider_failure] provider=open-meteo service=weather status=%s reason=%s timestamp=%s coord=(%.4f,%.4f)",
+        "[provider_failure] provider=open-meteo service=%s status=%s reason=%s timestamp=%s coord=(%.4f,%.4f)",
+        service,
         provider_status,
         str(last_error),
         datetime.now(timezone.utc).isoformat(),
         lat,
         lon,
     )
+    return None, provider_status
+
+
+
+# --- Current weather -----------------------------------------------------------
+
+def _weather_unavailable(provider_status: str) -> dict:
     return {
         "status": "unavailable",
         "provider": "open-meteo",
         "provider_status": provider_status,
-        "retry_after": 60,
+        "retry_after": _retry_after_for(provider_status),
+        "stale": False,
         "observed_at": None,
         "age_seconds": None,
         "temperature_c": None,
@@ -112,65 +152,130 @@ async def get_weather(lat: float, lon: float) -> dict:
     }
 
 
-async def get_aqi(lat: float, lon: float) -> dict:
-    """
-    Returns AQI (0–500 scale) from Open-Meteo Air Quality API.
-    Includes data freshness and provider diagnostics.
-    On failure: returns structured unavailable state (never assumes clean air).
-    """
-    start_time = time.perf_counter()
-    url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi"
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(url)
-            r.raise_for_status()
-            data = r.json()
-            current = data.get("current", {})
-            if "us_aqi" in current and current["us_aqi"] is not None:
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                metrics.record_provider_call("aqi", duration_ms, success=True)
-                now_iso = datetime.now(timezone.utc).isoformat()
-                return {
-                    "value": int(current["us_aqi"]),
-                    "status": "available",
-                    "provider": "open-meteo",
-                    "provider_status": "healthy",
-                    "observed_at": now_iso,
-                    "age_seconds": 0,
-                    "retry_after": None,
-                }
-    except Exception as e:
-        duration_ms = (time.perf_counter() - start_time) * 1000
-        provider_status = _classify_error(e)
-        metrics.record_provider_call("aqi", duration_ms, success=False, failure_type=provider_status)
-        logger.warning(
-            "[provider_failure] provider=open-meteo service=aqi status=%s reason=%s: %s timestamp=%s coord=(%.4f,%.4f)",
-            provider_status,
-            type(e).__name__,
-            e,
-            datetime.now(timezone.utc).isoformat(),
-            lat,
-            lon,
-        )
+def _weather_from_entry(entry: dict, provider_status: str = "healthy", stale: bool = False) -> dict:
+    data = entry["data"]
+    return {
+        "status": "available",
+        "provider": "open-meteo",
+        "provider_status": provider_status,
+        "retry_after": _retry_after_for(provider_status) if stale else None,
+        "stale": stale,
+        "observed_at": _iso(float(entry["fetched_at"])),
+        "age_seconds": age_seconds(entry),
+        "temperature_c": data["temperature_c"],
+        "humidity_pct": data["humidity_pct"],
+        "feels_like_c": data["feels_like_c"],
+    }
+
+
+async def _fetch_weather(lat: float, lon: float) -> tuple:
+    """Call Open-Meteo for current weather. Returns (values dict or None, provider_status)."""
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&current=temperature_2m,relative_humidity_2m,apparent_temperature"
+        f"&forecast_days=1"
+    )
+
+    def parse(data: dict) -> dict:
+        current = data.get("current", {})
         return {
-            "value": None,
-            "status": "unavailable",
-            "provider": "open-meteo",
-            "provider_status": provider_status,
-            "retry_after": 60,
-            "observed_at": None,
-            "age_seconds": None,
+            "temperature_c": float(current["temperature_2m"]),
+            "humidity_pct": float(current["relative_humidity_2m"]),
+            "feels_like_c": float(current["apparent_temperature"]),
         }
 
+    return await _call_open_meteo(url, "weather", lat, lon, parse, config.OPEN_METEO_MAX_ATTEMPTS)
+
+
+async def get_weather(lat: float, lon: float) -> dict:
+    """
+    Current temperature_c, humidity_pct, feels_like_c from Open-Meteo, cached per
+    ~0.01° grid cell for WEATHER_CACHE_TTL_SECONDS. observed_at/age_seconds give the
+    real fetch time. When the provider fails or is rate-limited, the last cached value
+    (up to WEATHER_STALE_MAX_SECONDS old) is returned with stale=True; otherwise a
+    structured unavailable state. A 429 is never retried and opens the circuit breaker.
+    """
+    key = cache_key("weather", lat, lon)
+    entry = await read_entry(key)
+    if entry and is_fresh(entry, config.WEATHER_CACHE_TTL_SECONDS):
+        return _weather_from_entry(entry)
+
+    if open_meteo_breaker.is_open:
+        provider_status = "rate_limited"
+    else:
+        values, provider_status = await _fetch_weather(*grid_cell(lat, lon))
+        if values is not None:
+            await write_entry(key, values, config.WEATHER_STALE_MAX_SECONDS)
+            return _weather_from_entry({"fetched_at": provider_cache.clock(), "data": values})
+
+    if entry:
+        return _weather_from_entry(entry, provider_status=provider_status, stale=True)
+    return _weather_unavailable(provider_status)
+
+
+# --- Air quality ---------------------------------------------------------------
+
+def _aqi_unavailable(provider_status: str) -> dict:
     return {
         "value": None,
         "status": "unavailable",
         "provider": "open-meteo",
-        "provider_status": "unreachable",
-        "retry_after": 60,
+        "provider_status": provider_status,
+        "retry_after": _retry_after_for(provider_status),
+        "stale": False,
         "observed_at": None,
         "age_seconds": None,
     }
+
+
+def _aqi_from_entry(entry: dict, provider_status: str = "healthy", stale: bool = False) -> dict:
+    return {
+        "value": entry["data"]["value"],
+        "status": "available",
+        "provider": "open-meteo",
+        "provider_status": provider_status,
+        "retry_after": _retry_after_for(provider_status) if stale else None,
+        "stale": stale,
+        "observed_at": _iso(float(entry["fetched_at"])),
+        "age_seconds": age_seconds(entry),
+    }
+
+
+async def _fetch_aqi(lat: float, lon: float) -> tuple:
+    """Call Open-Meteo Air Quality once (no retries). Returns (us_aqi or None, provider_status)."""
+    url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=us_aqi"
+
+    def parse(data: dict) -> Optional[int]:
+        value = data.get("current", {}).get("us_aqi")
+        return int(value) if value is not None else None
+
+    return await _call_open_meteo(url, "aqi", lat, lon, parse, max_attempts=1)
+
+
+async def get_aqi(lat: float, lon: float) -> dict:
+    """
+    US AQI (0–500) from Open-Meteo Air Quality, cached per ~0.01° grid cell for
+    WEATHER_CACHE_TTL_SECONDS. On failure or rate limiting, the last cached value
+    (up to WEATHER_STALE_MAX_SECONDS old) is returned with stale=True; otherwise a
+    structured unavailable state (never assumes clean air).
+    """
+    key = cache_key("aqi", lat, lon)
+    entry = await read_entry(key)
+    if entry and is_fresh(entry, config.WEATHER_CACHE_TTL_SECONDS):
+        return _aqi_from_entry(entry)
+
+    if open_meteo_breaker.is_open:
+        provider_status = "rate_limited"
+    else:
+        value, provider_status = await _fetch_aqi(*grid_cell(lat, lon))
+        if value is not None:
+            await write_entry(key, {"value": value}, config.WEATHER_STALE_MAX_SECONDS)
+            return _aqi_from_entry({"fetched_at": provider_cache.clock(), "data": {"value": value}})
+
+    if entry:
+        return _aqi_from_entry(entry, provider_status=provider_status, stale=True)
+    return _aqi_unavailable(provider_status)
 
 
 def compute_heat_index(temp_c: float, humidity_pct: float) -> float:
@@ -323,13 +428,40 @@ def build_forecast_hours(data: dict, now_utc: datetime) -> list:
     return hours_out
 
 
-async def get_hourly_forecast(lat: float, lon: float, now: Optional[datetime] = None) -> dict:
-    """
-    Fetch the next 24 hours of weather and comfort forecast from Open-Meteo,
-    in the location's local time with UTC offsets. `now` is for tests.
-    Returns structured unavailable state on provider failure.
-    """
-    start_time = time.perf_counter()
+def _forecast_unavailable(provider_status: str) -> dict:
+    return {
+        "status": "unavailable",
+        "provider": "open-meteo",
+        "provider_status": provider_status,
+        "retry_after": _retry_after_for(provider_status),
+        "stale": False,
+        "observed_at": None,
+        "age_seconds": None,
+        "hours": [],
+    }
+
+
+def _forecast_from_entry(
+    entry: dict, now_utc: datetime, provider_status: str = "healthy", stale: bool = False
+) -> Optional[dict]:
+    """Build the response from a cached raw Open-Meteo forecast; None if no hours remain."""
+    hours = build_forecast_hours(entry["data"], now_utc)
+    if not hours:
+        return None
+    return {
+        "status": "available",
+        "provider": "open-meteo",
+        "provider_status": provider_status,
+        "retry_after": _retry_after_for(provider_status) if stale else None,
+        "stale": stale,
+        "observed_at": _iso(float(entry["fetched_at"])),
+        "age_seconds": age_seconds(entry),
+        "hours": hours,
+    }
+
+
+async def _fetch_forecast(lat: float, lon: float) -> tuple:
+    """Call Open-Meteo for the hourly forecast. Returns (raw response dict or None, provider_status)."""
     # timezone=auto: hours in local time; 2 days so 24 hours remain even late in the day
     url = (
         f"https://api.open-meteo.com/v1/forecast"
@@ -339,58 +471,44 @@ async def get_hourly_forecast(lat: float, lon: float, now: Optional[datetime] = 
         f"&forecast_days=2"
     )
 
-    last_error = None
-    for attempt in range(3):
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.get(url)
-                if r.status_code == 429:
-                    logger.warning(
-                        "[provider_rate_limited] provider=open-meteo service=forecast attempt=%d/3 coord=(%.4f,%.4f)",
-                        attempt + 1, lat, lon
-                    )
-                    last_error = httpx.HTTPStatusError("Rate limited", request=r.request, response=r)
-                    await asyncio.sleep(2 ** attempt)
-                    continue
-                r.raise_for_status()
-                data = r.json()
-                now_utc = now or datetime.now(timezone.utc)
-                hours_out = build_forecast_hours(data, now_utc)
+    def parse(data: dict) -> Optional[dict]:
+        return data if data.get("hourly", {}).get("time") else None
 
-                if not hours_out:
-                    break
+    return await _call_open_meteo(url, "forecast", lat, lon, parse, config.OPEN_METEO_MAX_ATTEMPTS)
 
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                metrics.record_provider_call("forecast", duration_ms, success=True)
-                now_iso = now_utc.isoformat()
 
-                return {
-                    "status": "available",
-                    "provider": "open-meteo",
-                    "provider_status": "healthy",
-                    "observed_at": now_iso,
-                    "hours": hours_out,
-                }
-        except Exception as e:
-            last_error = e
-            logger.warning(
-                "[provider_error] provider=open-meteo service=forecast attempt=%d/3 reason=%s: %s coord=(%.4f,%.4f)",
-                attempt + 1, type(e).__name__, e, lat, lon
-            )
-            if attempt < 2:
-                await asyncio.sleep(2 ** attempt)
-                continue
+async def get_hourly_forecast(lat: float, lon: float, now: Optional[datetime] = None) -> dict:
+    """
+    The next 24 hours of weather and comfort forecast from Open-Meteo, in the
+    location's local time with UTC offsets. `now` is for tests.
 
-    # Fallback unavailable response
-    duration_ms = (time.perf_counter() - start_time) * 1000
-    provider_status = _classify_error(last_error) if last_error else "unreachable"
-    metrics.record_provider_call("forecast", duration_ms, success=False, failure_type=provider_status)
+    The raw provider response is cached per ~0.01° grid cell for
+    FORECAST_CACHE_TTL_SECONDS and re-sliced to the current hour on every request.
+    On failure or rate limiting, the cached forecast (up to FORECAST_STALE_MAX_SECONDS
+    old) is returned with stale=True; otherwise a structured unavailable state.
+    A 429 is never retried and opens the circuit breaker.
+    """
+    now_utc = now or datetime.now(timezone.utc)
+    key = cache_key("forecast", lat, lon)
+    entry = await read_entry(key)
+    if entry and is_fresh(entry, config.FORECAST_CACHE_TTL_SECONDS):
+        result = _forecast_from_entry(entry, now_utc)
+        if result:
+            return result
 
-    return {
-        "status": "unavailable",
-        "provider": "open-meteo",
-        "provider_status": provider_status,
-        "retry_after": 60,
-        "observed_at": None,
-        "hours": [],
-    }
+    if open_meteo_breaker.is_open:
+        provider_status = "rate_limited"
+    else:
+        raw, provider_status = await _fetch_forecast(*grid_cell(lat, lon))
+        if raw is not None:
+            await write_entry(key, raw, config.FORECAST_STALE_MAX_SECONDS)
+            result = _forecast_from_entry({"fetched_at": provider_cache.clock(), "data": raw}, now_utc)
+            if result:
+                return result
+            provider_status = "unreachable"
+
+    if entry:
+        stale = _forecast_from_entry(entry, now_utc, provider_status=provider_status, stale=True)
+        if stale:
+            return stale
+    return _forecast_unavailable(provider_status)

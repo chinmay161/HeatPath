@@ -2,6 +2,7 @@
 GET /conditions — returns real-time heat index, humidity, AQI, and shade for a coordinate.
 Returns structured unavailable state on third-party provider failure without fabricating data.
 """
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, Query
 from app.models.schemas import ConditionsResponse
@@ -34,8 +35,8 @@ async def get_conditions(
     Returns real-time heat index (°C), AQI index (0.0–1.0), and cached shade index if computed.
     When external providers are unreachable, returns 200 with structured status: "unavailable".
     """
-    weather = await get_weather(lat, lon)
-    aqi = await get_aqi(lat, lon)
+    # Concurrent, so the endpoint takes one Open-Meteo call budget at most, not two
+    weather, aqi = await asyncio.gather(get_weather(lat, lon), get_aqi(lat, lon))
 
     # If weather provider is unavailable, return structured unavailable state
     if weather.get("status") == "unavailable":
@@ -77,9 +78,10 @@ async def get_conditions(
         status="available",
         provider="open-meteo",
         provider_status=weather.get("provider_status", "healthy"),
-        retry_after=None,
         observed_at=weather.get("observed_at"),
         age_seconds=weather.get("age_seconds", 0),
+        stale=bool(weather.get("stale", False)),
+        retry_after=weather.get("retry_after"),
         heat_index=heat_index,
         shade_index=shade_index,
         aqi_index=aqi_index,

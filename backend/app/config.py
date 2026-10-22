@@ -25,6 +25,23 @@ class Config:
     CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", 21600))  # 6 hours
     CACHE_NAMESPACE = os.getenv("CACHE_NAMESPACE", "heatpath")
 
+    # Weather provider (Open-Meteo) caching per ~0.01 degree grid cell, and 429 protection
+    WEATHER_CACHE_TTL_SECONDS = int(os.getenv("WEATHER_CACHE_TTL_SECONDS", "600"))  # current weather + AQI
+    FORECAST_CACHE_TTL_SECONDS = int(os.getenv("FORECAST_CACHE_TTL_SECONDS", "1800"))
+    # How long a cached value may still be served, marked stale, when the provider fails
+    WEATHER_STALE_MAX_SECONDS = int(os.getenv("WEATHER_STALE_MAX_SECONDS", "3600"))  # 1 hour
+    FORECAST_STALE_MAX_SECONDS = int(os.getenv("FORECAST_STALE_MAX_SECONDS", "43200"))  # 12 hours
+    PROVIDER_CACHE_MAX_ENTRIES = int(os.getenv("PROVIDER_CACHE_MAX_ENTRIES", "2000"))
+    # Circuit breaker after a 429 when Open-Meteo sends no usable Retry-After
+    OPEN_METEO_RATE_LIMIT_DEFAULT_SECONDS = int(os.getenv("OPEN_METEO_RATE_LIMIT_DEFAULT_SECONDS", "60"))
+    OPEN_METEO_RATE_LIMIT_MAX_SECONDS = int(os.getenv("OPEN_METEO_RATE_LIMIT_MAX_SECONDS", "3600"))
+    # Total time for one Open-Meteo call, all attempts and waits included. Must stay under
+    # the app's 15 s per-attempt timeout so the server answers (stale or unavailable) first.
+    OPEN_METEO_CALL_BUDGET_SECONDS = float(os.getenv("OPEN_METEO_CALL_BUDGET_SECONDS", "12"))
+    OPEN_METEO_ATTEMPT_TIMEOUT_SECONDS = float(os.getenv("OPEN_METEO_ATTEMPT_TIMEOUT_SECONDS", "5"))
+    OPEN_METEO_MAX_ATTEMPTS = int(os.getenv("OPEN_METEO_MAX_ATTEMPTS", "2"))  # 1 retry, never for a 429
+    OPEN_METEO_RETRY_WAIT_SECONDS = float(os.getenv("OPEN_METEO_RETRY_WAIT_SECONDS", "1"))
+
     # Comfort Scoring Weights & Normalization Thresholds
     # Source: NOAA National Weather Service Heat Index standard & EPA AQI Breakpoints
     SCORING_WEIGHT_SHADE = float(os.getenv("SCORING_WEIGHT_SHADE", "0.5"))

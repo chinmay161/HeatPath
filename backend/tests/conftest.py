@@ -38,3 +38,13 @@ def reset_db_backoff():
     yield
     postgis_shade._pool_backoff.reset()
     user_store._db_pool_backoff.reset()
+
+@pytest.fixture(autouse=True)
+def reset_provider_cache():
+    """Clear cached weather/AQI/forecast and the Open-Meteo circuit breaker between tests."""
+    import app.services.provider_cache as provider_cache
+    provider_cache._memory_cache._store.clear()
+    provider_cache.open_meteo_breaker.reset()
+    yield
+    provider_cache._memory_cache._store.clear()
+    provider_cache.open_meteo_breaker.reset()

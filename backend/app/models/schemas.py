@@ -29,6 +29,7 @@ class ConditionsResponse(BaseModel):
     retry_after: Optional[int] = Field(default=None, description="Seconds to wait before retrying request")
     observed_at: Optional[str] = Field(default=None, description="ISO timestamp of weather observation")
     age_seconds: Optional[int] = Field(default=None, description="Age of data in seconds")
+    stale: bool = Field(default=False, description="True when serving the last cached value because the provider failed or is rate-limited")
     heat_index: Optional[float] = None
     shade_index: Optional[float] = None
     aqi_index: Optional[float] = None
@@ -206,6 +207,8 @@ class HourlyForecastResponse(BaseModel):
     provider: str = Field(default="open-meteo")
     provider_status: str = Field(default="healthy")
     observed_at: Optional[str] = None
+    age_seconds: Optional[int] = Field(default=None, description="Age of the forecast in seconds")
+    stale: bool = Field(default=False, description="True when serving the last cached forecast because the provider failed or is rate-limited")
     retry_after: Optional[int] = None
     hours: List[HourlyForecastItem] = Field(default_factory=list)
     model_config = ConfigDict(from_attributes=True)
