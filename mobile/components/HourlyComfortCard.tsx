@@ -13,35 +13,18 @@ import { usePreferences } from '../hooks/usePreferences';
 import { type HourlyForecastItem } from '../config/api';
 import Icon from './Icon';
 import { colors, fonts, radius } from '../theme/colors';
-import { cachedForecastNote, getForecastBadge, getForecastNotice } from '../utils/forecastStatus';
+import {
+  bestWalkingWindow,
+  cachedForecastNote,
+  formatForecastHour,
+  getForecastBadge,
+  getForecastNotice,
+} from '../utils/forecastStatus';
 
 type Props = {
   lat: number | null;
   lon: number | null;
 };
-
-function formatHour(timeStr: string, index: number): string {
-  if (index === 0) return 'Now';
-  try {
-    const d = new Date(timeStr);
-    if (isNaN(d.getTime())) {
-      const parts = timeStr.split('T');
-      if (parts[1]) {
-        const hour = parseInt(parts[1].split(':')[0], 10);
-        const ampm = hour >= 12 ? 'PM' : 'AM';
-        const h12 = hour % 12 === 0 ? 12 : hour % 12;
-        return `${h12} ${ampm}`;
-      }
-      return timeStr;
-    }
-    const hour = d.getHours();
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const h12 = hour % 12 === 0 ? 12 : hour % 12;
-    return `${h12} ${ampm}`;
-  } catch {
-    return timeStr;
-  }
-}
 
 function severityColor(sev: HourlyForecastItem['severity']): string {
   switch (sev) {
@@ -65,11 +48,8 @@ export function HourlyComfortCard({ lat, lon }: Props) {
   const badge = getForecastBadge({ loading, waking, failure, hasHours: hours.length > 0, isCached, cachedAt });
   const badgeDot = { live: '#4ade80', updating: '#4ade80', saved: '#fbbf24', down: '#f87171' }[badge.tone];
 
-  // Best time recommendation calculation
-  const bestHours = hours.filter(h => h.is_best_time);
-  const bestWindowLabel = bestHours.length > 0
-    ? `${formatHour(bestHours[0].time, hours.indexOf(bestHours[0]))} – ${formatHour(bestHours[bestHours.length - 1].time, hours.indexOf(bestHours[bestHours.length - 1]))}`
-    : 'Evening hours';
+  // Earliest run of best hours, e.g. "tomorrow 6 – 8 AM"; null when none are marked
+  const bestWindowLabel = bestWalkingWindow(hours);
 
   return (
     <View style={styles.card}>
@@ -124,19 +104,21 @@ export function HourlyComfortCard({ lat, lon }: Props) {
       {hours.length > 0 && (
         <>
           {/* Best Time Callout Banner */}
-          <View style={styles.bestTimeBanner}>
-            <View style={styles.bestTimeIconWrap}>
-              <Icon name="clock" size={16} stroke={colors.forest} />
+          {bestWindowLabel && (
+            <View style={styles.bestTimeBanner}>
+              <View style={styles.bestTimeIconWrap}>
+                <Icon name="clock" size={16} stroke={colors.forest} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bestTimeTitle}>
+                  Best walking window: {bestWindowLabel}
+                </Text>
+                <Text style={styles.bestTimeBody}>
+                  Lowest solar intensity & optimal comfort score for walking outdoors.
+                </Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.bestTimeTitle}>
-                Best walking window: {bestWindowLabel}
-              </Text>
-              <Text style={styles.bestTimeBody}>
-                Lowest solar intensity & optimal comfort score for walking outdoors.
-              </Text>
-            </View>
-          </View>
+          )}
 
           {/* Horizontal Hour Scroll Track */}
           <ScrollView
@@ -147,7 +129,7 @@ export function HourlyComfortCard({ lat, lon }: Props) {
             {hours.map((h, i) => {
               const isSelected = selectedIdx === i;
               const sevCol = severityColor(h.severity);
-              const hourLabel = formatHour(h.time, i);
+              const hourLabel = formatForecastHour(h.time, i);
               const tempStr = formatTemp(h.feels_like_c);
 
               return (
